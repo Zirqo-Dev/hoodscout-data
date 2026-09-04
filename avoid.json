@@ -2,6 +2,31 @@
   {
     "ca": "0xe81880c1c5054245e036359f5c7be31606e79f56",
     "symbol": "JINQIAN",
-    "reason": "Quoted against unofficial FAMI token: single-tx mint of 37,430,000, deployer kept 38%, runs a PoolRepricer contract. Not a Robinhood stock token."
+    "reason": "Quoted against unofficial FAMI token: single-tx mint of 37,430,000, deployer kept 38%, runs a PoolRepricer contract. Not a Robinhood stock token.",
+    "added": "2026-09-03"
+  },
+  {
+    "ca": "0x99452d7519e103daf9bc9f02311dd164a073a7a2",
+    "symbol": "MSTR (fake)",
+    "reason": "Ticker-squats the MSTR stock token. Priced $0.000156 vs a real underlying in the hundreds. 4 pools spun up within minutes of launch.",
+    "added": "2026-09-04"
+  },
+  {
+    "ca": "0x7d5b875428fa41a77d997f7183296b355fdb1724",
+    "symbol": "AI (fake)",
+    "reason": "Ticker collision with Artificial Inu ($223M). This one is $28.8k FDV on uniswap-v2-robinhood.",
+    "added": "2026-09-04"
+  },
+  {
+    "ca": "0x681df8b7cca76ec3f5cb383c7fb5a249ac7572ec",
+    "symbol": "$CASHCAT (fake)",
+    "reason": "Ticker collision with CASHCAT ($263M). Launched 2026-09-03 at $4.3k FDV on pons-v2.",
+    "added": "2026-09-04"
+  },
+  {
+    "ca": "0x9c32b3d11582c1c18b3ab791de2fb57b3793a3a5",
+    "symbol": "TEST - DO NOT BUY",
+    "reason": "Self-describing test deployment. Zero liquidity, nonsense $2,518 price.",
+    "added": "2026-09-04"
   }
 ]
