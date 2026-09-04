@@ -1,0 +1,44 @@
+name: stocks
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: stocks
+  cancel-in-progress: false
+
+jobs:
+  stocks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python scripts/stocks.py
+      - name: Commit
+        run: |
+          git config user.name "hoodscout-bot"
+          git config user.email "actions@github.com"
+          git add data
+          git diff --staged --quiet && exit 0
+          git commit -m "stocks: $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3 4 5; do
+            git push && exit 0
+            git pull --rebase --autostash
+            sleep 5
+          done
+          exit 1
+      - name: Alert
+        if: hashFiles('ALERT.txt') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "HoodScout alert $(date -u +%Y-%m-%d\ %H:%MZ)" \
+            --body-file ALERT.txt
