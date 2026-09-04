@@ -80,7 +80,7 @@ def parse_pool(item, now):
         "dex": ((rel.get("dex") or {}).get("data") or {}).get("id"),
         "price": num(a.get("base_token_price_usd")),
         "fdv": num(a.get("fdv_usd")),
-        "liq": num(a.get("reserve_in_usd")) or 0.0,
+        "liq": max(0.0, num(a.get("reserve_in_usd")) or 0.0),
         "vol24": num(vol.get("h24")) or 0.0,
         "b24": t24.get("buys") or 0, "s24": t24.get("sells") or 0,
         "byr24": t24.get("buyers") or 0, "slr24": t24.get("sellers") or 0,
@@ -125,9 +125,9 @@ def score_token(t):
     liq, fdv, age = t["liq_usd"], t["fdv_usd"], t["age_days"]
     lf = round(100 * liq / fdv, 2) if liq and fdv else None
     t["liq_fdv_pct"] = lf
-
-    # liquidity at or above FDV is structurally implausible outside a fresh curve pool
-    t["flag_liq_anomaly"] = bool(lf is not None and lf >= 90)
+           
+    # anomaly if liq >= FDV, unmeasurable, or dust
+    t["flag_liq_anomaly"] = bool(lf is None or lf >= 90 or liq < 1000)
 
     # buy-count skew disagreeing with price direction
     t["flag_contradiction"] = bool(
