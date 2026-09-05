@@ -21,6 +21,7 @@ BEST_MIN_AGE     = 2.0
 BEST_MIN_LIQ_FDV = 5.0
 BEST_MAX_TPT     = 4.0
 EMERGING_MAX_AGE = 3.0
+EMERGING_MAX_TPT = 5.0   # looser than BEST: early trading is concentrated
 DEAD_TXNS_24H    = 10    # below this, a token past MAX_AGE_DAYS is inactive
 TRENDING_PAGES = 2
 NEW_POOL_PAGES = 3
@@ -209,7 +210,7 @@ def classify(t, avoid, persist, hist):
         return "BEST"
 
     if (age is not None and age <= EMERGING_MAX_AGE and not contra
-            and tpt is not None and tpt <= BEST_MAX_TPT
+            and tpt is not None and tpt <= EMERGING_MAX_TPT
             and buyer_rate_rising(t["ca"], hist)):
         return "EMERGING"
 
