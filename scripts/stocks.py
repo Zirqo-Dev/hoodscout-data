@@ -4,6 +4,7 @@ import json, os, time, urllib.request
 from datetime import datetime, timezone, timedelta
 
 BASE = "https://api.geckoterminal.com/api/v2"
+BLOCKSCOUT = "https://robinhoodchain.blockscout.com/api/v2"
 NETWORK = "robinhood"
 HEADERS = {"Accept": "application/json;version=20230302",
            "User-Agent": "hoodscout-data/0.3"}
@@ -26,6 +27,10 @@ ALERT_PREMIUM   = 20.0   # % over anchor
 ALERT_SUPPLY_6H = 2.5    # % move in 6h
 ALERT_LOCKED    = 40.0   # % floor
 
+# fdv/price can go stale on GeckoTerminal and fake a mint/burn, so a supply move
+# is only trusted when on-chain totalSupply agrees within this margin
+SUPPLY_TOLERANCE = 1.0   # %
+
 
 def get(path):
     req = urllib.request.Request(BASE + path, headers=HEADERS)
@@ -38,6 +43,37 @@ def num(v):
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def chain_supply(ca):
+    req = urllib.request.Request(f"{BLOCKSCOUT}/tokens/{ca}",
+                                 headers={"Accept": "application/json",
+                                          "User-Agent": HEADERS["User-Agent"]})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        d = json.load(r)
+    total, dec = d.get("total_supply"), d.get("decimals")
+    if total is None or dec is None:
+        return None
+    return int(total) / 10 ** int(dec)
+
+
+def confirm_supply(r):
+    try:
+        chain = chain_supply(r["ca"])
+    except Exception as e:
+        print(f"WARN blockscout {r['symbol']}: {e}")
+        return f" [UNCONFIRMED: Blockscout check failed ({type(e).__name__})]"
+
+    if not chain:
+        return " [UNCONFIRMED: Blockscout returned no totalSupply]"
+
+    r["chain_supply"] = round(chain, 3)
+    gap = 100 * abs(r["supply"] / chain - 1)
+    r["chain_supply_gap_pct"] = round(gap, 2)
+    if gap > SUPPLY_TOLERANCE:
+        return (f" [UNCONFIRMED: Blockscout totalSupply {chain:,.0f}, "
+                f"{gap:.1f}% off the pool-derived figure]")
+    return ""
 
 
 def addr_of(rel, side):
@@ -134,7 +170,8 @@ def alerts(rows, hist, now):
             if abs(d) >= ALERT_SUPPLY_6H:
                 verb = "MINTED" if d > 0 else "BURNED"
                 fired.append(f"{r['symbol']} float {verb} {abs(d):.1f}% in 6h "
-                             f"({old[0]['supply']:,.0f} to {r['supply']:,.0f})")
+                             f"({old[0]['supply']:,.0f} to {r['supply']:,.0f})"
+                             + confirm_supply(r))
 
         lp = r.get("locked_pct_est")
         if lp is not None and lp < ALERT_LOCKED:
