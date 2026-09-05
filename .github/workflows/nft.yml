@@ -1,0 +1,48 @@
+name: nft
+on:
+  schedule:
+    - cron: "0 13,21 * * *"
+  workflow_dispatch:
+    inputs:
+      verify_slugs:
+        description: "Space-separated slugs to verify instead of collecting"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nft
+  cancel-in-progress: false
+
+jobs:
+  nft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Collect
+        env:
+          VERIFY_SLUGS: ${{ inputs.verify_slugs }}
+        run: |
+          if [ -n "$VERIFY_SLUGS" ]; then
+            python scripts/nft.py --verify $VERIFY_SLUGS
+          else
+            python scripts/nft.py
+          fi
+      - name: Commit
+        run: |
+          git config user.name "hoodscout-bot"
+          git config user.email "actions@github.com"
+          git add data
+          git diff --staged --quiet && exit 0
+          git commit -m "nft: $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3 4 5; do
+            git push && exit 0
+            git pull --rebase --autostash
+            sleep 5
+          done
+          exit 1
