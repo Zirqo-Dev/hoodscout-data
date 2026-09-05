@@ -11,6 +11,22 @@ HISTORY_DAYS   = 30
 THIN_SALES     = 5     # 24h sales below which a floor move is not trade-backed
 FLOOR_MOVE_PCT = 3.0   # floor move worth asking whether trades back it
 
+DISCOVER_ORDER  = "seven_day_volume"   # one_day_volume also accepted
+DISCOVER_LIMIT  = 20
+NEW_DAYS        = 30     # created within this many days counts as very new
+LOW_OWNER_RATIO = 0.15   # owners/supply under this reads as bundled, not spread
+
+# Every metadata field OpenSea returns that a collection fills in itself, plus
+# safelist_status. Counting the non-empty ones measures how completely the
+# listing is filled in and nothing else: each of these is free text a copycat
+# can populate in minutes, so the count carries no claim about the project.
+META_FIELDS = ["twitter_username", "project_url", "description", "discord_url",
+               "telegram_url", "instagram_username", "wiki_url", "safelist_status"]
+
+# "Nearly everything filled in" — 6 of 8 keeps the proportion of the 4-of-5
+# this flag was specified with
+DRESSED_MIN = 6
+
 # Only slugs verified against a live /collections/{slug} response belong here:
 #   python scripts/nft.py --verify <slug> [<slug> ...]
 # prints name, chains, floor, supply and whether the collection is on
@@ -155,6 +171,75 @@ def write_history(rows, now, path="data/nft.jsonl"):
         f.write("\n".join(kept) + "\n")
 
 
+def filled_meta(item):
+    # non-empty, not merely present: OpenSea returns "" for unset urls, so a
+    # key check would score an empty discord_url as filled in
+    return [f for f in META_FIELDS if str(item.get(f) or "").strip()]
+
+
+def age_days(created, now):
+    try:
+        d = datetime.fromisoformat(str(created))
+    except (TypeError, ValueError):
+        return None
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    return (now - d).days
+
+
+def discover_row(item, key, now):
+    slug = item["collection"]
+    # total_supply and created_date are detail-only; num_owners is stats-only
+    detail = get(f"/collections/{slug}", key)
+    stats = get(f"/collections/{slug}/stats", key)
+    total, day = stats.get("total") or {}, day_interval(stats)
+
+    supply = detail.get("total_supply")
+    owners = total.get("num_owners")
+    ratio = round(owners / supply, 4) if owners and supply else None
+    age = age_days(detail.get("created_date"), now)
+    filled = filled_meta(detail)
+
+    r = {"slug": slug, "name": detail.get("name"),
+         "created_date": detail.get("created_date"), "age_days": age,
+         "total_supply": supply, "num_owners": owners,
+         "owner_supply_ratio": ratio,
+         "floor_price": num(total.get("floor_price")),
+         "floor_symbol": total.get("floor_price_symbol"),
+         "volume_total": num(total.get("volume")),
+         "volume_24h": num(day.get("volume")), "sales_24h": day.get("sales"),
+         "safelist_status": detail.get("safelist_status"),
+         "opensea_url": detail.get("opensea_url"),
+         "social_presence_score": len(filled),
+         "social_fields_checked": len(META_FIELDS),
+         "social_fields_filled": filled}
+
+    r["flag_low_owner_ratio"] = bool(ratio is not None and ratio < LOW_OWNER_RATIO)
+    r["flag_new"] = bool(age is not None and age <= NEW_DAYS)
+    # complete listing + supply in few hands + brand new is the copycat shape
+    r["flag_dressed_but_thin"] = bool(
+        r["social_presence_score"] >= DRESSED_MIN
+        and r["flag_low_owner_ratio"] and r["flag_new"])
+    return r
+
+
+def discover(key, order, now):
+    listed = get(f"/collections?chain={CHAIN}&order_by={order}"
+                 f"&limit={DISCOVER_LIMIT}", key).get("collections") or []
+    rows = []
+    for item in listed:
+        if not item.get("collection"):
+            continue
+        try:
+            rows.append(discover_row(item, key, now))
+        except Exception as e:
+            print(f"WARN {item.get('collection')}: {err(e)}")
+        time.sleep(1)
+    # same thin-floor rule as tracked collections; a collection with no row in
+    # nft.jsonl yet simply has no prior floor to compare against
+    return enrich(rows, history())
+
+
 def err(e):
     body = ""
     try:
@@ -220,6 +305,23 @@ def main():
         return
 
     key = mint_key()
+
+    if "--discover" in sys.argv:
+        now = datetime.now(timezone.utc)
+        order = os.environ.get("DISCOVER_ORDER") or DISCOVER_ORDER
+        rows = discover(key, order, now)
+        os.makedirs("data", exist_ok=True)
+        # surfacing only: never feeds WATCHLIST, which stays hand-verified
+        json.dump({"generated_at": now.isoformat(), "chain": CHAIN,
+                   "order_by": order, "social_fields": META_FIELDS,
+                   "collections": rows},
+                  open("data/nft_discover.json", "w"), indent=2)
+        for r in rows:
+            print(f"{r['slug']}: floor {r['floor_price']} owners/supply "
+                  f"{r['owner_supply_ratio']} age {r['age_days']}d "
+                  f"meta {r['social_presence_score']}/{r['social_fields_checked']} "
+                  f"dressed_but_thin={r['flag_dressed_but_thin']}")
+        return
 
     if "--verify" in sys.argv:
         for slug in sys.argv[sys.argv.index("--verify") + 1:]:

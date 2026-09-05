@@ -13,6 +13,17 @@ on:
         type: boolean
         required: false
         default: false
+      discover:
+        description: "Surface Robinhood Chain collections to data/nft_discover.json"
+        type: boolean
+        required: false
+        default: false
+      discover_order:
+        description: "Ranking for discovery"
+        type: choice
+        required: false
+        default: seven_day_volume
+        options: [seven_day_volume, one_day_volume]
 
 permissions:
   contents: write
@@ -33,9 +44,13 @@ jobs:
         env:
           VERIFY_SLUGS: ${{ inputs.verify_slugs }}
           PROBE: ${{ inputs.probe }}
+          DISCOVER: ${{ inputs.discover }}
+          DISCOVER_ORDER: ${{ inputs.discover_order }}
         run: |
           if [ "$PROBE" = "true" ]; then
             python scripts/nft.py --probe
+          elif [ "$DISCOVER" = "true" ]; then
+            python scripts/nft.py --discover
           elif [ -n "$VERIFY_SLUGS" ]; then
             python scripts/nft.py --verify $VERIFY_SLUGS
           else
