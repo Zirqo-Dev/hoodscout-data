@@ -62,6 +62,13 @@ def confirm_supply(r):
         chain = chain_supply(r["ca"])
     except Exception as e:
         print(f"WARN blockscout {r['symbol']}: {e}")
+        # a bare 403 can't distinguish a WAF block from an API gate; the
+        # response headers and body opening say which
+        try:
+            print(f"WARN blockscout {r['symbol']} headers: {dict(e.headers)}")
+            print(f"WARN blockscout {r['symbol']} body: {e.read(200)!r}")
+        except Exception as diag:
+            print(f"WARN blockscout {r['symbol']} no response detail: {diag!r}")
         return f" [UNCONFIRMED: Blockscout check failed ({type(e).__name__})]"
 
     if not chain:
