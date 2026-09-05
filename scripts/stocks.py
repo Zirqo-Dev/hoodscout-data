@@ -218,7 +218,9 @@ def main():
               f"locked {r.get('locked_pct_est')}% prem {r.get('premium_pct')}")
     if fired:
         with open("ALERT.txt", "w") as f:
-            f.write("\n".join(fired))
+            # trailing newline required: the workflow reads this with `while
+            # read`, which drops a final line that has no line terminator
+            f.write("\n".join(fired) + "\n")
         print("ALERTS:", *fired, sep="\n  ")
 
 
