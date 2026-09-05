@@ -39,7 +39,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          while IFS= read -r line; do
+          while IFS= read -r line <&3; do
             [ -z "$line" ] && continue
             symbol=$(awk '{print $1}' <<< "$line")
             type=$(awk '{print $2}' <<< "$line")
@@ -57,4 +57,4 @@ jobs:
             else
               gh issue create --title "$title" --body "$line"
             fi
-          done < ALERT.txt
+          done 3< ALERT.txt
