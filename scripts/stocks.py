@@ -4,7 +4,7 @@ import json, os, time, urllib.request
 from datetime import datetime, timezone, timedelta
 
 BASE = "https://api.geckoterminal.com/api/v2"
-BLOCKSCOUT = "https://robinhoodchain.blockscout.com/api/v2"
+RPC = os.environ.get("RPC_URL", "https://rpc.mainnet.chain.robinhood.com")
 NETWORK = "robinhood"
 HEADERS = {"Accept": "application/json;version=20230302",
            "User-Agent": "hoodscout-data/0.3"}
@@ -45,40 +45,51 @@ def num(v):
         return None
 
 
-def chain_supply(ca):
-    req = urllib.request.Request(f"{BLOCKSCOUT}/tokens/{ca}",
-                                 headers={"Accept": "application/json",
+def eth_call(to, selector):
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "eth_call",
+                       "params": [{"to": to, "data": selector}, "latest"]}).encode()
+    req = urllib.request.Request(RPC, data=body,
+                                 headers={"Content-Type": "application/json",
                                           "User-Agent": HEADERS["User-Agent"]})
     with urllib.request.urlopen(req, timeout=30) as r:
         d = json.load(r)
-    total, dec = d.get("total_supply"), d.get("decimals")
+    if d.get("error"):
+        raise RuntimeError(f"rpc {d['error']}")
+    res = d.get("result")
+    # "0x" comes back when there is no contract at the address
+    if not res or res == "0x":
+        return None
+    return int(res, 16)
+
+
+def chain_supply(ca):
+    total = eth_call(ca, "0x18160ddd")   # totalSupply()
+    dec = eth_call(ca, "0x313ce567")     # decimals()
     if total is None or dec is None:
         return None
-    return int(total) / 10 ** int(dec)
+    return total / 10 ** dec
 
 
 def confirm_supply(r):
     try:
         chain = chain_supply(r["ca"])
     except Exception as e:
-        print(f"WARN blockscout {r['symbol']}: {e}")
-        # a bare 403 can't distinguish a WAF block from an API gate; the
-        # response headers and body opening say which
+        print(f"WARN rpc {r['symbol']}: {e}")
         try:
-            print(f"WARN blockscout {r['symbol']} headers: {dict(e.headers)}")
-            print(f"WARN blockscout {r['symbol']} body: {e.read(200)!r}")
+            print(f"WARN rpc {r['symbol']} headers: {dict(e.headers)}")
+            print(f"WARN rpc {r['symbol']} body: {e.read(200)!r}")
         except Exception as diag:
-            print(f"WARN blockscout {r['symbol']} no response detail: {diag!r}")
-        return f" [UNCONFIRMED: Blockscout check failed ({type(e).__name__})]"
+            print(f"WARN rpc {r['symbol']} no response detail: {diag!r}")
+        return f" [UNCONFIRMED: chain RPC check failed ({type(e).__name__})]"
 
     if not chain:
-        return " [UNCONFIRMED: Blockscout returned no totalSupply]"
+        return " [UNCONFIRMED: chain RPC returned no totalSupply]"
 
     r["chain_supply"] = round(chain, 3)
     gap = 100 * abs(r["supply"] / chain - 1)
     r["chain_supply_gap_pct"] = round(gap, 2)
     if gap > SUPPLY_TOLERANCE:
-        return (f" [UNCONFIRMED: Blockscout totalSupply {chain:,.0f}, "
+        return (f" [UNCONFIRMED: on-chain totalSupply {chain:,.0f}, "
                 f"{gap:.1f}% off the pool-derived figure]")
     return ""
 
