@@ -1,125 +1,124 @@
 {
-  "generated_at": "2026-09-05T01:44:58.417326+00:00",
+  "generated_at": "2026-09-05T01:58:00.068453+00:00",
   "anchor_utc": "2026-09-05T00:00:00+00:00",
   "alerts": [
-    "HIMS locked share 38.9% below 40.0% floor",
-    "AMC float MINTED 17.0% in 6h (2,475,107 to 2,895,758)",
-    "AMC locked share 25.8% below 40.0% floor"
+    "AMC float MINTED 2.8% in 6h (2,817,607 to 2,895,758)",
+    "AMC locked share 25.9% below 40.0% floor"
   ],
   "tokens": [
     {
       "symbol": "HIMS",
       "ca": "0xccee82fe024c36fa15e1005ede3e9e4787e23d09",
-      "price_usd": 27.791918,
+      "price_usd": 27.639224,
       "supply": 130876.335,
-      "float_usd": 3637304.36,
-      "reserve_locked": 2831861.39,
-      "reserve_reference": 2137911.82,
+      "float_usd": 3617320.34,
+      "reserve_locked": 2953139.27,
+      "reserve_reference": 2116990.63,
       "reserve_cross": 0.0,
-      "locked_units_est": 50947.6,
-      "locked_pct_est": 38.93,
-      "free_float_units": 79928.8,
+      "locked_units_est": 53423.0,
+      "locked_pct_est": 40.82,
+      "free_float_units": 77453.4,
       "pool_count": 20,
       "pools_capped": true,
       "top_pools": [
         {
           "name": "BONER / HIMS",
           "cat": "locked",
-          "reserve": 2344195.71,
+          "reserve": 2445564.21,
           "pool": "0x9c89b04303dfa76f3f6fb02c2b77be0e8a00ab8fa00d507119acd54ab3e8640d"
         },
         {
           "name": "HIMS / USDG 0.3%",
           "cat": "reference",
-          "reserve": 1158592.24,
+          "reserve": 1139562.96,
           "pool": "0xc8c90d3a1c1a24967e773ac2ad0d456ba3e31f64"
         },
         {
           "name": "HIMS / USDG 0.9%",
           "cat": "reference",
-          "reserve": 498099.58,
+          "reserve": 496318.82,
           "pool": "0x68d4f28f1432e0ad714658853edb2e6b0b1ac4060355ff3d169fea656b1d1c52"
         },
         {
           "name": "HIMS / WETH 5%",
           "cat": "reference",
-          "reserve": 426571.99,
+          "reserve": 426241.92,
           "pool": "0xddd0fbfc0958aee6e002104c719019275e69cac540583ad8b24533c1d3e78641"
         },
         {
           "name": "SHROOM / HIMS 20%",
           "cat": "locked",
-          "reserve": 176773.45,
+          "reserve": 182629.55,
           "pool": "0xc4c874974910f9bd738ebee59127dba52bee1b2c515628717e58a54c6b07e3fe"
         },
         {
           "name": "SPY / HIMS 0.05%",
           "cat": "locked",
-          "reserve": 145294.54,
+          "reserve": 145208.84,
           "pool": "0x67983c0d78cea3a8b4a5cc283feeeefd278a8ae5c6504b983b0c72bde13d1c0c"
         }
       ],
-      "ts": "2026-09-05T01:44:58.417326+00:00",
+      "ts": "2026-09-05T01:58:00.068453+00:00",
       "anchor_price": 27.73787,
-      "premium_pct": 0.19,
-      "supply_chg_6h_pct": 2.15
+      "premium_pct": -0.36,
+      "supply_chg_6h_pct": 1.55
     },
     {
       "symbol": "AMC",
       "ca": "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
-      "price_usd": 2.671278,
+      "price_usd": 2.670918,
       "supply": 2895757.577,
-      "float_usd": 7735373.05,
-      "reserve_locked": 3995914.52,
-      "reserve_reference": 5436170.61,
+      "float_usd": 7734330.49,
+      "reserve_locked": 4011555.07,
+      "reserve_reference": 5454064.09,
       "reserve_cross": 0.0,
-      "locked_units_est": 747940.6,
-      "locked_pct_est": 25.83,
-      "free_float_units": 2147816.9,
+      "locked_units_est": 750969.4,
+      "locked_pct_est": 25.93,
+      "free_float_units": 2144788.2,
       "pool_count": 20,
       "pools_capped": true,
       "top_pools": [
         {
           "name": "amc / USDG 0.3%",
           "cat": "reference",
-          "reserve": 3405059.88,
+          "reserve": 3413983.51,
           "pool": "0xaa34fea710a1a737840329051d81d3b0b7c564d5"
         },
         {
           "name": "amc / MEME",
           "cat": "locked",
-          "reserve": 2795612.52,
+          "reserve": 2840123.01,
           "pool": "0x27ccf0a6d1ee74840220715bcca7d3b01e0d33aa30d0259b47ae1585b3f4c071"
         },
         {
           "name": "amc / USDG 0.1%",
           "cat": "reference",
-          "reserve": 594187.76,
+          "reserve": 600408.87,
           "pool": "0x7499938c352d5b5b8f0c648722aca5ee964ef9b85c3a3041f1ec379726291d9d"
         },
         {
           "name": "amc / WETH 5%",
           "cat": "reference",
-          "reserve": 585149.72,
+          "reserve": 585991.19,
           "pool": "0x0b0d11e649641178fdc29a69af6161e6194c24b99cd62a164062be1e8e348d4f"
         },
         {
           "name": "amc / USDG 4%",
           "cat": "reference",
-          "reserve": 350259.28,
+          "reserve": 349478.46,
           "pool": "0x6126ac412fa954babe655766ea301cd6eabd92927b409656b0038de1539d9f4e"
         },
         {
           "name": "amc / USDG 3%",
           "cat": "reference",
-          "reserve": 314091.33,
+          "reserve": 317229.37,
           "pool": "0x592b43d2cca216f6b95b917a2a097464498c34816def99f3ccf2be7f88f45ef5"
         }
       ],
-      "ts": "2026-09-05T01:44:58.417326+00:00",
+      "ts": "2026-09-05T01:58:00.068453+00:00",
       "anchor_price": 2.683169,
-      "premium_pct": -0.44,
-      "supply_chg_6h_pct": 17.0,
+      "premium_pct": -0.46,
+      "supply_chg_6h_pct": 2.77,
       "chain_supply": 2895757.579,
       "chain_supply_gap_pct": 0.0
     }
