@@ -39,6 +39,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh issue create \
-            --title "HoodScout alert $(date -u +%Y-%m-%d\ %H:%MZ)" \
-            --body-file ALERT.txt
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            symbol=$(awk '{print $1}' <<< "$line")
+            type=$(awk '{print $2}' <<< "$line")
+            title="HoodScout alert: ${symbol} ${type}"
+
+            mapfile -t issues < <(gh issue list --state open --search "\"$title\" in:title" \
+              --json number,title --jq "[.[] | select(.title == \"$title\") | .number] | sort | .[]")
+
+            if [ -n "${issues[0]:-}" ]; then
+              keep="${issues[0]}"
+              gh issue edit "$keep" --body "$line"
+              for extra in "${issues[@]:1}"; do
+                gh issue close "$extra" --comment "Duplicate of #$keep, closing."
+              done
+            else
+              gh issue create --title "$title" --body "$line"
+            fi
+          done < ALERT.txt
