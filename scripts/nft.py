@@ -32,7 +32,12 @@ DRESSED_MIN = 6
 # prints name, chains, floor, supply and whether the collection is on
 # Robinhood Chain. Slugs are not guessable from a display name, so an
 # unverified guess silently tracks the wrong collection.
-WATCHLIST = {}
+WATCHLIST = {
+    "stonkbrokers-434284142": "StonkBrokers",   # 4444 supply, verified 2026-09-05
+    "cashcatss": "Cash Cats",                   # 9995 supply; note the double s
+    "chain-mancers": "Chain Mancers",           # 5000 supply
+    "itsriggles": "Riggles",                    # 2222 supply, thinnest of the four
+}
 
 
 def post(path):
