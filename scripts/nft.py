@@ -155,7 +155,70 @@ def write_history(rows, now, path="data/nft.jsonl"):
         f.write("\n".join(kept) + "\n")
 
 
+def err(e):
+    body = ""
+    try:
+        body = e.read(300).decode("utf-8", "replace").replace("\n", " ")
+    except Exception:
+        pass
+    return f"{e} {body}".strip()
+
+
+def probe():
+    """Dump raw discovery/detail responses so field names can be read, not assumed."""
+    key = mint_key()
+    listed, detail, orders = None, None, {}
+
+    print("=== RAW list: /collections?chain=%s&limit=3 ===" % CHAIN)
+    try:
+        listed = get(f"/collections?chain={CHAIN}&limit=3", key)
+        print(json.dumps(listed, indent=2, sort_keys=True)[:4000])
+    except Exception as e:
+        print("FAIL:", err(e))
+
+    for ob in ["market_cap", "seven_day_volume", "one_day_volume",
+               "created_date", "num_owners"]:
+        try:
+            d = get(f"/collections?chain={CHAIN}&order_by={ob}&limit=1", key)
+            orders[ob] = f"OK ({len(d.get('collections') or [])} item)"
+        except Exception as e:
+            orders[ob] = err(e)[:160]
+        time.sleep(1)
+
+    print()
+    print("=== RAW detail: /collections/stonkbrokers-434284142 ===")
+    try:
+        detail = get("/collections/stonkbrokers-434284142", key)
+        print(json.dumps(detail, indent=2, sort_keys=True)[:4000])
+    except Exception as e:
+        print("FAIL:", err(e))
+
+    # summary last: log tailing shows the end of the step
+    print()
+    print("=== SUMMARY ===")
+    print("list top-level keys:", sorted(listed) if isinstance(listed, dict) else None)
+    items = (listed or {}).get("collections") or []
+    print("list item count:", len(items))
+    print("list item keys:", sorted({k for it in items for k in it}) if items else None)
+    print("order_by accepted:")
+    for k, v in orders.items():
+        print(f"    {k}: {v}")
+    print("detail keys:", sorted(detail) if isinstance(detail, dict) else None)
+    for f in ["twitter_username", "project_url", "description", "discord_url",
+              "is_verified", "safelist_status", "created_date", "opensea_url",
+              "total_supply", "owner"]:
+        present = isinstance(detail, dict) and f in detail
+        val = repr((detail or {}).get(f))[:80] if present else "-"
+        print(f"    {f:18} present={present} value={val}")
+
+
 def main():
+    key = None
+
+    if "--probe" in sys.argv:
+        probe()
+        return
+
     key = mint_key()
 
     if "--verify" in sys.argv:

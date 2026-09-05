@@ -8,6 +8,11 @@ on:
         description: "Space-separated slugs to verify instead of collecting"
         required: false
         default: ""
+      probe:
+        description: "Dump raw discovery/detail responses to read field names"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -27,8 +32,11 @@ jobs:
       - name: Collect
         env:
           VERIFY_SLUGS: ${{ inputs.verify_slugs }}
+          PROBE: ${{ inputs.probe }}
         run: |
-          if [ -n "$VERIFY_SLUGS" ]; then
+          if [ "$PROBE" = "true" ]; then
+            python scripts/nft.py --probe
+          elif [ -n "$VERIFY_SLUGS" ]; then
             python scripts/nft.py --verify $VERIFY_SLUGS
           else
             python scripts/nft.py
