@@ -9,9 +9,16 @@ NETWORK = "robinhood"
 HEADERS = {"Accept": "application/json;version=20230302",
            "User-Agent": "hoodscout-data/0.3"}
 
+# Every entry is confirmed by scripts/verify_stocks.py: the on-chain name
+# carries the "Robinhood Token" suffix and the deployed bytecode is identical
+# to the others (283 bytes, sha256 caced2aa743efc36). Ticker squatters are
+# thick on this chain, so nothing goes in here on a name match alone.
 STOCKS = {
     "HIMS": "0xccee82fe024c36fa15e1005ede3e9e4787e23d09",
     "AMC":  "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
+    "NVDA": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",  # NVIDIA, verified 2026-09-06
+    "MSTR": "0xec262a75e413fafd0df80480274532c79d42da09",  # Strategy Inc.
+    "GME":  "0x1b0e319c6a659f002271b69db8a7df2f911c153e",  # GameStop
 }
 
 # counterparties that are trading venues, not "locking" pools
