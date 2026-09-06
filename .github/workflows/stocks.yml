@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
+    inputs:
+      verify_tickers:
+        description: "Space-separated tickers to verify instead of collecting"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -20,7 +25,15 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - run: python scripts/stocks.py
+      - name: Collect
+        env:
+          VERIFY_TICKERS: ${{ inputs.verify_tickers }}
+        run: |
+          if [ -n "$VERIFY_TICKERS" ]; then
+            python scripts/verify_stocks.py $VERIFY_TICKERS
+          else
+            python scripts/stocks.py
+          fi
       - name: Commit
         run: |
           git config user.name "hoodscout-bot"
