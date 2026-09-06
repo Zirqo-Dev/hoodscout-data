@@ -157,7 +157,44 @@ def describe(ca, ref_codes):
     return out
 
 
+def measure_preview(pairs):
+    """Run the live stocks.py measurement over SYM:CA pairs without touching
+    STOCKS, so the numbers can be eyeballed before a contract joins alerting."""
+    sys.path.insert(0, "scripts")
+    import stocks
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    hist = stocks.history()
+    print(f"anchor {stocks.ANCHOR_UTC}   history rows {len(hist)}")
+    print(f"{'sym':<7}{'locked_pct_est':>15}{'free_float_units':>18}"
+          f"{'premium_pct':>13}{'supply':>14}{'price_usd':>12}")
+    for pair in pairs:
+        sym, _, ca = pair.partition(":")
+        try:
+            m = stocks.measure(sym, ca.lower())
+        except Exception as e:
+            print(f"{sym:<7} measure failed: {e}")
+            continue
+        if not m:
+            print(f"{sym:<7} no price/fdv from GeckoTerminal")
+            continue
+        m["ts"] = now.isoformat()
+        fired = stocks.alerts([m], hist, now)
+        print(f"{sym:<7}{str(m.get('locked_pct_est')):>15}"
+              f"{str(m.get('free_float_units')):>18}"
+              f"{str(m.get('premium_pct')):>13}"
+              f"{m.get('supply'):>14,.0f}{m.get('price_usd'):>12}")
+        for f in fired:
+            print(f"        alert: {f}")
+        time.sleep(2.5)
+
+
 def main():
+    if "--measure" in sys.argv:
+        measure_preview(sys.argv[sys.argv.index("--measure") + 1:])
+        return
+
     tickers = [a for a in sys.argv[1:] if not a.startswith("-")]
     if not tickers:
         print("usage: verify_stocks.py TICKER [TICKER ...]")
