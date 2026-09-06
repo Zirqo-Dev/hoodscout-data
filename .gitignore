@@ -3,3 +3,7 @@ __pycache__/
 
 # written by scripts/stocks.py, consumed by the workflow's Alert step
 ALERT.txt
+
+# derived, rebuilt from the tracked JSON/JSONL by scripts/build_db.py
+hoodscout.db
+*.db
