@@ -260,7 +260,10 @@ def write_history(tokens, now):
                 "sells6": t["sells6"], "chg_h6": t["chg_h6"],
                 "chg_h24": t["chg_h24"], "main_pool": t["main_pool"],
                 "flag_contradiction": t["flag_contradiction"],
-                "flag_liq_anomaly": t["flag_liq_anomaly"]}))
+                "flag_liq_anomaly": t["flag_liq_anomaly"],
+                # every snapshot, not just the one daily file that survives,
+                # so tier persistence is queryable across runs
+                "tier": t.get("tier")}))
     with open(path, "w") as f:
         f.write("\n".join(kept) + "\n")
 

@@ -136,7 +136,7 @@ def load_memes():
             "main_pool": r.get("main_pool"),
             "flag_contradiction": flag(r.get("flag_contradiction")),
             "flag_liq_anomaly": flag(r.get("flag_liq_anomaly")),
-            "tier": None, "screen_score": None,
+            "tier": r.get("tier"), "screen_score": None,
             "trades_per_trader": None, "liq_fdv_pct": None, "age_days": None,
         }
 
