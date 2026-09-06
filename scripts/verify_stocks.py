@@ -10,7 +10,7 @@ the real token is a considerably higher bar.
 
 Usage: python scripts/verify_stocks.py NVDA SPCX MSTR GME
 """
-import hashlib, json, sys, time, urllib.parse, urllib.request
+import hashlib, json, sys, time, urllib.error, urllib.parse, urllib.request
 
 BASE = "https://api.geckoterminal.com/api/v2"
 RPC = "https://rpc.mainnet.chain.robinhood.com"
@@ -29,10 +29,20 @@ SEL_NAME, SEL_SYMBOL = "0x06fdde03", "0x95d89b41"
 SEL_DECIMALS, SEL_SUPPLY = "0x313ce567", "0x18160ddd"
 
 
-def gt(path):
-    req = urllib.request.Request(BASE + path, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.load(r)
+def gt(path, tries=4):
+    """GeckoTerminal rate-limits the free tier; back off rather than reporting
+    a 429 as an absence, which would read as 'no such token'."""
+    for i in range(tries):
+        try:
+            req = urllib.request.Request(BASE + path, headers=HEADERS)
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or i == tries - 1:
+                raise
+            wait = 20 * (i + 1)
+            print(f"    429, retrying in {wait}s")
+            time.sleep(wait)
 
 
 def rpc(method, params):
@@ -88,11 +98,7 @@ def similarity(a, b):
 def candidates(ticker):
     """Base tokens of any pool GeckoTerminal returns for this ticker."""
     q = urllib.parse.quote(ticker)
-    try:
-        d = gt(f"/search/pools?query={q}&network={NETWORK}&page=1")
-    except Exception as e:
-        print(f"    search failed: {e}")
-        return {}
+    d = gt(f"/search/pools?query={q}&network={NETWORK}&page=1")
     found = {}
     for item in d.get("data", []):
         a = item.get("attributes") or {}
@@ -176,7 +182,12 @@ def main():
         print("=" * 70)
         print(f"TICKER {ticker}")
         print("=" * 70)
-        found = candidates(ticker)
+        try:
+            found = candidates(ticker)
+        except Exception as e:
+            # not the same thing as an absence, and must not be read as one
+            print(f"  SEARCH FAILED, ticker NOT TESTED: {e}")
+            continue
         if not found:
             print("  no GeckoTerminal pools matched -> SKIP (not found)")
             time.sleep(2.5)
@@ -196,11 +207,14 @@ def main():
             print(f"      name suffix ok   : {d['name_suffix_ok']}")
             print(f"      decimals/supply  : {d['decimals']} / {d['total_supply']}")
             print(f"      code             : {d['code_len']} bytes sha256 {d['code_sha256']}")
+            passes = d["name_suffix_ok"] and any(b["exact"] for b in d["bytecode"].values())
             for sym, b in d["bytecode"].items():
                 print(f"      vs {sym:<5}        : exact={b['exact']} "
                       f"similarity={b['similarity_pct']}% len_delta={b['len_delta']}")
-            depth = pool_depth(ca)
-            print(f"      pool depth       : {json.dumps(depth)[:400]}")
+            print(f"      VERDICT          : {'PASS' if passes else 'REJECT'}")
+            # only the candidate that passed is worth spending a request on
+            if passes:
+                print(f"      pool depth       : {json.dumps(pool_depth(ca))[:500]}")
             time.sleep(2.5)
         time.sleep(2.5)
 
