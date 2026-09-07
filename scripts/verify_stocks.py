@@ -157,6 +157,38 @@ def describe(ca, ref_codes):
     return out
 
 
+def inspect(cas):
+    """Raw identity and pool evidence for arbitrary contracts, for checking a
+    flagged address before it is written into avoid.json."""
+    for ca in cas:
+        print()
+        print(f"--- {ca}")
+        try:
+            print(f"    name()       : {decode_string(call(ca, SEL_NAME))!r}")
+            print(f"    symbol()     : {decode_string(call(ca, SEL_SYMBOL))!r}")
+            dec = decode_uint(call(ca, SEL_DECIMALS))
+            sup = decode_uint(call(ca, SEL_SUPPLY))
+            print(f"    decimals     : {dec}")
+            print(f"    totalSupply  : {sup / 10 ** dec if sup is not None and dec else sup}")
+            code = code_of(ca)
+            print(f"    code         : {len(code)//2} bytes "
+                  f"sha256 {hashlib.sha256(code.encode()).hexdigest()[:16]}")
+        except Exception as e:
+            print(f"    RPC FAILED   : {err(e)}")
+        try:
+            a = (gt(f"/networks/{NETWORK}/tokens/{ca}").get("data") or {}).get("attributes") or {}
+            print(f"    GT name/sym  : {a.get('name')!r} / {a.get('symbol')!r}")
+            print(f"    GT price/fdv : {a.get('price_usd')} / {a.get('fdv_usd')}")
+        except Exception as e:
+            print(f"    GT token     : {err(e)}")
+        time.sleep(2.5)
+        try:
+            print(f"    pools        : {json.dumps(pool_depth(ca))[:700]}")
+        except Exception as e:
+            print(f"    pools        : {err(e)}")
+        time.sleep(2.5)
+
+
 def measure_preview(pairs):
     """Run the live stocks.py measurement over SYM:CA pairs without touching
     STOCKS, so the numbers can be eyeballed before a contract joins alerting."""
@@ -191,6 +223,10 @@ def measure_preview(pairs):
 
 
 def main():
+    if "--inspect" in sys.argv:
+        inspect(sys.argv[sys.argv.index("--inspect") + 1:])
+        return
+
     if "--measure" in sys.argv:
         measure_preview(sys.argv[sys.argv.index("--measure") + 1:])
         return
