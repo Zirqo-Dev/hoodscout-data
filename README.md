@@ -49,6 +49,45 @@ issue every run.
 
 Writes `data/stocks_latest.json` and appends to `data/stocks.jsonl`.
 
+### Verifying a contract before it joins `STOCKS` — `verify_stocks.py`
+
+Every ticker in `STOCKS` has at least one active impersonator on this chain,
+so a contract is confirmed before it is tracked, never matched on symbol.
+
+The checks used to come from Blockscout — a verified badge, a "Stock" tag, a
+robinhood.com link. That route is closed: the explorer sits behind a Cloudflare
+managed challenge (`Cf-Mitigated: challenge`, a "Just a moment..."
+interstitial) which requires executing JavaScript and returning client hints,
+so no scripted client can reach it, from a runner or anywhere else.
+
+Authenticity is established from the chain instead. `scripts/verify_stocks.py`
+searches GeckoTerminal for pools matching a ticker, then for each candidate
+contract reads `name()` and `symbol()` over JSON-RPC and compares
+`eth_getCode` against the known-good HIMS and AMC contracts. Robinhood stock
+tokens are clones of one implementation — 283 bytes, sha256 `caced2aa743efc36`
+— so a genuine token matches byte for byte while an impersonator does not. A
+squatter can copy a name, a logo and a website; matching deployed bytecode is
+a much higher bar. The run prints the two reference contracts' mutual
+similarity first, because the test means nothing if they do not match
+each other.
+
+It is run on demand through the `verify_tickers` input on `stocks.yml`
+(Actions → stocks → Run workflow), which takes over the run in place of
+collection, writes no data and fires no alerts:
+
+- `NVDA MSTR GME` — verify tickers, printing every candidate and a
+  PASS/REJECT per contract
+- `--inspect <address> [...]` — name, symbol, supply, code hash and pool
+  history for specific addresses, for checking a flagged contract before it
+  goes into `avoid.json`
+- `--measure SYM:0xADDRESS [...]` — run the live measurement over contracts
+  that are not in `STOCKS`, so locked share, free float and premium can be
+  reviewed before one joins the alerting pipeline
+
+This is how NVDA, MSTR and GME were confirmed, and how SPCX was rejected: ten
+candidates, none carrying the suffix or matching bytecode. The same check
+independently rejected the fake MSTR in `avoid.json` at 0.4% similarity.
+
 ## NFTs — `nft.py`
 
 Tracks floor price, volume, sales, and owner counts for a hand-verified list

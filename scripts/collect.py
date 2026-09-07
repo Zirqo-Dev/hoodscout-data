@@ -23,6 +23,15 @@ BEST_MAX_TPT     = 4.0
 EMERGING_MAX_AGE = 3.0
 EMERGING_MAX_TPT = 5.0   # looser than BEST: early trading is concentrated
 DEAD_TXNS_24H    = 10    # below this, a token past MAX_AGE_DAYS is inactive
+
+# Chain stablecoins are quote assets, not anything to discover, and they sit
+# close enough to the depth and concentration thresholds to keep resurfacing.
+# Addresses are confirmed live before being added here, never from memory:
+# 0x5fc5... reads name() 'Global Dollar', symbol() 'USDG', 6 decimals, trading
+# at $0.9997 across 20 pools since 2026-06-29.
+STABLECOINS = {
+    "0x5fc5360d0400a0fd4f2af552add042d716f1d168",   # USDG / Global Dollar
+}
 TRENDING_PAGES = 2
 NEW_POOL_PAGES = 3
 
@@ -360,9 +369,10 @@ def main():
     # contradiction tokens are excluded — they failed a sanity check rather
     # than a maturity bar, which is a different thing to be looking at.
     discover = [t for t in tokens
-                if t["tier"] == "EMERGING"
-                or (t["tier"] == "WATCH"
-                    and t["watch_reason"] in ("unproven", "tpt_high"))]
+                if t["ca"] not in STABLECOINS
+                and (t["tier"] == "EMERGING"
+                     or (t["tier"] == "WATCH"
+                         and t["watch_reason"] in ("unproven", "tpt_high")))]
     discover = sorted(
         ({"symbol": t["symbol"], "ca": t["ca"], "tier": t["tier"],
           "watch_reason": t["watch_reason"],
