@@ -227,6 +227,67 @@ def classify(t, avoid, persist, hist):
     return "SPECULATIVE"
 
 
+def watch_reason(t, persist, hist):
+    """Why a WATCH token is not in a higher tier. Labelling only — this reads
+    the same conditions classify() uses and never changes a tier."""
+    if t["flag_contradiction"]:
+        return "contradiction"
+
+    age, lf, tpt = t["age_days"], t["liq_fdv_pct"], t["trades_per_trader"]
+
+    # would BEST or EMERGING have taken it but for trade concentration alone?
+    best_but_tpt = (persist.get(t["ca"], 0) >= PERSIST_MIN
+                    and lf is not None and lf >= BEST_MIN_LIQ_FDV
+                    and age is not None and age >= BEST_MIN_AGE
+                    and (tpt is None or tpt > BEST_MAX_TPT))
+    emerging_but_tpt = (age is not None and age <= EMERGING_MAX_AGE
+                        and (tpt is None or tpt > EMERGING_MAX_TPT)
+                        and buyer_rate_rising(t["ca"], hist))
+    if best_but_tpt or emerging_but_tpt:
+        return "tpt_high"
+
+    # old enough and seen often enough to have been judged: what holds it back
+    # is pool depth, which is a quality bar rather than a maturity one
+    if (age is not None and age >= BEST_MIN_AGE
+            and persist.get(t["ca"], 0) >= PERSIST_MIN
+            and (lf is None or lf < BEST_MIN_LIQ_FDV)):
+        return "thin_depth"
+
+    return "unproven"
+
+
+def buyer_accel(ca, hist, recent_h=2.0, trailing_h=6.0):
+    """Mean buyers24 over the last ~2h against the trailing ~2-6h, anchored to
+    the token's own latest snapshot so a token that stopped reporting is not
+    measured against wall-clock now. Windows are time-based because snapshot
+    spacing is uneven. Ported from example_queries.sql, which held the only
+    implementation of this comparison."""
+    rows = [r for r in hist
+            if r.get("ca") == ca and r.get("byr24") is not None and r.get("ts")]
+    if not rows:
+        return None
+    try:
+        anchor = datetime.fromisoformat(max(r["ts"] for r in rows))
+    except ValueError:
+        return None
+
+    recent, trailing = [], []
+    for r in rows:
+        try:
+            hrs = (anchor - datetime.fromisoformat(r["ts"])).total_seconds() / 3600
+        except ValueError:
+            continue
+        if hrs <= recent_h:
+            recent.append(r["byr24"])
+        elif hrs <= trailing_h:
+            trailing.append(r["byr24"])
+
+    if not recent or not trailing:
+        return None
+    before = sum(trailing) / len(trailing)
+    return round(100 * ((sum(recent) / len(recent)) / before - 1), 2) if before else None
+
+
 def load_avoid():
     try:
         with open("avoid.json") as f:
@@ -278,6 +339,8 @@ def main():
     persist = persistence(hist)
     for t in tokens:
         t["tier"] = classify(t, avoid, persist, hist)
+        t["watch_reason"] = (watch_reason(t, persist, hist)
+                             if t["tier"] == "WATCH" else None)
 
     avoided = [{"symbol": t["symbol"], "ca": t["ca"], "reason": avoid[t["ca"]]}
                for t in tokens if t["ca"] in avoid]
@@ -293,9 +356,31 @@ def main():
     for tier, items in by_tier.items():
         counts[tier] = len(items)
 
+    # surfacing only: rising or simply unproven, never auto-promoted anywhere.
+    # contradiction tokens are excluded — they failed a sanity check rather
+    # than a maturity bar, which is a different thing to be looking at.
+    discover = [t for t in tokens
+                if t["tier"] == "EMERGING"
+                or (t["tier"] == "WATCH"
+                    and t["watch_reason"] in ("unproven", "tpt_high"))]
+    discover = sorted(
+        ({"symbol": t["symbol"], "ca": t["ca"], "tier": t["tier"],
+          "watch_reason": t["watch_reason"],
+          "buyer_accel_pct": buyer_accel(t["ca"], hist),
+          "screen_score": t["screen_score"], "txns24": t["txns24"],
+          "age_days": t["age_days"], "liq_usd": t["liq_usd"],
+          "vol24_usd": t["vol24_usd"], "gt_url": t["gt_url"]} for t in discover),
+        key=lambda r: (r["buyer_accel_pct"] is None, -(r["buyer_accel_pct"] or 0)))
+
+    reasons = {}
+    for t in tokens:
+        if t["watch_reason"]:
+            reasons[t["watch_reason"]] = reasons.get(t["watch_reason"], 0) + 1
+
     out = {"generated_at": now.isoformat(), "network": NETWORK,
            "pools_seen": len(pools), "tokens_seen": len(tokens),
-           "tier_counts": counts, "tokens_by_tier": by_tier,
+           "tier_counts": counts, "watch_reasons": reasons,
+           "tokens_by_tier": by_tier, "discover": discover,
            "avoided": avoided, "candidates": cands, "tokens": tokens}
     os.makedirs("data/daily", exist_ok=True)
     json.dump(out, open("data/latest.json", "w"), indent=2)
