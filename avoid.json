@@ -28,5 +28,17 @@
     "symbol": "TEST - DO NOT BUY",
     "reason": "Self-describing test deployment. Zero liquidity, nonsense $2,518 price.",
     "added": "2026-09-04"
+  },
+  {
+    "ca": "0x10253e0c72a5cda9d5bac502a2271c455db2fffe",
+    "symbol": "AI (fake)",
+    "reason": "Same-day ticker collision with Artificial Inu, NVDA pair. On-chain name 'Animal Intelligence', symbol AI. Round 1,000,000,000 single-mint supply against the real AI's 991,408,097. Sole pool AI/NVDA created 2026-09-06T19:30:45Z holding $3.8k, against the real token's 20 pools and $23M since 2026-07-14. FDV $3,851 vs $227M.",
+    "added": "2026-09-07"
+  },
+  {
+    "ca": "0xe7838f5334ed7e5fdccf1c068fe94e7a077bd6d6",
+    "symbol": "AI (fake)",
+    "reason": "Same-day ticker collision with Artificial Inu, WETH pair. Identical on-chain name 'Animal Intelligence' and identical round 1,000,000,000 supply to 0x10253e0c, with its sole pool created 50 seconds after that one (2026-09-06T19:31:35Z) - a matched pair, not two unrelated tokens. FDV $4,250 vs the real AI's $227M.",
+    "added": "2026-09-07"
   }
 ]
