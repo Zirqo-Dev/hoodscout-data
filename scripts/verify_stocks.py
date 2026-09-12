@@ -182,6 +182,79 @@ def describe(ca, ref_codes):
     return out
 
 
+SWEEP_MIN_RESERVE = 500_000
+
+
+def tracked_cas(path="data/latest.json"):
+    """Tokens collect.py already sees, so the sweep only reports what is missing."""
+    try:
+        d = json.load(open(path))
+    except Exception as e:
+        print(f"WARN {path}: {e}")
+        return set()
+    return {(t.get("ca") or "").lower() for t in d.get("tokens") or []}
+
+
+def sweep(cas, floor=SWEEP_MIN_RESERVE):
+    """Counterparties holding real depth against the given tokens that are not
+    already tracked. Quote assets and the source tokens themselves are skipped:
+    the question is which trading partners the pipeline cannot currently see."""
+    sys.path.insert(0, "scripts")
+    import stocks
+
+    known = tracked_cas()
+    sources = {c.lower() for c in cas}
+    skip = sources | known | {a.lower() for a in stocks.REFERENCE} \
+        | {c.lower() for c in stocks.STOCKS.values()}
+    print(f"already tracked in latest.json: {len(known)} tokens")
+    print(f"reserve floor: ${floor:,}")
+
+    found = {}
+    for ca in cas:
+        try:
+            rows = counterparties(ca, limit=20)
+        except Exception as e:
+            print(f"WARN {ca}: {err(e)}")
+            continue
+        for r in rows:
+            cp = (r["counterparty"] or "").lower()
+            if not cp or cp in skip or r["reserve"] < floor:
+                continue
+            f = found.setdefault(cp, {"best": 0.0, "via": []})
+            f["best"] = max(f["best"], r["reserve"])
+            f["via"].append(f"{r['pool']} ${r['reserve']:,.0f}")
+        time.sleep(2.5)
+
+    print()
+    print(f"=== {len(found)} untracked counterparties over the floor ===")
+    for cp, f in sorted(found.items(), key=lambda kv: -kv[1]["best"]):
+        print()
+        print(f"--- {cp}")
+        for v in f["via"]:
+            print(f"    via          : {v}")
+        try:
+            print(f"    name()       : {decode_string(call(cp, SEL_NAME))!r}")
+            print(f"    symbol()     : {decode_string(call(cp, SEL_SYMBOL))!r}")
+            dec = decode_uint(call(cp, SEL_DECIMALS))
+            sup = decode_uint(call(cp, SEL_SUPPLY))
+            human = sup / 10 ** dec if (sup is not None and dec) else sup
+            shape = "ROUND (single-mint shape)" if human and float(human).is_integer() \
+                and human >= 1_000_000 else "organic"
+            print(f"    totalSupply  : {human} -> {shape}")
+        except Exception as e:
+            print(f"    RPC FAILED   : {err(e)}")
+        try:
+            d = pool_depth(cp)
+            created = d.get("created") or []
+            span = f"{created[0]} .. {created[-1]}" if created else "-"
+            print(f"    pools        : {d.get('count')}   created span: {span}")
+            for p in (d.get("top") or [])[:3]:
+                print(f"        {p['reserve']:>14,.2f}  {p['name']}  {p['created']}")
+        except Exception as e:
+            print(f"    pools        : {err(e)}")
+        time.sleep(2.5)
+
+
 def inspect(cas):
     """Raw identity and pool evidence for arbitrary contracts, for checking a
     flagged address before it is written into avoid.json."""
@@ -258,6 +331,10 @@ def main():
             except Exception as e:
                 print(f"    FAILED: {err(e)}")
             time.sleep(2.5)
+        return
+
+    if "--sweep" in sys.argv:
+        sweep(sys.argv[sys.argv.index("--sweep") + 1:])
         return
 
     if "--inspect" in sys.argv:
