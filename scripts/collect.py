@@ -3,6 +3,8 @@
 import json, os, time, urllib.request
 from datetime import datetime, timezone, timedelta
 
+import stocks   # STOCKS is imported, never duplicated, so the two cannot drift
+
 NETWORK = "robinhood"
 BASE = "https://api.geckoterminal.com/api/v2"
 HEADERS = {"Accept": "application/json;version=20230302",
@@ -35,6 +37,15 @@ STABLECOINS = {
 TRENDING_PAGES = 2
 NEW_POOL_PAGES = 3
 
+# Deep counterparties are invisible to trending and new_pools, and to symbol
+# search: /search/pools?query=BONER returns four ~$3K impostors and misses the
+# real Boner Coin entirely, which holds $2.7M against HIMS and $1.9M against AI.
+# Pools are fetched for these tokens directly instead.
+EXTRA_POOL_LOOKUPS = {
+    "0x98096d17e191b3da1d5f99a6d7b3584351b11e18",   # BONER / 'Boner Coin'
+}
+POOL_LOOKUP_CAS = {c.lower() for c in stocks.STOCKS.values()} | EXTRA_POOL_LOOKUPS
+
 
 def get(path):
     req = urllib.request.Request(BASE + path, headers=HEADERS)
@@ -64,6 +75,22 @@ def collect():
             if addr and addr not in seen:
                 seen.add(addr)
                 pools.append(item)
+        time.sleep(2.5)
+
+    for ca in sorted(POOL_LOOKUP_CAS):
+        try:
+            data = get(f"/networks/{NETWORK}/tokens/{ca}/pools").get("data", [])
+        except Exception as e:
+            print(f"WARN pools {ca}: {e}")
+            continue
+        added = 0
+        for item in data:
+            addr = (item.get("attributes") or {}).get("address")
+            if addr and addr not in seen:
+                seen.add(addr)
+                pools.append(item)
+                added += 1
+        print(f"lookup {ca[:10]}: {len(data)} pools, {added} new")
         time.sleep(2.5)
     return pools
 
