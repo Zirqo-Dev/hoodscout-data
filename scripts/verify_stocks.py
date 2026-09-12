@@ -133,6 +133,31 @@ def pool_depth(ca):
             "created": sorted(p["created"] for p in pools if p["created"])}
 
 
+def counterparties(ca, limit=12):
+    """Pools this token trades in, with the address of the other side.
+
+    Symbol search is not enough to find a counterparty: /search/pools?query=BONER
+    returns only small USDG pools and misses the AI/BONER pool holding $3.3M.
+    Walking a known token's own pools reaches the deep ones directly.
+    """
+    d = gt(f"/networks/{NETWORK}/tokens/{ca}/pools")
+    rows = []
+    for item in d.get("data", []):
+        a, rel = item.get("attributes") or {}, item.get("relationships") or {}
+
+        def addr(side):
+            tid = ((rel.get(side) or {}).get("data") or {}).get("id", "")
+            return tid.split("_", 1)[1].lower() if "_" in tid else None
+
+        base, quote = addr("base_token"), addr("quote_token")
+        rows.append({"pool": a.get("name"),
+                     "reserve": round(float(a.get("reserve_in_usd") or 0), 2),
+                     "created": a.get("pool_created_at"),
+                     "counterparty": quote if base == ca.lower() else base})
+    rows.sort(key=lambda r: -r["reserve"])
+    return rows[:limit]
+
+
 def describe(ca, ref_codes):
     out = {"ca": ca}
     try:
@@ -223,6 +248,18 @@ def measure_preview(pairs):
 
 
 def main():
+    if "--counterparties" in sys.argv:
+        for ca in sys.argv[sys.argv.index("--counterparties") + 1:]:
+            print(f"--- pools of {ca}")
+            try:
+                for r in counterparties(ca):
+                    print(f"    {r['reserve']:>15,.2f}  {(r['pool'] or '')[:30]:<30} "
+                          f"{r['created']}  {r['counterparty']}")
+            except Exception as e:
+                print(f"    FAILED: {err(e)}")
+            time.sleep(2.5)
+        return
+
     if "--inspect" in sys.argv:
         inspect(sys.argv[sys.argv.index("--inspect") + 1:])
         return
