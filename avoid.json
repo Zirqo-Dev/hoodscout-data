@@ -58,5 +58,11 @@
     "symbol": "cyberbeer (dead sibling)",
     "reason": "cyberbeer name-cluster, single pool created 2026-09-07T04:52:17Z alongside 3 others sharing the same name, zero persistence in 7 subsequent collection runs while a sibling contract (0x829b217a...) grew to $60K+ liquidity — mint-and-abandon pattern, not a confirmed squat of an established token.",
     "added": "2026-09-07"
+  },
+  {
+    "ca": "0xc2362aff2a2a4cc1f48cf3dab2c4e2605eb94ba3",
+    "symbol": "GME (fake)",
+    "reason": "Impersonates the GameStop stock token and is funded, not dust. On-chain name 'GameStop' without the 'Robinhood Token' suffix the real contract carries, symbol GME. Round 100,000,000,000 single-mint supply against the real token's organic 172,432.744 - a 580,000x float. Deployed bytecode is 44 bytes (sha256 d6778098) and does not match the 283-byte stock-token implementation (sha256 caced2aa) that every genuine entry in STOCKS shares. Its deepest pool is GME/GME at $612,991 created 2026-07-23T00:41:53Z, quoted directly against the real GME, with 8 of its 20 pools created in a five-hour burst that same morning. Priced $0.0000251 vs the real $21.10. Collected and tiered WATCH on 2026-09-12 (3 snapshots, 176 buyers/24h) before being flagged.",
+    "added": "2026-09-13"
   }
 ]

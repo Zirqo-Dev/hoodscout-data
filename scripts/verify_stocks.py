@@ -24,6 +24,17 @@ REFERENCE = {
     "AMC": "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
 }
 
+# Quote assets: what tokens are priced *against*, not trading partners worth
+# surfacing. stocks.REFERENCE holds USDG and the zero address (native), so a
+# pool quoted in the wrapped-ETH ERC-20 was being reported as an untracked
+# counterparty of interest on every sweep. Kept here rather than added to
+# stocks.REFERENCE because that set also drives the locked/reference split in
+# stocks.measure(), and moving this depth would shift locked_pct_est and the
+# alert that reads it.
+QUOTE_ASSETS = {
+    "0x0bd7d308f8e1639fab988df18a8011f41eacad73",  # WETH, name()/symbol() 'WETH', 2202 bytes
+}
+
 NAME_SUFFIX = "robinhood token"
 SEL_NAME, SEL_SYMBOL = "0x06fdde03", "0x95d89b41"
 SEL_DECIMALS, SEL_SUPPLY = "0x313ce567", "0x18160ddd"
@@ -218,7 +229,7 @@ def sweep(cas, floor=SWEEP_MIN_RESERVE):
     known = tracked_cas()
     sources = {c.lower() for c in cas}
     skip = sources | known | {a.lower() for a in stocks.REFERENCE} \
-        | {c.lower() for c in stocks.STOCKS.values()}
+        | {c.lower() for c in stocks.STOCKS.values()} | QUOTE_ASSETS
     print(f"already tracked in latest.json: {len(known)} tokens")
     print(f"reserve floor: ${floor:,}")
 
