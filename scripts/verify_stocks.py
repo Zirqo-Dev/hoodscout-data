@@ -29,6 +29,19 @@ SEL_NAME, SEL_SYMBOL = "0x06fdde03", "0x95d89b41"
 SEL_DECIMALS, SEL_SUPPLY = "0x313ce567", "0x18160ddd"
 
 
+def err(e):
+    """One-line exception summary. An HTTPError carries the status and the
+    first of the body, which is what distinguishes a rate limit, a WAF
+    interstitial and a real absence from each other."""
+    if isinstance(e, urllib.error.HTTPError):
+        try:
+            body = e.read(200)
+        except Exception:
+            body = b""
+        return f"HTTP {e.code} {e.reason} {body!r}"
+    return f"{type(e).__name__}: {e}"
+
+
 def gt(path, tries=4):
     """GeckoTerminal rate-limits the free tier; back off rather than reporting
     a 429 as an absence, which would read as 'no such token'."""
