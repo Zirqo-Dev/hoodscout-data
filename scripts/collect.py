@@ -26,6 +26,11 @@ EMERGING_MAX_AGE = 3.0
 EMERGING_MAX_TPT = 5.0   # looser than BEST: early trading is concentrated
 DEAD_TXNS_24H    = 10    # below this, a token past MAX_AGE_DAYS is inactive
 
+# momentum: strictly additive, never an input to screen_score or tier
+MOMENTUM_MIN_AGE_H = 30.0  # 24h byr24 window + the 6h trailing window
+PRICE_BANDS = ((5.0, 5), (2.0, 3), (0.5, 1))      # chg_h6 %
+ACCEL_BANDS = ((50.0, 5), (20.0, 3), (5.0, 1))    # buyer_accel %
+
 # Chain stablecoins are quote assets, not anything to discover, and they sit
 # close enough to the depth and concentration thresholds to keep resurfacing.
 # Addresses are confirmed live before being added here, never from memory:
@@ -324,6 +329,61 @@ def buyer_accel(ca, hist, recent_h=2.0, trailing_h=6.0):
     return round(100 * ((sum(recent) / len(recent)) / before - 1), 2) if before else None
 
 
+def _band(v, bands):
+    """Map a signed value onto a symmetric -5..+5 band. Bands rather than a
+    continuous function because both inputs are noisy enough that a token's
+    exact percentile would be false precision."""
+    if v is None:
+        return None
+    for edge, pts in bands:
+        if v >= edge:
+            return pts
+        if v <= -edge:
+            return -pts
+    return 0
+
+
+def momentum(t, hist):
+    """How a token is moving, kept deliberately separate from whether it is a
+    real market. Verification over the full history.jsonl found BEST tokens did
+    no better than WATCH on the next print (median -0.45% vs -0.15%, win rate
+    44.7% vs 45.1%), so tier cannot be read as a direction call. This answers
+    the direction question on its own terms and is never folded back into
+    screen_score or tier.
+
+    Returns (score, basis, accel_pct). Score is price direction over 6h plus
+    buyer-rate acceleration, each banded to +/-5, so -10..+10.
+    """
+    age = t.get("age_days")
+    age_h = age * 24 if age is not None else None
+
+    # buyer_accel compares byr24 across two windows, but byr24 is a trailing
+    # 24h count: for a token younger than 24h it climbs as the window fills,
+    # whatever buyers actually do, so the ratio reports acceleration that is
+    # not there. The bias only fully clears once both windows sit past the
+    # fill, hence 24h + the 6h trailing window rather than a token simply
+    # being "a few hours old". Guarded here rather than inside buyer_accel,
+    # which the discover ordering already uses unguarded.
+    accel = None
+    if age_h is not None and age_h >= MOMENTUM_MIN_AGE_H:
+        accel = buyer_accel(t["ca"], hist)
+
+    price_pts = _band(t.get("chg_h6"), PRICE_BANDS)
+    accel_pts = _band(accel, ACCEL_BANDS)
+
+    if price_pts is None and accel_pts is None:
+        return None, "unscored: no 6h change and no usable buyer rate", None
+    if accel_pts is None:
+        basis = ("price only (too young for buyer rate)"
+                 if age_h is not None and age_h < MOMENTUM_MIN_AGE_H
+                 else "price only (not enough history for buyer rate)")
+    elif price_pts is None:
+        basis = "accel only (no 6h change reported)"
+    else:
+        basis = "price+accel"
+    return (price_pts or 0) + (accel_pts or 0), basis, accel
+
+
 def load_avoid():
     try:
         with open("avoid.json") as f:
@@ -355,6 +415,7 @@ def write_history(tokens, now):
                 "sellers24": t["sellers24"], "fdv_usd": t["fdv_usd"],
                 "vol24_usd": t["vol24_usd"], "buys6": t["buys6"],
                 "sells6": t["sells6"], "chg_h6": t["chg_h6"],
+                "momentum_score": t.get("momentum_score"),
                 "chg_h24": t["chg_h24"], "main_pool": t["main_pool"],
                 "flag_contradiction": t["flag_contradiction"],
                 "flag_liq_anomaly": t["flag_liq_anomaly"],
@@ -377,6 +438,12 @@ def main():
         t["tier"] = classify(t, avoid, persist, hist)
         t["watch_reason"] = (watch_reason(t, persist, hist)
                              if t["tier"] == "WATCH" else None)
+        # additive only: nothing below reads back into tier or screen_score
+        ms, basis, accel = momentum(t, hist)
+        t["momentum_score"], t["momentum_basis"] = ms, basis
+        t["momentum_accel_pct"] = accel      # age-guarded; discover's is not
+        t["flag_best_negative_momentum"] = bool(
+            t["tier"] == "BEST" and ms is not None and ms < 0)
 
     avoided = [{"symbol": t["symbol"], "ca": t["ca"], "reason": avoid[t["ca"]]}
                for t in tokens if t["ca"] in avoid]
@@ -417,6 +484,8 @@ def main():
     out = {"generated_at": now.isoformat(), "network": NETWORK,
            "pools_seen": len(pools), "tokens_seen": len(tokens),
            "tier_counts": counts, "watch_reasons": reasons,
+           "best_negative_momentum": sum(
+               1 for t in tokens if t["flag_best_negative_momentum"]),
            "tokens_by_tier": by_tier, "discover": discover,
            "avoided": avoided, "candidates": cands, "tokens": tokens}
     os.makedirs("data/daily", exist_ok=True)
