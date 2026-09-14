@@ -21,10 +21,14 @@ STOCKS = {
     "GME":  "0x1b0e319c6a659f002271b69db8a7df2f911c153e",  # GameStop
 }
 
-# counterparties that are trading venues, not "locking" pools
+# counterparties that are trading venues, not "locking" pools. Native ETH and
+# the wrapped-ETH ERC-20 are the same asset, so both belong here: whether a
+# pool quotes a stock token in one or the other is a venue detail, and it must
+# not decide whether that depth reads as locked.
 REFERENCE = {
     "0x5fc5360d0400a0fd4f2af552add042d716f1d168",  # USDG
-    "0x0000000000000000000000000000000000000000",  # native / WETH
+    "0x0000000000000000000000000000000000000000",  # native ETH
+    "0x0bd7d308f8e1639fab988df18a8011f41eacad73",  # WETH, name()/symbol() 'WETH'
 }
 
 # last moment the AP can still arbitrage before the blackout (UTC)
