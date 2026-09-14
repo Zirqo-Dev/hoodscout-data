@@ -24,17 +24,6 @@ REFERENCE = {
     "AMC": "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
 }
 
-# Quote assets: what tokens are priced *against*, not trading partners worth
-# surfacing. stocks.REFERENCE holds USDG and the zero address (native), so a
-# pool quoted in the wrapped-ETH ERC-20 was being reported as an untracked
-# counterparty of interest on every sweep. Kept here rather than added to
-# stocks.REFERENCE because that set also drives the locked/reference split in
-# stocks.measure(), and moving this depth would shift locked_pct_est and the
-# alert that reads it.
-QUOTE_ASSETS = {
-    "0x0bd7d308f8e1639fab988df18a8011f41eacad73",  # WETH, name()/symbol() 'WETH', 2202 bytes
-}
-
 NAME_SUFFIX = "robinhood token"
 SEL_NAME, SEL_SYMBOL = "0x06fdde03", "0x95d89b41"
 SEL_DECIMALS, SEL_SUPPLY = "0x313ce567", "0x18160ddd"
@@ -229,7 +218,7 @@ def sweep(cas, floor=SWEEP_MIN_RESERVE):
     known = tracked_cas()
     sources = {c.lower() for c in cas}
     skip = sources | known | {a.lower() for a in stocks.REFERENCE} \
-        | {c.lower() for c in stocks.STOCKS.values()} | QUOTE_ASSETS
+        | {c.lower() for c in stocks.STOCKS.values()}
     print(f"already tracked in latest.json: {len(known)} tokens")
     print(f"reserve floor: ${floor:,}")
 
@@ -344,6 +333,93 @@ def measure_preview(pairs):
         time.sleep(2.5)
 
 
+def reclass():
+    """Throwaway A/B: categorise every tracked token's pools under the old
+    REFERENCE (USDG + native) and the new one (plus the WETH ERC-20) from a
+    single fetch, so the locked/reference shift is measured at one instant."""
+    sys.path.insert(0, "scripts")
+    import stocks
+
+    USDG = "0x5fc5360d0400a0fd4f2af552add042d716f1d168"
+    ZERO = "0x0000000000000000000000000000000000000000"
+    WETH = "0x0bd7d308f8e1639fab988df18a8011f41eacad73"
+    OLD, NEW = {USDG, ZERO}, {USDG, ZERO, WETH}
+    stock_cas = {v.lower() for v in stocks.STOCKS.values()}
+
+    def bucket(data, ca, ref):
+        cats = {"locked": 0.0, "reference": 0.0, "cross": 0.0}
+        price = fdv = src = None
+        deepest = 0.0
+        for item in data:
+            a = item.get("attributes") or {}
+            rel = item.get("relationships") or {}
+            base = stocks.addr_of(rel, "base_token")
+            quote = stocks.addr_of(rel, "quote_token")
+            if ca not in (base, quote):
+                continue
+            other = quote if base == ca else base
+            res = stocks.num(a.get("reserve_in_usd")) or 0.0
+            if other in ref:
+                cat = "reference"
+                if res > deepest:
+                    deepest, src = res, a.get("name")
+                    price = stocks.num(a.get("token_price_usd"))
+                    fdv = stocks.num(a.get("fdv_usd"))
+            elif other in stock_cas:
+                cat = "cross"
+            else:
+                cat = "locked"
+            cats[cat] += res
+        return cats, price, fdv, src
+
+    print(f"{'sym':<6}{'rule':<6}{'locked':>15}{'reference':>15}"
+          f"{'locked_pct':>13}   price_src")
+    for sym, ca in stocks.STOCKS.items():
+        ca = ca.lower()
+        try:
+            data = gt(f"/networks/{NETWORK}/tokens/{ca}/pools").get("data", [])
+        except Exception as e:
+            print(f"{sym:<6} fetch failed: {err(e)}")
+            continue
+        moved = []
+        for item in data:
+            a = item.get("attributes") or {}
+            rel = item.get("relationships") or {}
+            base = stocks.addr_of(rel, "base_token")
+            quote = stocks.addr_of(rel, "quote_token")
+            if ca not in (base, quote):
+                continue
+            other = quote if base == ca else base
+            if other == WETH:
+                moved.append((a.get("name"), stocks.num(a.get("reserve_in_usd")) or 0.0))
+        out = {}
+        for label, ref in (("old", OLD), ("new", NEW)):
+            cats, price, fdv, src = bucket(data, ca, ref)
+            if not price or not fdv:
+                print(f"{sym:<6}{label:<6} no price/fdv")
+                out[label] = None
+                continue
+            supply = fdv / price
+            lu = cats["locked"] / 2 / price
+            pct = 100 * lu / supply if supply else None
+            out[label] = pct
+            print(f"{sym:<6}{label:<6}{cats['locked']:>15,.0f}{cats['reference']:>15,.0f}"
+                  f"{pct:>13.2f}   {src or '-'}")
+        if moved:
+            print(f"      WETH-ERC20 pools moved: {len(moved)}, ${sum(r for _, r in moved):,.0f}")
+            for n, r in sorted(moved, key=lambda x: -x[1]):
+                print(f"        ${r:>14,.2f}  {n}")
+        else:
+            print("      WETH-ERC20 pools moved: none")
+        if out.get("old") is not None and out.get("new") is not None:
+            crosses = (out["old"] >= 40) != (out["new"] >= 40)
+            print(f"      shift: {out['old']:.2f} -> {out['new']:.2f} "
+                  f"({out['new'] - out['old']:+.2f} pts)   "
+                  f"40% floor: {'CROSSES' if crosses else 'no change'}")
+        print()
+        time.sleep(2.5)
+
+
 def main():
     if "--counterparties" in sys.argv:
         for ca in sys.argv[sys.argv.index("--counterparties") + 1:]:
@@ -363,6 +439,10 @@ def main():
 
     if "--inspect" in sys.argv:
         inspect(sys.argv[sys.argv.index("--inspect") + 1:])
+        return
+
+    if "--reclass" in sys.argv:
+        reclass()
         return
 
     if "--measure" in sys.argv:
