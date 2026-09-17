@@ -202,9 +202,17 @@ def alerts(rows, hist, now):
                              f"({old[0]['supply']:,.0f} to {r['supply']:,.0f})"
                              + confirm_supply(r))
 
+        # Edge-triggered: fire on the poll that crosses the floor, not on every
+        # poll it stays crossed. MSTR sat below it for 635 consecutive polls
+        # against a single crossing, and each of those polls rewrote the same
+        # issue. A standing condition is what the open issue already records.
         lp = r.get("locked_pct_est")
         if lp is not None and lp < ALERT_LOCKED:
-            fired.append(f"{r['symbol']} locked share {lp:.1f}% below {ALERT_LOCKED}% floor")
+            prior = [h["locked_pct_est"] for h in past
+                     if h.get("locked_pct_est") is not None]
+            if not prior or prior[-1] >= ALERT_LOCKED:
+                fired.append(f"{r['symbol']} locked share {lp:.1f}% "
+                             f"below {ALERT_LOCKED}% floor")
     return fired
 
 

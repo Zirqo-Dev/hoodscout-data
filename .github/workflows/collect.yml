@@ -61,7 +61,14 @@ jobs:
 
             if [ -n "${issues[0]:-}" ]; then
               keep="${issues[0]}"
-              gh issue edit "$keep" --body "$line"
+              # only write when the text actually differs: a standing condition
+              # otherwise rewrites an identical body every single poll
+              current=$(gh issue view "$keep" --json body --jq .body)
+              if [ "$current" = "$line" ]; then
+                echo "#$keep unchanged, skipping edit"
+              else
+                gh issue edit "$keep" --body "$line"
+              fi
               for extra in "${issues[@]:1}"; do
                 gh issue close "$extra" --comment "Duplicate of #$keep, closing."
               done
