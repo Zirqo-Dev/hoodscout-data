@@ -26,8 +26,8 @@ EMERGING_MAX_AGE = 3.0
 EMERGING_MAX_TPT = 5.0   # looser than BEST: early trading is concentrated
 DEAD_TXNS_24H    = 10    # below this, a token past MAX_AGE_DAYS is inactive
 
-# momentum: strictly additive, never an input to screen_score or tier
-MOMENTUM_MIN_AGE_H = 30.0  # 24h byr24 window + the 6h trailing window
+# recent move: strictly additive, never an input to screen_score or tier
+RECENT_MOVE_MIN_AGE_H = 30.0  # 24h byr24 window + the 6h trailing window
 PRICE_BANDS = ((5.0, 5), (2.0, 3), (0.5, 1))      # chg_h6 %
 ACCEL_BANDS = ((50.0, 5), (20.0, 3), (5.0, 1))    # buyer_accel %
 
@@ -343,13 +343,24 @@ def _band(v, bands):
     return 0
 
 
-def momentum(t, hist):
-    """How a token is moving, kept deliberately separate from whether it is a
-    real market. Verification over the full history.jsonl found BEST tokens did
-    no better than WATCH on the next print (median -0.45% vs -0.15%, win rate
-    44.7% vs 45.1%), so tier cannot be read as a direction call. This answers
-    the direction question on its own terms and is never folded back into
-    screen_score or tier.
+def recent_move(t, hist):
+    """How far a token has just moved, kept separate from whether it is a real
+    market. Verification over the full history.jsonl found BEST tokens did no
+    better than WATCH on the next print (median -0.45% vs -0.15%, win rate
+    44.7% vs 45.1%), so tier cannot be read as a direction call. This is a
+    second, independent description and is never folded back into screen_score
+    or tier.
+
+    Named for what it measures and nothing more. It was called momentum until a
+    forward test over 6,656 scored rows (2026-09-14..17) showed the opposite of
+    persistence: a positive score preceded *worse* returns than a negative one
+    at 1h, 6h and 24h. At 6h the gap survived regime, token-clustering and
+    paired within-token tests (positive beat the same token's negative prints
+    in 22 of 79 cases), and roughly 85% of it was reproduced by chg_h6 alone --
+    short-horizon mean reversion, not momentum. The acceleration term showed no
+    independent forward signal at any horizon tested. Read this as "how far it
+    just moved", never as a direction call; the flag that did read it that way
+    was retired rather than inverted.
 
     Returns (score, basis, accel_pct). Score is price direction over 6h plus
     buyer-rate acceleration, each banded to +/-5, so -10..+10.
@@ -365,7 +376,7 @@ def momentum(t, hist):
     # being "a few hours old". Guarded here rather than inside buyer_accel,
     # which the discover ordering already uses unguarded.
     accel = None
-    if age_h is not None and age_h >= MOMENTUM_MIN_AGE_H:
+    if age_h is not None and age_h >= RECENT_MOVE_MIN_AGE_H:
         accel = buyer_accel(t["ca"], hist)
 
     price_pts = _band(t.get("chg_h6"), PRICE_BANDS)
@@ -375,7 +386,7 @@ def momentum(t, hist):
         return None, "unscored: no 6h change and no usable buyer rate", None
     if accel_pts is None:
         basis = ("price only (too young for buyer rate)"
-                 if age_h is not None and age_h < MOMENTUM_MIN_AGE_H
+                 if age_h is not None and age_h < RECENT_MOVE_MIN_AGE_H
                  else "price only (not enough history for buyer rate)")
     elif price_pts is None:
         basis = "accel only (no 6h change reported)"
@@ -415,7 +426,7 @@ def write_history(tokens, now):
                 "sellers24": t["sellers24"], "fdv_usd": t["fdv_usd"],
                 "vol24_usd": t["vol24_usd"], "buys6": t["buys6"],
                 "sells6": t["sells6"], "chg_h6": t["chg_h6"],
-                "momentum_score": t.get("momentum_score"),
+                "recent_move_score": t.get("recent_move_score"),
                 "chg_h24": t["chg_h24"], "main_pool": t["main_pool"],
                 "flag_contradiction": t["flag_contradiction"],
                 "flag_liq_anomaly": t["flag_liq_anomaly"],
@@ -439,11 +450,9 @@ def main():
         t["watch_reason"] = (watch_reason(t, persist, hist)
                              if t["tier"] == "WATCH" else None)
         # additive only: nothing below reads back into tier or screen_score
-        ms, basis, accel = momentum(t, hist)
-        t["momentum_score"], t["momentum_basis"] = ms, basis
-        t["momentum_accel_pct"] = accel      # age-guarded; discover's is not
-        t["flag_best_negative_momentum"] = bool(
-            t["tier"] == "BEST" and ms is not None and ms < 0)
+        rm, basis, accel = recent_move(t, hist)
+        t["recent_move_score"], t["recent_move_basis"] = rm, basis
+        t["recent_move_accel_pct"] = accel   # age-guarded; discover's is not
 
     avoided = [{"symbol": t["symbol"], "ca": t["ca"], "reason": avoid[t["ca"]]}
                for t in tokens if t["ca"] in avoid]
@@ -484,8 +493,6 @@ def main():
     out = {"generated_at": now.isoformat(), "network": NETWORK,
            "pools_seen": len(pools), "tokens_seen": len(tokens),
            "tier_counts": counts, "watch_reasons": reasons,
-           "best_negative_momentum": sum(
-               1 for t in tokens if t["flag_best_negative_momentum"]),
            "tokens_by_tier": by_tier, "discover": discover,
            "avoided": avoided, "candidates": cands, "tokens": tokens}
     os.makedirs("data/daily", exist_ok=True)
