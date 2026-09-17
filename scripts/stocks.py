@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Track Robinhood Stock Token float, locked share, and premium vs a pre-blackout anchor."""
-import json, os, time, urllib.request
+import json, os, time, urllib.error, urllib.request
 from datetime import datetime, timezone, timedelta
 
 BASE = "https://api.geckoterminal.com/api/v2"
@@ -43,10 +43,23 @@ ALERT_LOCKED    = 40.0   # % floor
 SUPPLY_TOLERANCE = 1.0   # %
 
 
-def get(path):
-    req = urllib.request.Request(BASE + path, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.load(r)
+def get(path, tries=4):
+    """Same 429 backoff as collect.get() and verify_stocks.gt(). This matters
+    more since the collection moved into collect.yml: stocks.py now runs
+    immediately after collect.py in the same job, against a rate-limit budget
+    collect.py has just spent, and without backoff a 429 dropped the symbol
+    from the run entirely."""
+    for i in range(tries):
+        try:
+            req = urllib.request.Request(BASE + path, headers=HEADERS)
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or i == tries - 1:
+                raise
+            wait = 20 * (i + 1)
+            print(f"  429 on {path}, retrying in {wait}s")
+            time.sleep(wait)
 
 
 def num(v):
@@ -219,15 +232,18 @@ def alerts(rows, hist, now):
 def main():
     now = datetime.now(timezone.utc)
     hist = history()
-    rows = []
+    rows, failed = [], []
     for sym, ca in STOCKS.items():
         try:
             m = measure(sym, ca.lower())
             if m:
                 m["ts"] = now.isoformat()
                 rows.append(m)
+            else:
+                failed.append({"symbol": sym, "error": "no price/fdv from GeckoTerminal"})
         except Exception as e:
             print(f"WARN {sym}: {e}")
+            failed.append({"symbol": sym, "error": f"{type(e).__name__}: {e}"})
         time.sleep(2.5)
 
     if not rows:
@@ -239,13 +255,19 @@ def main():
     with open("data/stocks.jsonl", "a") as f:
         for r in rows:
             f.write(json.dumps({k: v for k, v in r.items() if k != "top_pools"}) + "\n")
+    # a symbol that failed to measure is recorded rather than simply missing
+    # from tokens, which reads identically to a symbol that has no pools
     json.dump({"generated_at": now.isoformat(), "anchor_utc": ANCHOR_UTC,
-               "alerts": fired, "tokens": rows},
+               "alerts": fired, "measured": len(rows),
+               "failed": failed, "tokens": rows},
               open("data/stocks_latest.json", "w"), indent=2)
 
     for r in rows:
         print(f"{r['symbol']}: ${r['price_usd']:.4f} supply {r['supply']:,.0f} "
               f"locked {r.get('locked_pct_est')}% prem {r.get('premium_pct')}")
+    if failed:
+        print("FAILED to measure: "
+              + ", ".join(f["symbol"] for f in failed))
     if fired:
         with open("ALERT.txt", "w") as f:
             # trailing newline required: the workflow reads this with `while
