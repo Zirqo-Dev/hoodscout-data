@@ -54,7 +54,14 @@ jobs:
           elif [ -n "$VERIFY_SLUGS" ]; then
             python scripts/nft.py --verify $VERIFY_SLUGS
           else
+            # Scheduled run. --discover is a separate invocation, not another
+            # branch of this if: nft.py returns after whichever mode it matches,
+            # so folding discover in here as an elif would silently stop
+            # nft_latest.json and nft.jsonl updating. Tracked collections first,
+            # since that is the output the alerts depend on; discover is
+            # surfacing only and must not be able to fail the tracked run.
             python scripts/nft.py
+            python scripts/nft.py --discover || echo "discover failed, tracked data still written"
           fi
       - name: Commit
         run: |
