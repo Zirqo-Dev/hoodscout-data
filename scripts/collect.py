@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Collect Robinhood Chain pool data, aggregate by token, score."""
-import json, os, time, urllib.request
+import json, os, time, urllib.error, urllib.request
 from datetime import datetime, timezone, timedelta
 
 import stocks   # STOCKS is imported, never duplicated, so the two cannot drift
@@ -52,10 +52,23 @@ EXTRA_POOL_LOOKUPS = {
 POOL_LOOKUP_CAS = {c.lower() for c in stocks.STOCKS.values()} | EXTRA_POOL_LOOKUPS
 
 
-def get(path):
-    req = urllib.request.Request(BASE + path, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.load(r)
+def get(path, tries=4):
+    """GeckoTerminal rate-limits the free tier. Without backoff a 429 aborted
+    the call and was logged as a warning, which reads as "this token has no
+    pools" rather than "we were throttled" -- and the direct lookups run at
+    :00/:30, the same minutes stocks.py polls the same endpoints. Same backoff
+    as verify_stocks.gt()."""
+    for i in range(tries):
+        try:
+            req = urllib.request.Request(BASE + path, headers=HEADERS)
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or i == tries - 1:
+                raise
+            wait = 20 * (i + 1)
+            print(f"  429 on {path}, retrying in {wait}s")
+            time.sleep(wait)
 
 
 def num(v):
@@ -82,11 +95,17 @@ def collect():
                 pools.append(item)
         time.sleep(2.5)
 
+    # Outcome per address is returned and written to latest.json: a lookup that
+    # silently returns nothing is indistinguishable in the output from a token
+    # with no pools, and these six went missing for days before anyone noticed.
+    lookups = []
     for ca in sorted(POOL_LOOKUP_CAS):
         try:
             data = get(f"/networks/{NETWORK}/tokens/{ca}/pools").get("data", [])
         except Exception as e:
             print(f"WARN pools {ca}: {e}")
+            lookups.append({"ca": ca, "ok": False, "pools_returned": 0,
+                            "pools_new": 0, "error": f"{type(e).__name__}: {e}"})
             continue
         added = 0
         for item in data:
@@ -96,8 +115,10 @@ def collect():
                 pools.append(item)
                 added += 1
         print(f"lookup {ca[:10]}: {len(data)} pools, {added} new")
+        lookups.append({"ca": ca, "ok": True, "pools_returned": len(data),
+                        "pools_new": added, "error": None})
         time.sleep(2.5)
-    return pools
+    return pools, lookups
 
 
 def parse_pool(item, now):
@@ -440,7 +461,8 @@ def write_history(tokens, now):
 def main():
     now = datetime.now(timezone.utc)
     avoid = load_avoid()
-    pools = [parse_pool(p, now) for p in collect()]
+    raw, lookups = collect()
+    pools = [parse_pool(p, now) for p in raw]
     tokens = [score_token(t) for t in aggregate(pools)]
 
     hist = load_history()
@@ -492,6 +514,8 @@ def main():
 
     out = {"generated_at": now.isoformat(), "network": NETWORK,
            "pools_seen": len(pools), "tokens_seen": len(tokens),
+           "pool_lookups": lookups,
+           "pool_lookups_failed": sum(1 for l in lookups if not l["ok"]),
            "tier_counts": counts, "watch_reasons": reasons,
            "tokens_by_tier": by_tier, "discover": discover,
            "avoided": avoided, "candidates": cands, "tokens": tokens}
@@ -499,8 +523,11 @@ def main():
     json.dump(out, open("data/latest.json", "w"), indent=2)
     json.dump(out, open(f"data/daily/{now:%Y-%m-%d}.json", "w"), indent=2)
     write_history(tokens, now)
+    bad = [l["ca"][:10] for l in lookups if not l["ok"]]
     print(f"{len(pools)} pools -> {len(tokens)} tokens, "
           f"{len(cands)} candidates, {len(avoided)} avoided")
+    print(f"pool lookups: {len(lookups) - len(bad)}/{len(lookups)} ok"
+          + (f", FAILED: {', '.join(bad)}" if bad else ""))
 
 
 if __name__ == "__main__":
