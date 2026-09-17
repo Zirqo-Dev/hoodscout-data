@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: collect
@@ -20,6 +21,16 @@ jobs:
         with:
           python-version: "3.11"
       - run: python scripts/collect.py
+      # Same 30-min job rather than a separate */15 schedule: every condition
+      # in stocks.alerts() works on 6h windows, level checks or a fixed anchor,
+      # so 15-min resolution bought nothing. Running the two sequentially here
+      # also stops them hitting the same GeckoTerminal endpoints at :00/:30,
+      # which is what was rate-limiting the direct pool lookups.
+      # continue-on-error so a stocks failure cannot cost collect its commit,
+      # which is the isolation the separate workflows used to provide.
+      - name: Stocks
+        continue-on-error: true
+        run: python scripts/stocks.py
       - name: Commit
         run: |
           git config user.name "hoodscout-bot"
@@ -34,3 +45,27 @@ jobs:
             sleep 5
           done
           echo "push failed after 5 attempts"; exit 1
+      - name: Alert
+        if: hashFiles('ALERT.txt') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          while IFS= read -r line <&3; do
+            [ -z "$line" ] && continue
+            symbol=$(awk '{print $1}' <<< "$line")
+            type=$(awk '{print $2}' <<< "$line")
+            title="HoodScout alert: ${symbol} ${type}"
+
+            mapfile -t issues < <(gh issue list --state open --search "\"$title\" in:title" \
+              --json number,title --jq "[.[] | select(.title == \"$title\") | .number] | sort | .[]")
+
+            if [ -n "${issues[0]:-}" ]; then
+              keep="${issues[0]}"
+              gh issue edit "$keep" --body "$line"
+              for extra in "${issues[@]:1}"; do
+                gh issue close "$extra" --comment "Duplicate of #$keep, closing."
+              done
+            else
+              gh issue create --title "$title" --body "$line"
+            fi
+          done 3< ALERT.txt
