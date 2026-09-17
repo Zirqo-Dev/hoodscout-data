@@ -1,182 +1,182 @@
 {
-  "generated_at": "2026-09-17T15:43:40.242633+00:00",
+  "generated_at": "2026-09-17T15:57:33.291685+00:00",
   "anchor_utc": "2026-09-05T00:00:00+00:00",
   "alerts": [
-    "HIMS float BURNED 4.6% in 6h (124,955 to 119,187) [UNCONFIRMED: on-chain totalSupply 121,700, 2.1% off the pool-derived figure]",
+    "HIMS float BURNED 4.6% in 6h (124,955 to 119,187) [UNCONFIRMED: on-chain totalSupply 121,854, 2.2% off the pool-derived figure]",
     "NVDA float BURNED 4.5% in 6h (96,305 to 91,937)",
-    "MSTR locked share 15.4% below 40.0% floor",
-    "GME locked share 19.1% below 40.0% floor"
+    "MSTR locked share 15.0% below 40.0% floor",
+    "GME locked share 18.9% below 40.0% floor"
   ],
   "tokens": [
     {
       "symbol": "HIMS",
       "ca": "0xccee82fe024c36fa15e1005ede3e9e4787e23d09",
-      "price_usd": 27.895042,
+      "price_usd": 28.055813,
       "supply": 119186.882,
-      "float_usd": 3324723.08,
-      "reserve_locked": 2808935.76,
-      "reserve_reference": 2818020.05,
+      "float_usd": 3343884.82,
+      "reserve_locked": 2815148.8,
+      "reserve_reference": 2827415.49,
       "reserve_cross": 0.0,
-      "locked_units_est": 50348.3,
-      "locked_pct_est": 42.24,
-      "free_float_units": 68838.6,
+      "locked_units_est": 50170.5,
+      "locked_pct_est": 42.09,
+      "free_float_units": 69016.4,
       "pool_count": 20,
       "pools_capped": true,
       "top_pools": [
         {
           "name": "BONER / HIMS",
           "cat": "locked",
-          "reserve": 2446158.59,
+          "reserve": 2451511.69,
           "pool": "0x9c89b04303dfa76f3f6fb02c2b77be0e8a00ab8fa00d507119acd54ab3e8640d"
         },
         {
           "name": "HIMS / USDG 0.3%",
           "cat": "reference",
-          "reserve": 1798360.0,
+          "reserve": 1808213.22,
           "pool": "0xc8c90d3a1c1a24967e773ac2ad0d456ba3e31f64"
         },
         {
           "name": "HIMS / WETH 1%",
           "cat": "reference",
-          "reserve": 510356.19,
+          "reserve": 511020.69,
           "pool": "0xd10e6245961d697d975963682ece9979e9917fbc"
         },
         {
           "name": "HIMS / USDG 0.9%",
           "cat": "reference",
-          "reserve": 394741.54,
+          "reserve": 393562.4,
           "pool": "0x68d4f28f1432e0ad714658853edb2e6b0b1ac4060355ff3d169fea656b1d1c52"
         },
         {
           "name": "SPY / HIMS 0.05%",
           "cat": "locked",
-          "reserve": 246966.84,
+          "reserve": 247159.46,
           "pool": "0x67983c0d78cea3a8b4a5cc283feeeefd278a8ae5c6504b983b0c72bde13d1c0c"
         },
         {
           "name": "HIMS / WETH 0.3%",
           "cat": "reference",
-          "reserve": 32467.97,
+          "reserve": 32550.22,
           "pool": "0xeb576c467d69e084a0fdc6ddf744467804634650"
         }
       ],
-      "ts": "2026-09-17T15:43:40.242633+00:00",
+      "ts": "2026-09-17T15:57:33.291685+00:00",
       "anchor_price": 27.73787,
-      "premium_pct": 0.57,
+      "premium_pct": 1.15,
       "supply_chg_6h_pct": -4.62,
-      "chain_supply": 121700.288,
-      "chain_supply_gap_pct": 2.07
+      "chain_supply": 121853.929,
+      "chain_supply_gap_pct": 2.19
     },
     {
       "symbol": "AMC",
       "ca": "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
-      "price_usd": 2.668117,
+      "price_usd": 2.673412,
       "supply": 1236968.706,
-      "float_usd": 3300376.86,
-      "reserve_locked": 2880630.7,
-      "reserve_reference": 2541579.07,
+      "float_usd": 3306927.48,
+      "reserve_locked": 2879877.82,
+      "reserve_reference": 2543414.91,
       "reserve_cross": 0.0,
-      "locked_units_est": 539824.7,
-      "locked_pct_est": 43.64,
-      "free_float_units": 697144.0,
+      "locked_units_est": 538614.6,
+      "locked_pct_est": 43.54,
+      "free_float_units": 698354.1,
       "pool_count": 20,
       "pools_capped": true,
       "top_pools": [
         {
           "name": "amc / MEME",
           "cat": "locked",
-          "reserve": 2415809.5,
+          "reserve": 2414179.09,
           "pool": "0x27ccf0a6d1ee74840220715bcca7d3b01e0d33aa30d0259b47ae1585b3f4c071"
         },
         {
           "name": "amc / USDG 0.3%",
           "cat": "reference",
-          "reserve": 1712339.79,
+          "reserve": 1715797.29,
           "pool": "0xaa34fea710a1a737840329051d81d3b0b7c564d5"
         },
         {
           "name": "amc / WETH 5%",
           "cat": "reference",
-          "reserve": 490440.13,
+          "reserve": 491365.7,
           "pool": "0x0b0d11e649641178fdc29a69af6161e6194c24b99cd62a164062be1e8e348d4f"
         },
         {
           "name": "amc / USDG 0.1%",
           "cat": "reference",
-          "reserve": 198475.17,
+          "reserve": 196134.08,
           "pool": "0x7499938c352d5b5b8f0c648722aca5ee964ef9b85c3a3041f1ec379726291d9d"
         },
         {
           "name": "amc / CINEMA 1%",
           "cat": "locked",
-          "reserve": 160927.97,
+          "reserve": 161293.07,
           "pool": "0xf452715675de947f6b7cfba359f9e1d9f8eb42cba54a5e7275a12bf31487bf53"
         },
         {
           "name": "amc / WETH 1%",
           "cat": "reference",
-          "reserve": 100181.75,
+          "reserve": 100184.18,
           "pool": "0xcf38764ae8c92222af4358a701871a6235cfc7b7"
         }
       ],
-      "ts": "2026-09-17T15:43:40.242633+00:00",
+      "ts": "2026-09-17T15:57:33.291685+00:00",
       "anchor_price": 2.683169,
-      "premium_pct": -0.56,
+      "premium_pct": -0.36,
       "supply_chg_6h_pct": -1.02
     },
     {
       "symbol": "NVDA",
       "ca": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
-      "price_usd": 218.698888,
+      "price_usd": 219.589827,
       "supply": 91937.085,
-      "float_usd": 20106538.2,
-      "reserve_locked": 34076128.87,
-      "reserve_reference": 12097591.03,
+      "float_usd": 20188448.5,
+      "reserve_locked": 34574632.25,
+      "reserve_reference": 12128483.84,
       "reserve_cross": 0.0,
-      "locked_units_est": 77906.5,
-      "locked_pct_est": 84.74,
-      "free_float_units": 14030.6,
+      "locked_units_est": 78725.5,
+      "locked_pct_est": 85.63,
+      "free_float_units": 13211.6,
       "pool_count": 20,
       "pools_capped": true,
       "top_pools": [
         {
           "name": "AI / NVDA",
           "cat": "locked",
-          "reserve": 31191877.56,
+          "reserve": 31704484.67,
           "pool": "0xcbdfea90430a30ee4469c9902e120a77e7c7e4711d5643671c1d1957f2f1ce27"
         },
         {
           "name": "NVDA / USDG 0.05%",
           "cat": "reference",
-          "reserve": 7597243.02,
+          "reserve": 7628939.71,
           "pool": "0xd4eb21209c4d6093f80b5b84f5c45cc093ea14a3"
         },
         {
           "name": "NVDA / WETH 0.05%",
           "cat": "reference",
-          "reserve": 1299476.25,
+          "reserve": 1304241.5,
           "pool": "0x62ab521f71431f78ac374cdbadc6cda3c8916b6c"
         },
         {
           "name": "NVDA / USDG 0.3%",
           "cat": "reference",
-          "reserve": 1202134.33,
+          "reserve": 1201661.81,
           "pool": "0x3bb34a44f1b2b5f32c034c38a53065a521a47b199700fa9bd19d60985ff24bf1"
         },
         {
           "name": "SPY / NVDA 0.05%",
           "cat": "locked",
-          "reserve": 878339.45,
+          "reserve": 874797.04,
           "pool": "0xbc732a1a0baabce2574ec2bca24fccad8e2c38a061a37cefc17a2fd12809394f"
         },
         {
           "name": "ORBIO / NVDA",
           "cat": "locked",
-          "reserve": 798090.28,
+          "reserve": 797368.4,
           "pool": "0xa95b1fbdccb15d2b07509b980f63adab8a94303b1781f5ebc53b72942d12ddc1"
         }
       ],
-      "ts": "2026-09-17T15:43:40.242633+00:00",
+      "ts": "2026-09-17T15:57:33.291685+00:00",
       "supply_chg_6h_pct": -4.54,
       "chain_supply": 91937.513,
       "chain_supply_gap_pct": 0.0
@@ -184,111 +184,111 @@
     {
       "symbol": "MSTR",
       "ca": "0xec262a75e413fafd0df80480274532c79d42da09",
-      "price_usd": 130.286076,
+      "price_usd": 131.774678,
       "supply": 31268.505,
-      "float_usd": 4073850.76,
-      "reserve_locked": 1253775.17,
-      "reserve_reference": 3594994.51,
+      "float_usd": 4120397.11,
+      "reserve_locked": 1239581.85,
+      "reserve_reference": 3625215.22,
       "reserve_cross": 0.0,
-      "locked_units_est": 4811.6,
-      "locked_pct_est": 15.39,
-      "free_float_units": 26456.9,
+      "locked_units_est": 4703.4,
+      "locked_pct_est": 15.04,
+      "free_float_units": 26565.1,
       "pool_count": 20,
       "pools_capped": true,
       "top_pools": [
         {
           "name": "MSTR / USDG 0.25%",
           "cat": "reference",
-          "reserve": 1527700.91,
+          "reserve": 1551191.51,
           "pool": "0x319bac87e616a89e241c10aeb8afd4892a852cdd8b373cd9765ecddc40b87cfe"
         },
         {
           "name": "STRATEGY / MSTR",
           "cat": "locked",
-          "reserve": 606410.99,
+          "reserve": 607057.68,
           "pool": "0xa6975f4720a95aa9cdfa9b010a065b0e941534c93f9fa708104c08f0ac029ca0"
         },
         {
           "name": "MSTR / USDG 1%",
           "cat": "reference",
-          "reserve": 519332.19,
+          "reserve": 519616.47,
           "pool": "0x17578c0e0d15da44f31677263114f71ae76653ea"
         },
         {
           "name": "MSTR / WETH 1%",
           "cat": "reference",
-          "reserve": 513937.06,
+          "reserve": 514554.48,
           "pool": "0x70504a6fafdbfb75fe971faa4dd716e79ac5624c"
         },
         {
           "name": "MSTR / USDG 0.24%",
           "cat": "reference",
-          "reserve": 449735.9,
+          "reserve": 449511.7,
           "pool": "0xc105b8300ff65d750a0e4e63c7a879e20504069b770713464a5315e797735326"
         },
         {
           "name": "SAYLORMOON / MSTR",
           "cat": "locked",
-          "reserve": 312061.22,
+          "reserve": 297043.94,
           "pool": "0xd1c2f6cb178a165a643deae8752098dea08d51b6170cd8e36e196ef03dc74751"
         }
       ],
-      "ts": "2026-09-17T15:43:40.242633+00:00",
+      "ts": "2026-09-17T15:57:33.291685+00:00",
       "supply_chg_6h_pct": 0.72
     },
     {
       "symbol": "GME",
       "ca": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
-      "price_usd": 21.977259,
+      "price_usd": 22.46064,
       "supply": 135983.864,
-      "float_usd": 2988552.65,
-      "reserve_locked": 1144244.98,
-      "reserve_reference": 1887564.24,
+      "float_usd": 3054284.66,
+      "reserve_locked": 1152605.42,
+      "reserve_reference": 1877262.03,
       "reserve_cross": 0.0,
-      "locked_units_est": 26032.5,
-      "locked_pct_est": 19.14,
-      "free_float_units": 109951.4,
+      "locked_units_est": 25658.3,
+      "locked_pct_est": 18.87,
+      "free_float_units": 110325.5,
       "pool_count": 20,
       "pools_capped": true,
       "top_pools": [
         {
           "name": "GME / USDG 1%",
           "cat": "reference",
-          "reserve": 1039556.67,
+          "reserve": 1035792.72,
           "pool": "0xe9713f453adb9245b19559790c96f470a18f2fdf"
         },
         {
           "name": "GME / USDG 0.05%",
           "cat": "reference",
-          "reserve": 629719.19,
+          "reserve": 634252.98,
           "pool": "0xe2b46c905e12ab8e2f864e4821a4325884c1b126"
         },
         {
           "name": "GME / GME",
           "cat": "locked",
-          "reserve": 484188.11,
+          "reserve": 487705.75,
           "pool": "0x3623694d2613d7a543903b93226ed020d2fddbe00ed93ebd21aec098b10211c2"
         },
         {
           "name": "GME / TSUKI",
           "cat": "locked",
-          "reserve": 135564.27,
+          "reserve": 135822.87,
           "pool": "0xdbc5b9a6048c48abe3f95e94d0e28def8aa085ce7784d2462ae55baffc361630"
         },
         {
           "name": "ZAIBATSU / GME",
           "cat": "locked",
-          "reserve": 102292.14,
+          "reserve": 103031.43,
           "pool": "0x1cbac474c81b584caff0f1aa23eb38fb39beab5c173eb6d8486036f4f29808ca"
         },
         {
           "name": "GME / WETH 0.5%",
           "cat": "reference",
-          "reserve": 88702.99,
+          "reserve": 89234.5,
           "pool": "0x4dbbaad1bd1b4d23a1078c8ee830dc9f45fdaa10d195b6f539b3a8ef0d422afe"
         }
       ],
-      "ts": "2026-09-17T15:43:40.242633+00:00",
+      "ts": "2026-09-17T15:57:33.291685+00:00",
       "supply_chg_6h_pct": -2.16
     }
   ]
