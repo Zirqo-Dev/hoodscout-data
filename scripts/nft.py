@@ -41,8 +41,10 @@ WATCHLIST = {
 
 
 def post(path, tries=4):
-    """OpenSea rate-limits /auth/keys. A 429 here kills the whole run before a
-    single collection is read, so back off rather than dying on the first."""
+    """OpenSea rate-limits /auth/keys. Back off on a 429, and on the last
+    attempt print the response headers and body first: a per-minute burst
+    limit and an exhausted longer-window quota look identical from the status
+    code alone, and they need different answers."""
     for i in range(tries):
         try:
             req = urllib.request.Request(
@@ -52,6 +54,12 @@ def post(path, tries=4):
                 return json.load(r)
         except urllib.error.HTTPError as e:
             if e.code != 429 or i == tries - 1:
+                if e.code == 429:
+                    try:
+                        print(f"  429 headers: {dict(e.headers)}")
+                        print(f"  429 body: {e.read(300)!r}")
+                    except Exception as diag:
+                        print(f"  429 no response detail: {diag!r}")
                 raise
             wait = 20 * (i + 1)
             print(f"  429 minting key, retrying in {wait}s")
@@ -67,8 +75,16 @@ def get(path, key):
 
 
 def mint_key():
-    # free-tier keys are self-service; minting per run avoids depending on a
-    # key lifetime the docs give inconsistently
+    # A key supplied by the environment wins. Minting one per run is what broke
+    # here: /auth/keys started refusing with 429 through four attempts across a
+    # two-minute backoff, which is a spent quota rather than a burst, and no
+    # amount of retrying inside a run fixes that. Set OPENSEA_API_KEY (repo
+    # secret) to skip minting entirely.
+    env_key = os.environ.get("OPENSEA_API_KEY", "").strip()
+    if env_key:
+        print("using OPENSEA_API_KEY from the environment, not minting")
+        return env_key
+
     d = post("/auth/keys")
     key = d.get("api_key") or d.get("key")
     if not key:

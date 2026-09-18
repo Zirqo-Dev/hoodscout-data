@@ -42,6 +42,8 @@ jobs:
           python-version: "3.11"
       - name: Collect
         env:
+          # optional: when set, nft.py uses it instead of minting a key per run
+          OPENSEA_API_KEY: ${{ secrets.OPENSEA_API_KEY }}
           VERIFY_SLUGS: ${{ inputs.verify_slugs }}
           PROBE: ${{ inputs.probe }}
           DISCOVER: ${{ inputs.discover }}
