@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Track Robinhood Chain NFT collection floors, volume, and thin-volume floor moves."""
-import json, os, sys, time, urllib.request
+import json, os, sys, time, urllib.error, urllib.request
 from datetime import datetime, timezone, timedelta
 
 BASE = "https://api.opensea.io/api/v2"
@@ -40,11 +40,22 @@ WATCHLIST = {
 }
 
 
-def post(path):
-    req = urllib.request.Request(BASE + path, data=b"",
-                                 headers={"Accept": "application/json", "User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.load(r)
+def post(path, tries=4):
+    """OpenSea rate-limits /auth/keys. A 429 here kills the whole run before a
+    single collection is read, so back off rather than dying on the first."""
+    for i in range(tries):
+        try:
+            req = urllib.request.Request(
+                BASE + path, data=b"",
+                headers={"Accept": "application/json", "User-Agent": UA})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or i == tries - 1:
+                raise
+            wait = 20 * (i + 1)
+            print(f"  429 minting key, retrying in {wait}s")
+            time.sleep(wait)
 
 
 def get(path, key):
@@ -302,41 +313,24 @@ def probe():
         print(f"    {f:18} present={present} value={val}")
 
 
-def main():
-    key = None
+def run_discover(key):
+    now = datetime.now(timezone.utc)
+    order = os.environ.get("DISCOVER_ORDER") or DISCOVER_ORDER
+    rows = discover(key, order, now)
+    os.makedirs("data", exist_ok=True)
+    # surfacing only: never feeds WATCHLIST, which stays hand-verified
+    json.dump({"generated_at": now.isoformat(), "chain": CHAIN,
+               "order_by": order, "social_fields": META_FIELDS,
+               "collections": rows},
+              open("data/nft_discover.json", "w"), indent=2)
+    for r in rows:
+        print(f"{r['slug']}: floor {r['floor_price']} owners/supply "
+              f"{r['owner_supply_ratio']} age {r['age_days']}d "
+              f"meta {r['social_presence_score']}/{r['social_fields_checked']} "
+              f"dressed_but_thin={r['flag_dressed_but_thin']}")
 
-    if "--probe" in sys.argv:
-        probe()
-        return
 
-    key = mint_key()
-
-    if "--discover" in sys.argv:
-        now = datetime.now(timezone.utc)
-        order = os.environ.get("DISCOVER_ORDER") or DISCOVER_ORDER
-        rows = discover(key, order, now)
-        os.makedirs("data", exist_ok=True)
-        # surfacing only: never feeds WATCHLIST, which stays hand-verified
-        json.dump({"generated_at": now.isoformat(), "chain": CHAIN,
-                   "order_by": order, "social_fields": META_FIELDS,
-                   "collections": rows},
-                  open("data/nft_discover.json", "w"), indent=2)
-        for r in rows:
-            print(f"{r['slug']}: floor {r['floor_price']} owners/supply "
-                  f"{r['owner_supply_ratio']} age {r['age_days']}d "
-                  f"meta {r['social_presence_score']}/{r['social_fields_checked']} "
-                  f"dressed_but_thin={r['flag_dressed_but_thin']}")
-        return
-
-    if "--verify" in sys.argv:
-        for slug in sys.argv[sys.argv.index("--verify") + 1:]:
-            try:
-                print(json.dumps(evidence(slug, key), indent=2))
-            except Exception as e:
-                print(f"FAIL {slug}: {e}")
-            time.sleep(1)
-        return
-
+def run_tracked(key):
     if not WATCHLIST:
         print("WATCHLIST empty; verify slugs with --verify before tracking")
         return
@@ -367,6 +361,42 @@ def main():
         print(f"{r['slug']}: floor {r['floor_price']} {r['floor_symbol'] or ''} "
               f"chg {r['floor_chg_pct']}% sales24 {r['sales_24h']} "
               f"thin={r['flag_thin_floor_move']}")
+
+
+def main():
+    if "--probe" in sys.argv:
+        probe()
+        return
+
+    key = mint_key()
+
+    if "--discover" in sys.argv:
+        run_discover(key)
+        return
+
+    if "--verify" in sys.argv:
+        for slug in sys.argv[sys.argv.index("--verify") + 1:]:
+            try:
+                print(json.dumps(evidence(slug, key), indent=2))
+            except Exception as e:
+                print(f"FAIL {slug}: {e}")
+            time.sleep(1)
+        return
+
+    run_tracked(key)
+
+    # The scheduled path. Both jobs share the one minted key: running the
+    # script twice minted two, and /auth/keys is rate-limited hard enough that
+    # the second mint 429'd and, when it was the first, took the tracked run
+    # down with it. Tracked data is already written by this point, so a
+    # discovery failure is reported and exits non-zero without costing it --
+    # the workflow commits regardless.
+    if "--with-discover" in sys.argv:
+        try:
+            run_discover(key)
+        except Exception as e:
+            print(f"::error::discovery failed: {type(e).__name__}: {e}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":
