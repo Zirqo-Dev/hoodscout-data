@@ -1,7 +1,10 @@
 name: collect
 on:
-  schedule:
-    - cron: "*/30 * * * *"
+  # PAUSED 2026-10-02: cron commented out to stop scheduled runs. The trigger
+  # below is left in place rather than deleted -- uncomment these two lines
+  # to resume. workflow_dispatch is untouched, so manual runs still work.
+  # schedule:
+  #   - cron: "*/30 * * * *"
   workflow_dispatch:
 
 permissions:
