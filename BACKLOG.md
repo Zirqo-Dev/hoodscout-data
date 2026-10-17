@@ -30,6 +30,27 @@ No 429, no mint_key error. Tracked 3 collections, discovered 20.
 The 2-keys-per-day cap no longer applies, so manual `nft.yml` dispatches
 are safe again and no longer cost a scheduled run its key.
 
+## `history.jsonl` is full-rewritten every run
+
+`write_history()` reads the file, prunes rows past `HISTORY_DAYS`, appends the
+new snapshot and writes the whole thing back with `open(path, "w")`. So each
+run commits a fresh ~21 MB blob to git for ~25 KB of genuinely new rows. At
+the `*/15` cadence that is up to ~96 full rewrites a day. Should become an
+append plus a periodic prune, or a rolling set of per-period files, so git
+stores the delta rather than a new whole-file blob each time.
+
+## Revisit the cadence-coupled constants after a week
+
+`PERSIST_RUNS`/`PERSIST_MIN` (16/10) and `buyer_rate_rising`'s `window` (5)
+count snapshots, not time, so their wall-clock meaning depends on how many
+scheduled runs GitHub actually delivers. They were set assuming `*/15`
+delivers ~96/day, but observed delivery at `*/30` was 22.9 snapshots/day
+against a nominal 48 — under half. If `*/15` lands nearer 46/day than 96,
+these are roughly 2x too large and the BEST bar spans ~8h rather than the
+intended ~4h. Measure the real rate over a week, then retune. Same for
+`HISTORY_DAYS = 15`, which was halved to hold file size flat on the
+assumption of doubled delivery.
+
 ## The `Commit` step cannot resolve `data/` conflicts
 
 `git pull --rebase --autostash` in each workflow's Commit step fails on a

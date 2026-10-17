@@ -14,11 +14,14 @@ MIN_TXNS_24H   = 300     # "real activity"
 MIN_SCORE_TXNS = 200     # below this: no score at all
 MIN_AGE_DEPTH  = 1.0     # days before liq/FDV means anything
 MAX_AGE_DAYS   = 14
-HISTORY_DAYS   = 30
+HISTORY_DAYS   = 15     # halved with the move to */15 to hold file size flat
 
-# tier thresholds
-PERSIST_RUNS     = 8     # snapshots looked back over for BEST
-PERSIST_MIN      = 5     # of which this many must show the token healthy
+# tier thresholds.
+# PERSIST_RUNS counts SNAPSHOTS, not hours, so it is coupled to the collect
+# cadence: doubled from 8/5 when the cron went */30 -> */15, to keep the BEST
+# persistence bar spanning the same ~4h of wall clock rather than ~2h.
+PERSIST_RUNS     = 16    # snapshots looked back over for BEST (~4h at */15)
+PERSIST_MIN      = 10    # of which this many must show the token healthy
 BEST_MIN_AGE     = 2.0
 BEST_MIN_LIQ_FDV = 5.0
 BEST_MAX_TPT     = 4.0
@@ -247,8 +250,13 @@ def persistence(hist):
     return {ca: len(ts) for ca, ts in seen.items()}
 
 
-def buyer_rate_rising(ca, hist, window=3):
-    """buyers24 strictly increasing across the last few snapshots for this CA."""
+def buyer_rate_rising(ca, hist, window=5):
+    """buyers24 strictly increasing across the last few snapshots for this CA.
+
+    window counts snapshots, so it tracks the collect cadence: raised 3 -> 5
+    when the cron went */30 -> */15, so the trend is still measured over about
+    an hour rather than half of one. byr24 is a trailing 24h count and barely
+    moves in 15 minutes, so too short a window tests noise, not direction."""
     rows = sorted([r for r in hist if r.get("ca") == ca and r.get("byr24") is not None],
                   key=lambda r: r.get("ts") or "")[-window:]
     if len(rows) < 2:
