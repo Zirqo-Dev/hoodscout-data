@@ -19,15 +19,16 @@ lives on `main`.
 before any GET executes. Same gap `collect.py` and `stocks.py` had before
 30d36e7 / ec018e8.
 
-## `OPENSEA_API_KEY` secret is not set
+## ~~`OPENSEA_API_KEY` secret is not set~~ — RESOLVED 2026-10-17
 
-NFT works without it, but with zero headroom: OpenSea caps key creation at
-2 per day ("Key creation rate limit exceeded. Maximum 2 keys per day.",
-`retry-after: 43080`), and the 13:00/21:00 schedule mints exactly 2. Runs
-39-62 went 23/24, the one failure being that 429. Consequence: a manual
-`nft.yml` dispatch is a third mint and will fail, likely taking that day's
-scheduled run with it. Setting the secret removes the cap and makes manual
-NFT runs safe.
+The secret is set. Verified by nft.yml **run 63** (manual dispatch,
+2026-10-17T14:13:53Z, success): the step env shows `OPENSEA_API_KEY: ***`
+and the run printed `using OPENSEA_API_KEY from the environment, not
+minting`, so `mint_key()` returned before reaching `post("/auth/keys")`.
+No 429, no mint_key error. Tracked 3 collections, discovered 20.
+
+The 2-keys-per-day cap no longer applies, so manual `nft.yml` dispatches
+are safe again and no longer cost a scheduled run its key.
 
 ## The `Commit` step cannot resolve `data/` conflicts
 
