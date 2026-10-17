@@ -51,6 +51,12 @@ intended ~4h. Measure the real rate over a week, then retune. Same for
 `HISTORY_DAYS = 15`, which was halved to hold file size flat on the
 assumption of doubled delivery.
 
+## Scheduler delivery
+
+GitHub dropped ~9 collect fires and the 21:00 NFT run on 2026-10-17;
+off-peak minutes tried; external dispatch is plan B. Re-measure after 24 h:
+delivered runs per day vs nominal.
+
 ## The `Commit` step cannot resolve `data/` conflicts
 
 `git pull --rebase --autostash` in each workflow's Commit step fails on a

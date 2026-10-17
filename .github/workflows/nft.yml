@@ -1,7 +1,7 @@
 name: nft
 on:
   schedule:
-    - cron: "0 13,21 * * *"
+    - cron: "17 13,21 * * *"
   workflow_dispatch:
     inputs:
       verify_slugs:
