@@ -187,6 +187,16 @@ footer a{color:var(--accent)}
 <script>
 "use strict";
 var REPO = "https://github.com/Zirqo-Dev/hoodscout-data";
+
+/* Chain slugs for the outbound chart links -- one line each if either ever
+   changes, and nothing else to touch.
+   GT_CHAIN matches the collector's own network slug (scripts/collect.py) and
+   is corroborated by every gt_url it writes.
+   DEX_CHAIN was confirmed by loading a pool page for astro
+   (0x5b81efe5e0ba2b31c0ed843b908a2c45fe6e14c5, pool
+   0x3416b8d8aa6ae642ffdc2f65165ff479d4bd3007) on 2026-10-17. */
+var GT_CHAIN = "robinhood";
+var DEX_CHAIN = "robinhood";
 var TIERS = ["BEST","EMERGING","WATCH","SPECULATIVE","DEAD","AVOID"];
 var TIER_VAR = {BEST:"--t-best",EMERGING:"--t-emerging",WATCH:"--t-watch",
                 SPECULATIVE:"--t-spec",DEAD:"--t-dead",AVOID:"--t-avoid"};
@@ -273,10 +283,8 @@ function copyBtn(text){
   });
   return b;
 }
-/* NETWORK matches scripts/collect.py (NETWORK = "robinhood"), which is also
-   the slug the collector already bakes into every gt_url it writes. */
-var NETWORK = "robinhood";
-var GT_BASE = "https://www.geckoterminal.com/" + NETWORK;
+var GT_BASE = "https://www.geckoterminal.com/" + GT_CHAIN;
+var DEX_BASE = "https://dexscreener.com";
 
 /* The deepest pool, wherever this shape of record keeps it. latest.json
    tokens carry main_pool; stocks_latest.json carries top_pools[].pool;
@@ -299,8 +307,12 @@ function geckoUrl(ca, t){
   return pool ? GT_BASE + "/pools/" + encodeURIComponent(pool)
               : GT_BASE + "/tokens/" + encodeURIComponent(ca);
 }
-function dexUrl(ca){
-  return "https://dexscreener.com/search?q=" + encodeURIComponent(ca);
+/* Pool page when a pool address is known, address search otherwise. Same pool
+   source as the Gecko link, so both buttons point at the same market. */
+function dexUrl(ca, t){
+  var pool = poolOf(t);
+  return pool ? DEX_BASE + "/" + DEX_CHAIN + "/" + encodeURIComponent(pool)
+              : DEX_BASE + "/search?q=" + encodeURIComponent(ca);
 }
 function linkBtn(label, href, title){
   var a = el("a", "lnk", label);
@@ -318,8 +330,9 @@ function addrRow(ca, tok){
   d.appendChild(el("code", null, ca));
   d.appendChild(copyBtn(ca));
   if (tok){
-    d.appendChild(linkBtn("DexScreener", dexUrl(ca), "Search DexScreener for " + ca));
     var pool = poolOf(tok);
+    d.appendChild(linkBtn("DexScreener", dexUrl(ca, tok),
+      pool ? "DexScreener pool " + pool : "Search DexScreener for " + ca));
     d.appendChild(linkBtn("Gecko", geckoUrl(ca, tok),
       pool ? "GeckoTerminal pool " + pool : "GeckoTerminal token " + ca));
   }
