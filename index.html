@@ -83,7 +83,7 @@ summary:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
 .sym{font-weight:650}
 .pill{font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
   padding:2px 6px; border-radius:4px; border:1px solid currentColor; font-weight:600}
-.addr{display:flex; align-items:center; gap:6px; margin-top:6px}
+.addr{display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap}
 code{font:12px/1.4 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
   background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
   padding:4px 6px; word-break:break-all; color:var(--text)}
@@ -91,6 +91,10 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospac
   border:1px solid var(--border); border-radius:6px; padding:4px 9px;
   font-size:11.5px; cursor:pointer; font-weight:600}
 .copy:hover{color:var(--text); border-color:var(--accent)}
+.lnk{flex:0 0 auto; background:var(--surface-2); color:var(--accent);
+  border:1px solid var(--border); border-radius:6px; padding:4px 9px;
+  font-size:11.5px; font-weight:600; text-decoration:none; white-space:nowrap}
+.lnk:hover{border-color:var(--accent)}
 .copy.done{color:var(--ok); border-color:var(--ok)}
 .kv{display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:7px; font-size:12.5px; color:var(--muted)}
 .kv span b{color:var(--text); font-weight:600; font-variant-numeric:tabular-nums}
@@ -269,10 +273,56 @@ function copyBtn(text){
   });
   return b;
 }
-function addrRow(ca){
+/* NETWORK matches scripts/collect.py (NETWORK = "robinhood"), which is also
+   the slug the collector already bakes into every gt_url it writes. */
+var NETWORK = "robinhood";
+var GT_BASE = "https://www.geckoterminal.com/" + NETWORK;
+
+/* The deepest pool, wherever this shape of record keeps it. latest.json
+   tokens carry main_pool; stocks_latest.json carries top_pools[].pool;
+   discover rows carry neither but do carry the collector's own pool link,
+   so the address is lifted back out of that rather than guessed. */
+function poolOf(t){
+  if (!t) return null;
+  if (t.main_pool) return t.main_pool;
+  if (t.top_pools && t.top_pools.length && t.top_pools[0] && t.top_pools[0].pool){
+    return t.top_pools[0].pool;
+  }
+  if (typeof t.gt_url === "string"){
+    var m = t.gt_url.match(/\/pools\/([0-9a-zA-Z]+)/);
+    if (m) return m[1];
+  }
+  return null;
+}
+function geckoUrl(ca, t){
+  var pool = poolOf(t);
+  return pool ? GT_BASE + "/pools/" + encodeURIComponent(pool)
+              : GT_BASE + "/tokens/" + encodeURIComponent(ca);
+}
+function dexUrl(ca){
+  return "https://dexscreener.com/search?q=" + encodeURIComponent(ca);
+}
+function linkBtn(label, href, title){
+  var a = el("a", "lnk", label);
+  a.href = href;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  if (title) a.title = title;
+  return a;
+}
+
+/* tok is optional: when given, the chart links are built from the addresses
+   in that record. Never from the ticker -- tickers repeat on this chain. */
+function addrRow(ca, tok){
   var d = el("div", "addr");
   d.appendChild(el("code", null, ca));
   d.appendChild(copyBtn(ca));
+  if (tok){
+    d.appendChild(linkBtn("DexScreener", dexUrl(ca), "Search DexScreener for " + ca));
+    var pool = poolOf(tok);
+    d.appendChild(linkBtn("Gecko", geckoUrl(ca, tok),
+      pool ? "GeckoTerminal pool " + pool : "GeckoTerminal token " + ca));
+  }
   return d;
 }
 function kv(pairs){
@@ -428,7 +478,7 @@ function renderPools(res){
     p.style.color = tierColor("BEST");
     h.appendChild(p);
     r.appendChild(h);
-    r.appendChild(addrRow(t.ca));
+    r.appendChild(addrRow(t.ca, t));
     r.appendChild(moveBar(t.recent_move_score));
     /* The fields the tier actually turns on: age, liquidity depth against FDV
        and trade concentration. Persistence is not published in latest.json --
@@ -485,7 +535,7 @@ function renderPools(res){
       ]));
       row.appendChild(sum);
       var inner = el("div", "dbody");
-      inner.appendChild(addrRow(r.ca));
+      inner.appendChild(addrRow(r.ca, r));
       row.appendChild(inner);
       dm.appendChild(row);
     });
@@ -559,7 +609,7 @@ function renderStocks(res){
         ? "—" : pct(t.supply_chg_6h_pct,2)],
       ["pools", num(t.pool_count) + (t.pools_capped ? "+" : "")]
     ]));
-    c.appendChild(addrRow(t.ca));
+    c.appendChild(addrRow(t.ca, t));
     cards.appendChild(c);
   });
   mount.appendChild(cards);
