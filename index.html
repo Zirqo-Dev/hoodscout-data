@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>HoodScout</title>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0d1117; --surface:#161b22; --surface-2:#1c2128; --border:#30363d;
+  --text:#e6edf3; --muted:#8b949e; --faint:#6e7681;
+  --accent:#2f81f7;
+  /* semantic tier palette, deliberately distinct from --accent */
+  --ok:#3fb950; --warn:#d29922; --bad:#f85149; --neutral:#6e7681;
+  --t-best:var(--ok); --t-emerging:var(--warn); --t-watch:#769fcd;
+  --t-spec:var(--neutral); --t-dead:#8b5a56; --t-avoid:var(--bad);
+  --radius:10px;
+}
+@media (prefers-color-scheme: light){
+  :root{
+    color-scheme: light;
+    --bg:#f6f8fa; --surface:#ffffff; --surface-2:#f0f3f6; --border:#d0d7de;
+    --text:#1f2328; --muted:#59636e; --faint:#818b98;
+    --accent:#0969da;
+    --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; --neutral:#6e7781;
+    --t-watch:#3f6ea8; --t-dead:#8c5a55;
+  }
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:900px; margin:0 auto; padding:18px 16px 40px}
+header{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:4px}
+h1{font-size:20px; margin:0; letter-spacing:-.01em}
+.tag{font-size:11px; color:var(--muted); border:1px solid var(--border);
+  padding:2px 7px; border-radius:999px; text-transform:uppercase; letter-spacing:.06em}
+.sub{color:var(--muted); font-size:13px; margin:2px 0 18px}
+
+/* health */
+.health{display:grid; grid-template-columns:1fr; gap:8px; margin-bottom:8px}
+@media(min-width:560px){.health{grid-template-columns:1fr 1fr}}
+.hcard{background:var(--surface); border:1px solid var(--border);
+  border-left:3px solid var(--neutral); border-radius:var(--radius); padding:10px 12px}
+.hcard.s-ok{border-left-color:var(--ok)} .hcard.s-warn{border-left-color:var(--warn)}
+.hcard.s-bad{border-left-color:var(--bad)}
+.hcard .hname{font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.02em}
+.hcard .hage{font-size:17px; font-weight:650; margin-top:2px}
+.hcard.s-ok .hage{color:var(--ok)} .hcard.s-warn .hage{color:var(--warn)}
+.hcard.s-bad .hage{color:var(--bad)}
+.hcard .hmeta{font-size:12px; color:var(--faint); margin-top:3px}
+.banner{background:color-mix(in srgb, var(--bad) 14%, var(--surface));
+  border:1px solid var(--bad); color:var(--text); border-radius:var(--radius);
+  padding:10px 12px; margin-bottom:12px; font-size:13.5px; font-weight:600}
+
+/* sections */
+details{background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius); margin:12px 0; overflow:hidden}
+summary{cursor:pointer; padding:12px 14px; font-weight:650; font-size:14.5px;
+  display:flex; align-items:center; gap:9px; list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+"; margin-left:auto; color:var(--muted); font-weight:400; font-size:17px}
+details[open] summary::after{content:"\2212"}
+summary:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+.body{padding:0 14px 14px}
+.note{font-size:12.5px; color:var(--muted); margin:0 0 10px}
+.count{font-size:11.5px; color:var(--muted); font-weight:500}
+
+/* chips */
+.chips{display:flex; flex-wrap:wrap; gap:7px}
+.chip{display:flex; align-items:baseline; gap:6px; background:var(--surface-2);
+  border:1px solid var(--border); border-radius:999px; padding:5px 11px; font-size:12.5px}
+.chip b{font-size:14px; font-variant-numeric:tabular-nums}
+.chip .dot{width:7px; height:7px; border-radius:50%; align-self:center}
+
+/* rows */
+.row{border-top:1px solid var(--border); padding:11px 0}
+.row:first-child{border-top:0}
+.rhead{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap}
+.sym{font-weight:650}
+.pill{font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
+  padding:2px 6px; border-radius:4px; border:1px solid currentColor; font-weight:600}
+.addr{display:flex; align-items:center; gap:6px; margin-top:6px}
+code{font:12px/1.4 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+  padding:4px 6px; word-break:break-all; color:var(--text)}
+.copy{flex:0 0 auto; background:var(--surface-2); color:var(--muted);
+  border:1px solid var(--border); border-radius:6px; padding:4px 9px;
+  font-size:11.5px; cursor:pointer; font-weight:600}
+.copy:hover{color:var(--text); border-color:var(--accent)}
+.copy.done{color:var(--ok); border-color:var(--ok)}
+.kv{display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:7px; font-size:12.5px; color:var(--muted)}
+.kv span b{color:var(--text); font-weight:600; font-variant-numeric:tabular-nums}
+
+/* meter (bars only -- no time series is fetched, so no sparklines) */
+.meter{height:5px; background:var(--surface-2); border-radius:3px;
+  overflow:hidden; margin-top:7px; border:1px solid var(--border)}
+.meter i{display:block; height:100%}
+.dv{display:flex; align-items:center; gap:7px; margin-top:7px; font-size:12px; color:var(--muted)}
+.dv .track{position:relative; flex:1; height:5px; background:var(--surface-2);
+  border:1px solid var(--border); border-radius:3px}
+.dv .track::before{content:""; position:absolute; left:50%; top:-2px; bottom:-2px;
+  width:1px; background:var(--border)}
+.dv .track i{position:absolute; top:0; bottom:0; border-radius:3px}
+
+/* stock cards */
+.cards{display:grid; grid-template-columns:1fr; gap:10px}
+@media(min-width:560px){.cards{grid-template-columns:1fr 1fr}}
+.card{background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--radius); padding:12px}
+.card.alarm{border-color:var(--bad)}
+.card .ctop{display:flex; align-items:baseline; gap:8px}
+.card .big{font-size:21px; font-weight:680; font-variant-numeric:tabular-nums}
+
+/* scrollers */
+.scroll{overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -14px; padding:0 14px}
+table{border-collapse:collapse; font-size:12.5px; min-width:520px}
+th,td{text-align:left; padding:7px 10px 7px 0; white-space:nowrap;
+  border-top:1px solid var(--border)}
+th{color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase;
+  letter-spacing:.04em; border-top:0}
+td.num,th.num{text-align:right; font-variant-numeric:tabular-nums}
+
+.err{background:color-mix(in srgb, var(--bad) 12%, var(--surface));
+  border:1px solid var(--bad); border-radius:8px; padding:10px 12px; font-size:13px}
+.empty{color:var(--muted); font-size:13px; padding:4px 0}
+.reason{font-size:12.5px; color:var(--muted); margin-top:6px}
+footer{margin-top:26px; padding-top:14px; border-top:1px solid var(--border);
+  color:var(--muted); font-size:12.5px}
+footer a{color:var(--accent)}
+.neg{color:var(--bad)} .pos{color:var(--ok)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>HoodScout</h1>
+    <span class="tag">Robinhood Chain</span>
+  </header>
+  <p class="sub">Market-data snapshots, collected on a schedule. Nothing here is financial advice,
+    and no flag is a verdict.</p>
+
+  <div id="banner"></div>
+  <div class="health" id="health"></div>
+
+  <details open><summary>Tier summary <span class="count" id="tier-count"></span></summary>
+    <div class="body" id="tier"></div></details>
+
+  <details open><summary>BEST <span class="count" id="best-count"></span></summary>
+    <div class="body" id="best"></div></details>
+
+  <details><summary>Discover <span class="count" id="disc-count"></span></summary>
+    <div class="body" id="disc"></div></details>
+
+  <details open><summary>Stock squeeze board <span class="count" id="stk-count"></span></summary>
+    <div class="body" id="stk"></div></details>
+
+  <details><summary>NFT <span class="count" id="nft-count"></span></summary>
+    <div class="body" id="nft"></div></details>
+
+  <details><summary>Avoid list <span class="count" id="avoid-count"></span></summary>
+    <div class="body" id="avoid"></div></details>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+"use strict";
+var REPO = "https://github.com/Zirqo-Dev/hoodscout-data";
+var TIERS = ["BEST","EMERGING","WATCH","SPECULATIVE","DEAD","AVOID"];
+var TIER_VAR = {BEST:"--t-best",EMERGING:"--t-emerging",WATCH:"--t-watch",
+                SPECULATIVE:"--t-spec",DEAD:"--t-dead",AVOID:"--t-avoid"};
+
+function el(tag, cls, text){
+  var n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined && text !== null) n.textContent = String(text);
+  return n;
+}
+function tierColor(t){ return "var(" + (TIER_VAR[t] || "--neutral") + ")"; }
+function num(v, dp){
+  if (v === null || v === undefined || v === "" || isNaN(v)) return "n/a";
+  return Number(v).toLocaleString(undefined, {minimumFractionDigits: dp||0,
+                                              maximumFractionDigits: dp||0});
+}
+function usd(v){
+  if (v === null || v === undefined || isNaN(v)) return "n/a";
+  var n = Number(v);
+  if (n >= 1e9) return "$" + (n/1e9).toFixed(2) + "B";
+  if (n >= 1e6) return "$" + (n/1e6).toFixed(2) + "M";
+  if (n >= 1e3) return "$" + (n/1e3).toFixed(1) + "K";
+  return "$" + n.toFixed(2);
+}
+function pct(v, dp){
+  if (v === null || v === undefined || isNaN(v)) return "n/a";
+  return Number(v).toFixed(dp === undefined ? 2 : dp) + "%";
+}
+function ageMin(iso){
+  var t = Date.parse(iso);
+  if (isNaN(t)) return null;
+  return (Date.now() - t) / 60000;
+}
+function ageText(m){
+  if (m === null) return "unknown";
+  if (m < 1) return "just now";
+  if (m < 60) return Math.round(m) + " min ago";
+  var h = m / 60;
+  if (h < 48) return (h < 10 ? h.toFixed(1) : Math.round(h)) + " h ago";
+  return Math.round(h / 24) + " d ago";
+}
+function ageClass(m){
+  if (m === null) return "s-bad";
+  if (m < 45) return "s-ok";
+  if (m < 120) return "s-warn";
+  return "s-bad";
+}
+
+function load(path){
+  return fetch(path + "?t=" + Date.now(), {cache: "no-store"})
+    .then(function(r){
+      if (!r.ok) throw new Error("HTTP " + r.status + " " + r.statusText);
+      return r.json();
+    })
+    .then(function(d){ return {ok: true, data: d}; })
+    .catch(function(e){ return {ok: false, error: String(e.message || e)}; });
+}
+function fail(mount, label, msg){
+  var box = document.getElementById(mount);
+  box.textContent = "";
+  box.appendChild(el("div", "err", "Could not load " + label + " — " + msg));
+}
+function copyBtn(text){
+  var b = el("button", "copy", "Copy");
+  b.type = "button";
+  b.setAttribute("aria-label", "Copy contract address " + text);
+  b.addEventListener("click", function(){
+    var done = function(){
+      b.textContent = "Copied";
+      b.classList.add("done");
+      setTimeout(function(){ b.textContent = "Copy"; b.classList.remove("done"); }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done, function(){ b.textContent = "Failed"; });
+    } else {
+      var ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch(e){ b.textContent = "Failed"; }
+      document.body.removeChild(ta);
+    }
+  });
+  return b;
+}
+function addrRow(ca){
+  var d = el("div", "addr");
+  d.appendChild(el("code", null, ca));
+  d.appendChild(copyBtn(ca));
+  return d;
+}
+function kv(pairs){
+  var d = el("div", "kv");
+  pairs.forEach(function(p){
+    if (p[1] === undefined) return;
+    var s = el("span", null, p[0] + " ");
+    var b = el("b", null, p[1]);
+    if (p[2]) b.className = p[2];
+    s.appendChild(b);
+    d.appendChild(s);
+  });
+  return d;
+}
+/* diverging bar for recent_move_score, which runs -10..+10 */
+function moveBar(score){
+  var d = el("div", "dv");
+  d.appendChild(el("span", null, "move"));
+  var track = el("div", "track");
+  if (score !== null && score !== undefined && !isNaN(score)){
+    var s = Math.max(-10, Math.min(10, Number(score)));
+    var i = el("i");
+    var half = Math.abs(s) / 10 * 50;
+    if (s >= 0){ i.style.left = "50%"; i.style.width = half + "%"; i.style.background = "var(--ok)"; }
+    else { i.style.right = "50%"; i.style.width = half + "%"; i.style.background = "var(--bad)"; }
+    track.appendChild(i);
+  }
+  d.appendChild(track);
+  var lab = el("b", null, (score === null || score === undefined) ? "n/a" :
+             (Number(score) > 0 ? "+" : "") + score);
+  lab.style.minWidth = "2.2em";
+  lab.style.textAlign = "right";
+  lab.style.color = "var(--text)";
+  d.appendChild(lab);
+  return d;
+}
+function meter(frac, color){
+  var m = el("div", "meter");
+  var i = el("i");
+  i.style.width = Math.max(0, Math.min(100, frac * 100)) + "%";
+  i.style.background = color;
+  m.appendChild(i);
+  return m;
+}
+function table(cols, rows){
+  var wrap = el("div", "scroll");
+  var t = el("table");
+  var thead = el("thead"), tr = el("tr");
+  cols.forEach(function(c){
+    var th = el("th", c.num ? "num" : null, c.label);
+    tr.appendChild(th);
+  });
+  thead.appendChild(tr); t.appendChild(thead);
+  var tb = el("tbody");
+  rows.forEach(function(r){
+    var row = el("tr");
+    cols.forEach(function(c){
+      var cell = el("td", c.num ? "num" : null, c.get(r));
+      var cl = c.cls && c.cls(r);
+      if (cl) cell.classList.add(cl);
+      row.appendChild(cell);
+    });
+    tb.appendChild(row);
+  });
+  t.appendChild(tb); wrap.appendChild(t);
+  return wrap;
+}
+
+/* ---------- render ---------- */
+var stamps = [];
+
+function renderHealth(entries){
+  var mount = document.getElementById("health");
+  mount.textContent = "";
+  var stale = [];
+  entries.forEach(function(e){
+    var m = e.ok ? ageMin(e.at) : null;
+    var card = el("div", "hcard " + (e.ok ? ageClass(m) : "s-bad"));
+    card.appendChild(el("div", "hname", e.name));
+    card.appendChild(el("div", "hage", e.ok ? ageText(m) : "unavailable"));
+    card.appendChild(el("div", "hmeta", e.ok ? (e.meta || "") : (e.error || "fetch failed")));
+    mount.appendChild(card);
+    if (!e.ok) stale.push(e.name + " unavailable");
+    else if (m !== null && m >= 120) stale.push(e.name + " " + ageText(m));
+  });
+  var b = document.getElementById("banner");
+  b.textContent = "";
+  if (stale.length){
+    b.appendChild(el("div", "banner", "STALE DATA — " + stale.join(" · ")));
+  }
+}
+
+function renderPools(res){
+  if (!res.ok){
+    ["tier","best","disc"].forEach(function(id){ fail(id, "data/latest.json", res.error); });
+    return;
+  }
+  var d = res.data;
+  stamps.push(["pools", d.generated_at]);
+
+  /* tier chips */
+  var tc = d.tier_counts || {};
+  var tm = document.getElementById("tier");
+  tm.textContent = "";
+  var chips = el("div", "chips");
+  TIERS.forEach(function(t){
+    var c = el("div", "chip");
+    var dot = el("span", "dot");
+    dot.style.background = tierColor(t);
+    c.appendChild(dot);
+    c.appendChild(el("span", null, t));
+    c.appendChild(el("b", null, tc[t] === undefined ? 0 : tc[t]));
+    chips.appendChild(c);
+  });
+  tm.appendChild(chips);
+  var wr = d.watch_reasons || {};
+  var wrk = Object.keys(wr);
+  if (wrk.length){
+    var p = el("p", "note", "WATCH split: " + wrk.map(function(k){
+      return k + " " + wr[k]; }).join(" · "));
+    p.style.marginTop = "10px"; p.style.marginBottom = "0";
+    tm.appendChild(p);
+  }
+  document.getElementById("tier-count").textContent =
+    (d.tokens_seen || 0) + " tokens · " + (d.pools_seen || 0) + " pools";
+
+  /* BEST */
+  var best = (d.tokens || []).filter(function(t){ return t.tier === "BEST"; });
+  var bm = document.getElementById("best");
+  bm.textContent = "";
+  document.getElementById("best-count").textContent = best.length + "";
+  bm.appendChild(el("p", "note",
+    "Persistent, liquid, unflagged — the figures below are the ones this tier turns on. "
+    + "Persistence itself is not published in latest.json, so it is not shown. "
+    + "The contract address is the identity; tickers repeat."));
+  if (!best.length){ bm.appendChild(el("div", "empty", "No tokens in BEST.")); }
+  best.forEach(function(t){
+    var r = el("div", "row");
+    var h = el("div", "rhead");
+    h.appendChild(el("span", "sym", t.symbol === null ? "(no symbol)" : t.symbol));
+    var p = el("span", "pill", "BEST");
+    p.style.color = tierColor("BEST");
+    h.appendChild(p);
+    r.appendChild(h);
+    r.appendChild(addrRow(t.ca));
+    r.appendChild(moveBar(t.recent_move_score));
+    /* The fields the tier actually turns on: age, liquidity depth against FDV
+       and trade concentration. Persistence is not published in latest.json --
+       it is a local in collect.main() -- so it is left out, not guessed at. */
+    r.appendChild(kv([
+      ["age", t.age_days === null ? "n/a" : num(t.age_days, 1) + " d"],
+      ["liq", usd(t.liq_usd)],
+      ["liq/FDV", pct(t.liq_fdv_pct, 2)],
+      ["trades/trader", t.trades_per_trader === null ? "n/a" : num(t.trades_per_trader, 2)],
+      ["txns 24h", num(t.txns24)],
+      ["6h", pct(t.chg_h6, 1), Number(t.chg_h6) < 0 ? "neg" : "pos"],
+      ["24h", pct(t.chg_h24, 1), Number(t.chg_h24) < 0 ? "neg" : "pos"]
+    ]));
+    if (t.recent_move_basis){
+      r.appendChild(el("div", "reason", "move basis: " + t.recent_move_basis));
+    }
+    bm.appendChild(r);
+  });
+
+  /* Discover */
+  var dv = d.discover || [];
+  var dm = document.getElementById("disc");
+  dm.textContent = "";
+  document.getElementById("disc-count").textContent = dv.length + "";
+  dm.appendChild(el("p", "note",
+    "Discovery only, not promoted. Surfaced by buyer-rate acceleration; never auto-added anywhere."));
+  if (!dv.length){ dm.appendChild(el("div", "empty", "Nothing surfaced.")); }
+  else {
+    dm.appendChild(table([
+      {label:"Symbol", get:function(r){ return r.symbol || "(none)"; }},
+      {label:"Tier", get:function(r){ return r.tier; }},
+      {label:"Reason", get:function(r){ return r.watch_reason || "—"; }},
+      {label:"Accel", num:true, get:function(r){ return r.buyer_accel_pct === null ? "n/a" : pct(r.buyer_accel_pct,1); },
+       cls:function(r){ return Number(r.buyer_accel_pct) < 0 ? "neg" : "pos"; }},
+      {label:"Txns 24h", num:true, get:function(r){ return num(r.txns24); }},
+      {label:"Liq", num:true, get:function(r){ return usd(r.liq_usd); }},
+      {label:"Age", num:true, get:function(r){ return r.age_days === null ? "n/a" : num(r.age_days,1)+" d"; }},
+      {label:"Address", get:function(r){ return r.ca; }}
+    ], dv));
+  }
+}
+
+function renderStocks(res){
+  var mount = document.getElementById("stk");
+  if (!res.ok){ fail("stk", "data/stocks_latest.json", res.error); return; }
+  var d = res.data;
+  stamps.push(["stocks", d.generated_at]);
+  mount.textContent = "";
+  document.getElementById("stk-count").textContent =
+    (d.measured === undefined ? (d.tokens || []).length : d.measured) + "/5 measured";
+
+  var alerts = d.alerts || [];
+  if (alerts.length){
+    var ab = el("div", "err");
+    ab.appendChild(el("div", null, "Active alerts"));
+    alerts.forEach(function(a){
+      var li = el("div", null, "• " + a);
+      li.style.fontWeight = "400";
+      li.style.marginTop = "4px";
+      ab.appendChild(li);
+    });
+    mount.appendChild(ab);
+  }
+  var failed = d.failed || [];
+  if (failed.length){
+    mount.appendChild(el("p", "note", "Failed to measure: " + failed.map(function(f){
+      return f.symbol + " (" + f.error + ")"; }).join("; ")));
+  }
+  mount.appendChild(el("p", "note",
+    "Locked share under 40% is flagged. Premium is measured against the pre-blackout anchor "
+    + (d.anchor_utc || "")  + "."));
+
+  var cards = el("div", "cards");
+  (d.tokens || []).forEach(function(t){
+    var low = t.locked_pct_est !== null && t.locked_pct_est !== undefined
+              && Number(t.locked_pct_est) < 40;
+    var c = el("div", "card" + (low ? " alarm" : ""));
+    var top = el("div", "ctop");
+    top.appendChild(el("span", "sym", t.symbol));
+    var pr = el("span", "count", usd(t.price_usd));
+    top.appendChild(pr);
+    c.appendChild(top);
+    var big = el("div", "big", pct(t.locked_pct_est, 1));
+    big.style.color = low ? "var(--bad)" : "var(--ok)";
+    c.appendChild(big);
+    c.appendChild(el("div", "count", "locked share"));
+    if (t.locked_pct_est !== null && t.locked_pct_est !== undefined){
+      c.appendChild(meter(Number(t.locked_pct_est) / 100,
+                    low ? "var(--bad)" : "var(--ok)"));
+    }
+    c.appendChild(kv([
+      ["free float", num(t.free_float_units) + " u"],
+      ["premium", t.premium_pct === null || t.premium_pct === undefined ? "—" : pct(t.premium_pct,2),
+        Number(t.premium_pct) < 0 ? "neg" : "pos"],
+      ["supply 6h", t.supply_chg_6h_pct === null || t.supply_chg_6h_pct === undefined
+        ? "—" : pct(t.supply_chg_6h_pct,2)],
+      ["pools", num(t.pool_count) + (t.pools_capped ? "+" : "")]
+    ]));
+    c.appendChild(addrRow(t.ca));
+    cards.appendChild(c);
+  });
+  mount.appendChild(cards);
+}
+
+function renderNft(tracked, disc){
+  var mount = document.getElementById("nft");
+  mount.textContent = "";
+  var n = 0;
+  if (tracked.ok){ stamps.push(["nft", tracked.data.generated_at]); n += (tracked.data.collections||[]).length; }
+  if (disc.ok){ n += (disc.data.collections||[]).length; }
+  document.getElementById("nft-count").textContent = n + "";
+
+  mount.appendChild(el("p", "note", "Tracked collections"));
+  if (!tracked.ok){
+    mount.appendChild(el("div", "err", "Could not load data/nft_latest.json — " + tracked.error));
+  } else {
+    var tc = tracked.data.collections || [];
+    if (!tc.length) mount.appendChild(el("div", "empty", "No tracked collections."));
+    else mount.appendChild(table([
+      {label:"Collection", get:function(r){ return r.name || r.slug; }},
+      {label:"Floor", num:true, get:function(r){ return r.floor_price === null ? "n/a"
+        : num(r.floor_price,4) + " " + (r.floor_symbol || ""); }},
+      {label:"Floor chg", num:true, get:function(r){ return r.floor_chg_pct === null
+        || r.floor_chg_pct === undefined ? "—" : pct(r.floor_chg_pct,2); },
+       cls:function(r){ return Number(r.floor_chg_pct) < 0 ? "neg" : "pos"; }},
+      {label:"Sales 24h", num:true, get:function(r){ return num(r.sales_24h); }},
+      {label:"Vol 24h", num:true, get:function(r){ return num(r.volume_24h,2); }},
+      {label:"Owners", num:true, get:function(r){ return num(r.num_owners); }},
+      {label:"Supply", num:true, get:function(r){ return num(r.total_supply); }},
+      {label:"Thin move", get:function(r){ return r.flag_thin_floor_move ? "FLAG" : "—"; },
+       cls:function(r){ return r.flag_thin_floor_move ? "neg" : null; }}
+    ], tc));
+  }
+
+  var p2 = el("p", "note", "Discovery only, not promoted — ranked by "
+    + (disc.ok ? (disc.data.order_by || "volume") : "volume")
+    + ". social_presence_score counts filled listing fields and says nothing about legitimacy.");
+  p2.style.marginTop = "14px";
+  mount.appendChild(p2);
+  if (!disc.ok){
+    mount.appendChild(el("div", "err", "Could not load data/nft_discover.json — " + disc.error));
+  } else {
+    var dc = disc.data.collections || [];
+    if (!dc.length) mount.appendChild(el("div", "empty", "Nothing surfaced."));
+    else mount.appendChild(table([
+      {label:"Collection", get:function(r){ return r.name || r.slug; }},
+      {label:"Floor", num:true, get:function(r){ return r.floor_price === null ? "n/a"
+        : num(r.floor_price,4) + " " + (r.floor_symbol || ""); }},
+      {label:"Vol 24h", num:true, get:function(r){ return num(r.volume_24h,2); }},
+      {label:"Sales 24h", num:true, get:function(r){ return num(r.sales_24h); }},
+      {label:"Owner/supply", num:true, get:function(r){ return r.owner_supply_ratio === null
+        ? "n/a" : num(r.owner_supply_ratio,4); }},
+      {label:"Age", num:true, get:function(r){ return r.age_days === null ? "n/a" : r.age_days + " d"; }},
+      {label:"Fields", num:true, get:function(r){ return r.social_presence_score + "/"
+        + r.social_fields_checked; }},
+      {label:"Dressed/thin", get:function(r){ return r.flag_dressed_but_thin ? "FLAG" : "—"; },
+       cls:function(r){ return r.flag_dressed_but_thin ? "neg" : null; }},
+      {label:"Safelist", get:function(r){ return r.safelist_status || "—"; }}
+    ], dc));
+  }
+}
+
+function renderAvoid(res){
+  var mount = document.getElementById("avoid");
+  if (!res.ok){ fail("avoid", "avoid.json", res.error); return; }
+  var list = Array.isArray(res.data) ? res.data : [];
+  mount.textContent = "";
+  document.getElementById("avoid-count").textContent = list.length + "";
+  mount.appendChild(el("p", "note",
+    "Hand-reviewed. Excluded from scoring and tiered AVOID when seen."));
+  if (!list.length){ mount.appendChild(el("div", "empty", "Empty.")); return; }
+  list.forEach(function(e){
+    var r = el("div", "row");
+    var h = el("div", "rhead");
+    h.appendChild(el("span", "sym", e.symbol || "(no symbol)"));
+    var p = el("span", "pill", "avoid");
+    p.style.color = tierColor("AVOID");
+    h.appendChild(p);
+    if (e.added) h.appendChild(el("span", "count", "added " + e.added));
+    r.appendChild(h);
+    r.appendChild(addrRow(e.ca));
+    if (e.reason) r.appendChild(el("div", "reason", e.reason));
+    mount.appendChild(r);
+  });
+}
+
+function renderFooter(){
+  var f = document.getElementById("footer");
+  f.textContent = "";
+  var parts = stamps.map(function(s){
+    return s[0] + " " + (s[1] ? s[1].replace("T", " ").slice(0, 19) + "Z" : "unknown");
+  });
+  f.appendChild(el("div", null, "data as of — " + (parts.length ? parts.join("  ·  ") : "no data loaded")));
+  var d = el("div");
+  d.style.marginTop = "6px";
+  var a = el("a", null, "Zirqo-Dev/hoodscout-data");
+  a.href = REPO; a.rel = "noopener";
+  d.appendChild(el("span", null, "source: "));
+  d.appendChild(a);
+  f.appendChild(d);
+}
+
+Promise.all([
+  load("data/latest.json"),
+  load("data/stocks_latest.json"),
+  load("data/nft_latest.json"),
+  load("data/nft_discover.json"),
+  load("avoid.json")
+]).then(function(r){
+  var pools = r[0], stocks = r[1], nftT = r[2], nftD = r[3], avoid = r[4];
+
+  renderHealth([
+    {name: "Pools (latest.json)", ok: pools.ok, at: pools.ok ? pools.data.generated_at : null,
+     error: pools.error,
+     meta: pools.ok ? ("pool lookups failed: " + pools.data.pool_lookups_failed
+            + "  ·  " + pools.data.tokens_seen + " tokens") : null},
+    {name: "Stock tokens (stocks_latest.json)", ok: stocks.ok,
+     at: stocks.ok ? stocks.data.generated_at : null, error: stocks.error,
+     meta: stocks.ok ? ("measured " + stocks.data.measured + "/5  ·  failed "
+            + (stocks.data.failed || []).length
+            + "  ·  alerts " + (stocks.data.alerts || []).length) : null},
+    {name: "NFT tracked (nft_latest.json)", ok: nftT.ok,
+     at: nftT.ok ? nftT.data.generated_at : null, error: nftT.error,
+     meta: nftT.ok ? ((nftT.data.collections || []).length + " collections") : null},
+    {name: "NFT discover (nft_discover.json)", ok: nftD.ok,
+     at: nftD.ok ? nftD.data.generated_at : null, error: nftD.error,
+     meta: nftD.ok ? ((nftD.data.collections || []).length + " surfaced") : null}
+  ]);
+
+  renderPools(pools);
+  renderStocks(stocks);
+  renderNft(nftT, nftD);
+  renderAvoid(avoid);
+  renderFooter();
+});
+</script>
+</body>
+</html>

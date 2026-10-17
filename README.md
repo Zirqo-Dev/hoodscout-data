@@ -12,6 +12,26 @@ this repo, so every snapshot is a plain file with a git history behind it.
 
 All three also accept `workflow_dispatch` for an on-demand run.
 
+## Dashboard
+
+A single static page, `index.html` at the repo root, served by GitHub Pages:
+
+```
+https://zirqo-dev.github.io/hoodscout-data/
+```
+
+It fetches `data/latest.json`, `data/stocks_latest.json`, `data/nft_latest.json`,
+`data/nft_discover.json` and `avoid.json` from the same origin on every load with
+a cache-buster, so it is as current as the last pipeline commit. No build step, no
+external scripts, no tracking; `.nojekyll` keeps Pages from processing the tree.
+
+It never fetches `data/history.jsonl` — that file is tens of megabytes and would
+make the page unusable on a phone. Each section fails independently and says so
+rather than rendering blank, and a file older than two hours raises a loud stale
+banner at the top.
+
+Enable it under Settings → Pages with the source set to the `main` branch, root.
+
 ## Pools — `collect.py`
 
 Pulls trending and new pools, aggregates them by token, and scores each on
