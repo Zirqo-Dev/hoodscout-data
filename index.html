@@ -691,7 +691,15 @@ function renderAvoid(res){
     h.appendChild(p);
     if (e.added) h.appendChild(el("span", "count", "added " + e.added));
     r.appendChild(h);
-    r.appendChild(addrRow(e.ca));
+    /* No entry in avoid.json carries a pool, so every Gecko link here takes
+       the /tokens/<address> fallback. An entry with no usable address gets no
+       address block and no links at all -- there is nothing to build them
+       from, and a link to the wrong contract is worse than none. */
+    if (typeof e.ca === "string" && e.ca.trim()){
+      r.appendChild(addrRow(e.ca.trim(), e));
+    } else {
+      r.appendChild(el("div", "reason", "no contract address recorded"));
+    }
     if (e.reason) r.appendChild(el("div", "reason", e.reason));
     mount.appendChild(r);
   });
