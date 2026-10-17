@@ -94,6 +94,8 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospac
 .copy.done{color:var(--ok); border-color:var(--ok)}
 .kv{display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:7px; font-size:12.5px; color:var(--muted)}
 .kv span b{color:var(--text); font-weight:600; font-variant-numeric:tabular-nums}
+.kv span.dim{opacity:.6}
+.kv span.dim b{color:var(--muted); font-weight:500}
 
 /* meter (bars only -- no time series is fetched, so no sparklines) */
 .meter{height:5px; background:var(--surface-2); border-radius:3px;
@@ -114,6 +116,17 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospac
 .card.alarm{border-color:var(--bad)}
 .card .ctop{display:flex; align-items:baseline; gap:8px}
 .card .big{font-size:21px; font-weight:680; font-variant-numeric:tabular-nums}
+
+/* expandable discover rows -- readable at 400px, no clipped columns */
+details.drow{background:transparent; border:0; border-top:1px solid var(--border);
+  border-radius:0; margin:0}
+details.drow:first-of-type{border-top:0}
+details.drow summary{padding:11px 0; font-weight:400; display:block}
+details.drow summary::after{content:"+"; float:right; margin-top:-22px;
+  color:var(--muted); font-size:16px}
+details.drow[open] summary::after{content:"\2212"}
+details.drow summary .rhead{padding-right:20px}
+details.drow .dbody{padding:0 0 11px}
 
 /* scrollers */
 .scroll{overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -14px; padding:0 14px}
@@ -211,10 +224,13 @@ function ageText(m){
   if (h < 48) return (h < 10 ? h.toFixed(1) : Math.round(h)) + " h ago";
   return Math.round(h / 24) + " d ago";
 }
-function ageClass(m){
+/* thresholds are per file, in minutes, because the pipelines run at different
+   cadences: collect every 15 min, NFT twice a day. One global rule flagged a
+   perfectly healthy NFT file as stale for most of the day. */
+function ageClass(m, amber, red){
   if (m === null) return "s-bad";
-  if (m < 45) return "s-ok";
-  if (m < 120) return "s-warn";
+  if (m < amber) return "s-ok";
+  if (m < red) return "s-warn";
   return "s-bad";
 }
 
@@ -263,13 +279,24 @@ function kv(pairs){
   var d = el("div", "kv");
   pairs.forEach(function(p){
     if (p[1] === undefined) return;
-    var s = el("span", null, p[0] + " ");
+    var s = el("span", p[3] || null, p[0] + " ");
     var b = el("b", null, p[1]);
     if (p[2]) b.className = p[2];
     s.appendChild(b);
     d.appendChild(s);
   });
   return d;
+}
+
+/* "2026-09-05T00:00:00+00:00" -> "Sep 5, 2026". Formatted explicitly rather
+   than via toLocaleDateString so the label does not shift with the viewer's
+   locale. */
+var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function anchorDate(iso){
+  var t = Date.parse(iso);
+  if (isNaN(t)) return null;
+  var d = new Date(t);
+  return MONTHS[d.getUTCMonth()] + " " + d.getUTCDate() + ", " + d.getUTCFullYear();
 }
 /* diverging bar for recent_move_score, which runs -10..+10 */
 function moveBar(score){
@@ -334,13 +361,13 @@ function renderHealth(entries){
   var stale = [];
   entries.forEach(function(e){
     var m = e.ok ? ageMin(e.at) : null;
-    var card = el("div", "hcard " + (e.ok ? ageClass(m) : "s-bad"));
+    var card = el("div", "hcard " + (e.ok ? ageClass(m, e.amber, e.red) : "s-bad"));
     card.appendChild(el("div", "hname", e.name));
     card.appendChild(el("div", "hage", e.ok ? ageText(m) : "unavailable"));
     card.appendChild(el("div", "hmeta", e.ok ? (e.meta || "") : (e.error || "fetch failed")));
     mount.appendChild(card);
     if (!e.ok) stale.push(e.name + " unavailable");
-    else if (m !== null && m >= 120) stale.push(e.name + " " + ageText(m));
+    else if (m !== null && m >= e.red) stale.push(e.name + " " + ageText(m));
   });
   var b = document.getElementById("banner");
   b.textContent = "";
@@ -430,17 +457,38 @@ function renderPools(res){
     "Discovery only, not promoted. Surfaced by buyer-rate acceleration; never auto-added anywhere."));
   if (!dv.length){ dm.appendChild(el("div", "empty", "Nothing surfaced.")); }
   else {
-    dm.appendChild(table([
-      {label:"Symbol", get:function(r){ return r.symbol || "(none)"; }},
-      {label:"Tier", get:function(r){ return r.tier; }},
-      {label:"Reason", get:function(r){ return r.watch_reason || "—"; }},
-      {label:"Accel", num:true, get:function(r){ return r.buyer_accel_pct === null ? "n/a" : pct(r.buyer_accel_pct,1); },
-       cls:function(r){ return Number(r.buyer_accel_pct) < 0 ? "neg" : "pos"; }},
-      {label:"Txns 24h", num:true, get:function(r){ return num(r.txns24); }},
-      {label:"Liq", num:true, get:function(r){ return usd(r.liq_usd); }},
-      {label:"Age", num:true, get:function(r){ return r.age_days === null ? "n/a" : num(r.age_days,1)+" d"; }},
-      {label:"Address", get:function(r){ return r.ca; }}
-    ], dv));
+    /* Cards, not a table: eight columns clipped at 400px and the address was
+       the first thing cut off. Each row expands to the full address. */
+    dm.appendChild(el("p", "note", "Tap a row for the full contract address."));
+    dv.forEach(function(r){
+      var row = el("details", "drow");
+      var sum = el("summary");
+      var head = el("div", "rhead");
+      head.appendChild(el("span", "sym", r.symbol || "(no symbol)"));
+      var tp = el("span", "pill", r.tier);
+      tp.style.color = tierColor(r.tier);
+      head.appendChild(tp);
+      if (r.watch_reason){
+        var rp = el("span", "pill", r.watch_reason);
+        rp.style.color = "var(--muted)";
+        head.appendChild(rp);
+      }
+      sum.appendChild(head);
+      sum.appendChild(kv([
+        ["accel", r.buyer_accel_pct === null || r.buyer_accel_pct === undefined
+          ? "n/a" : pct(r.buyer_accel_pct, 1),
+          Number(r.buyer_accel_pct) < 0 ? "neg" : "pos"],
+        ["txns 24h", num(r.txns24)],
+        ["liq", usd(r.liq_usd)],
+        ["24h vol", usd(r.vol24_usd)],
+        ["age", r.age_days === null ? "n/a" : num(r.age_days, 1) + " d"]
+      ]));
+      row.appendChild(sum);
+      var inner = el("div", "dbody");
+      inner.appendChild(addrRow(r.ca));
+      row.appendChild(inner);
+      dm.appendChild(row);
+    });
   }
 }
 
@@ -470,9 +518,14 @@ function renderStocks(res){
     mount.appendChild(el("p", "note", "Failed to measure: " + failed.map(function(f){
       return f.symbol + " (" + f.error + ")"; }).join("; ")));
   }
+  var anchor = anchorDate(d.anchor_utc);
   mount.appendChild(el("p", "note",
-    "Locked share under 40% is flagged. Premium is measured against the pre-blackout anchor "
-    + (d.anchor_utc || "")  + "."));
+    "Locked share under 40% is flagged. Alerts fire only when a symbol newly "
+    + "crosses the floor."));
+  mount.appendChild(el("p", "note",
+    "Premium is measured against a fixed pre-blackout anchor"
+    + (anchor ? " of " + anchor : "") + " and does not move, so it reads as stale. "
+    + "Symbols first tracked after that date have no anchor and show —."));
 
   var cards = el("div", "cards");
   (d.tokens || []).forEach(function(t){
@@ -492,10 +545,16 @@ function renderStocks(res){
       c.appendChild(meter(Number(t.locked_pct_est) / 100,
                     low ? "var(--bad)" : "var(--ok)"));
     }
+    /* premium only means anything where an anchor row actually exists: NVDA,
+       MSTR and GME were first tracked after the anchor date and carry no
+       anchor_price at all, so they get a dash rather than a fabricated 0%. */
+    var hasAnchor = t.anchor_price !== null && t.anchor_price !== undefined
+                    && !isNaN(t.anchor_price);
     c.appendChild(kv([
       ["free float", num(t.free_float_units) + " u"],
-      ["premium", t.premium_pct === null || t.premium_pct === undefined ? "—" : pct(t.premium_pct,2),
-        Number(t.premium_pct) < 0 ? "neg" : "pos"],
+      [(anchor ? "premium vs " + anchor + " anchor (stale)" : "premium (stale)"),
+        hasAnchor ? pct(t.premium_pct, 2) : "—",
+        hasAnchor && Number(t.premium_pct) < 0 ? "neg" : null, "dim"],
       ["supply 6h", t.supply_chg_6h_pct === null || t.supply_chg_6h_pct === undefined
         ? "—" : pct(t.supply_chg_6h_pct,2)],
       ["pools", num(t.pool_count) + (t.pools_capped ? "+" : "")]
@@ -615,19 +674,22 @@ Promise.all([
 
   renderHealth([
     {name: "Pools (latest.json)", ok: pools.ok, at: pools.ok ? pools.data.generated_at : null,
-     error: pools.error,
+     error: pools.error, amber: 45, red: 180,
      meta: pools.ok ? ("pool lookups failed: " + pools.data.pool_lookups_failed
             + "  ·  " + pools.data.tokens_seen + " tokens") : null},
     {name: "Stock tokens (stocks_latest.json)", ok: stocks.ok,
      at: stocks.ok ? stocks.data.generated_at : null, error: stocks.error,
+     amber: 45, red: 180,
      meta: stocks.ok ? ("measured " + stocks.data.measured + "/5  ·  failed "
             + (stocks.data.failed || []).length
             + "  ·  alerts " + (stocks.data.alerts || []).length) : null},
     {name: "NFT tracked (nft_latest.json)", ok: nftT.ok,
      at: nftT.ok ? nftT.data.generated_at : null, error: nftT.error,
+     amber: 540, red: 840,
      meta: nftT.ok ? ((nftT.data.collections || []).length + " collections") : null},
     {name: "NFT discover (nft_discover.json)", ok: nftD.ok,
      at: nftD.ok ? nftD.data.generated_at : null, error: nftD.error,
+     amber: 540, red: 840,
      meta: nftD.ok ? ((nftD.data.collections || []).length + " surfaced") : null}
   ]);
 
