@@ -41,21 +41,54 @@ stores the delta rather than a new whole-file blob each time.
 
 ## Revisit the cadence-coupled constants after a week
 
-`PERSIST_RUNS`/`PERSIST_MIN` (16/10) and `buyer_rate_rising`'s `window` (5)
-count snapshots, not time, so their wall-clock meaning depends on how many
-scheduled runs GitHub actually delivers. They were set assuming `*/15`
-delivers ~96/day, but observed delivery at `*/30` was 22.9 snapshots/day
-against a nominal 48 — under half. If `*/15` lands nearer 46/day than 96,
-these are roughly 2x too large and the BEST bar spans ~8h rather than the
-intended ~4h. Measure the real rate over a week, then retune. Same for
+`buyer_rate_rising`'s `window` (5) counts snapshots, not time, so its
+wall-clock meaning depends on how many scheduled runs GitHub actually
+delivers. It was set assuming `*/15` delivers ~96/day, but observed delivery
+at `*/30` was 22.9 snapshots/day against a nominal 48 — under half, and the
+2026-10-18 measurement above is worse still. If `*/15` lands nearer 46/day
+than 96, the window is roughly 2x too short in time terms. Same for
 `HISTORY_DAYS = 15`, which was halved to hold file size flat on the
 assumption of doubled delivery.
 
-## Scheduler delivery
+`window` has a second, sharper problem, independent of the cadence: it
+returns `False` only below 2 rows, so with 2 rows it tests one increase
+instead of four. Measured pass rate is 40.0% at 2 rows, 24.7% at 3, 17.5% at
+4 and 13.6% at 5 — a thin history makes the EMERGING gate **2.9x easier**,
+not harder. Blast radius is small (the `MIN_SCORE_TXNS` gate keeps the
+eligible pool at ~11 tokens, so about +3 entries right after a prune and
+~14 false EMERGING token-snapshots a day in steady state), but the fix is to
+require the full window or scale the bar, not to leave it reading as a
+4-increase test.
+
+`PERSIST_RUNS`/`PERSIST_MIN` (16/10) were the worst case of this and are
+retired as of `2d6a4fb`; they are kept defined for one week so the old gate
+can be recomputed beside the time-based one.
+
+## Scheduler delivery — off-peak minutes did not work, plan B in progress
 
 GitHub dropped ~9 collect fires and the 21:00 NFT run on 2026-10-17;
 off-peak minutes tried; external dispatch is plan B. Re-measure after 24 h:
 delivered runs per day vs nominal.
+
+**Measured 2026-10-18.** The off-peak move (`7162f6b`, crons to
+`7,22,37,52` and `17 13,21`) did not help. Between the 21:56 and 23:58
+collect runs, eight fires were nominal — 22:07, 22:22, 22:37, 22:52, 23:07,
+23:22, 23:37, 23:52 — and **one was delivered**: Actions run 1358, which
+started at 23:58:05 against the 23:52 cron, six minutes late. Nothing fired
+between 23:58 and 04:03. So 1 of 8, and peak-minute contention is ruled out
+as the explanation rather than merely unproven.
+
+Plan B is therefore in progress: an external scheduler calling
+`workflow_dispatch`, which has fired reliably every time it was used this
+session while schedules did not. Until it lands, the pipeline's effective
+cadence is unpredictable and anything measured in snapshots is unsafe — which
+is what `2d6a4fb` moved persistence off.
+
+Consequence worth watching: the 2 h gap let `new_pools` accumulate two hours
+of mints into one snapshot, and the 23:58 run took in 51 tokens it had never
+seen, 49 of them a single zero-liquidity batch mint (tickers `5`..`53`, one
+contract and one pool each, FDV climbing monotonically with the number). DEAD
+went 25 -> 57 on composition alone; nothing was demoted into it.
 
 ## The `Commit` step cannot resolve `data/` conflicts
 
@@ -64,3 +97,47 @@ content conflict in the data files rather than resolving it (seen on
 collect.yml run 665, 2026-09-17, caused by pushing code while runs were in
 flight). Exposure is lower since `stocks.yml` stopped being a scheduled
 writer, but `collect.yml` and `nft.yml` can still collide.
+
+## Evidence layer: forward-return baseline by tier
+
+Baseline for anything that later claims a tier predicts direction. Method:
+for each token-snapshot, the same token's nearest price print to 6 h inside a
+4-8 h window; recovered pre-prune `history.jsonl`, 2026-09-17..10-17, 43,365
+rows, 686 snapshots. `eff. n` collapses (token, 6 h-bucket) cells, since
+overlapping windows inflate raw n about 5x. `token-median` is the median of
+per-token medians, which is what survives clustering.
+
+| tier | rows | retained | n | tokens | eff. n | median | mean | win% | token-median |
+|---|---|---|---|---|---|---|---|---|---|
+| BEST | 12,805 | 94.6% | 12,115 | 85 | 1,270 | −0.376% | −0.307% | 43.5% | −2.732% |
+| EMERGING | 1,775 | 93.9% | 1,667 | 111 | 310 | −7.457% | +1.547% | 38.5% | −6.316% |
+| WATCH | 25,873 | 87.4% | 22,615 | 270 | 2,610 | −0.564% | +0.993% | 41.9% | −1.430% |
+| SPECULATIVE | 2,489 | 51.1% | 1,273 | 50 | 182 | +0.000% | −0.439% | 28.3% | −0.377% |
+| DEAD | 108 | 0.0% | — | — | — | — | — | — | — |
+| AVOID | 315 | 90.2% | 284 | 1 | 29 | −0.196% | −0.754% | 43.0% | −0.196% |
+
+What it establishes:
+
+- **BEST vs WATCH is a null, and the direction depends on the statistic.**
+  Pooled, BEST leads by 0.19pp; clustered by token, WATCH leads by 1.30pp;
+  paired within token (72 tokens with >=5 prints in each tier) BEST is better
+  for 30 and worse for 42, median gap −0.49pp; by week the sign flips
+  (−0.26, +0.48, +0.18pp). Treat "BEST beats WATCH" and its inverse as both
+  unsupported. The dashboard legend quotes the paired figures.
+- **EMERGING is lottery-shaped and that is not an artifact.** Median −7.46%
+  against a mean of +1.55%: a few large winners against many losers. Negative
+  on 11 of 15 days, 111 distinct tokens, and the heaviest contributors split
+  both ways (HOODIE +17.4% over 79 prints, BEORN −28.6% over 40). Not one day
+  and not one token.
+- **DEAD retention is 0% by construction** — a token is DEAD partly because it
+  stopped printing, so it can never have a forward price. SPECULATIVE at 51.1%
+  is the only bucket where attrition could plausibly move the number.
+
+Separately, on `recent_move_score` over the same window: the price half
+(`_band(chg_h6)`) is monotone mean reversion (+5 band -> −3.96% median
+forward, −5 band -> −0.69%) and survives pairing, clustering and a retention
+control, but **not regime** — the gap is +0.06pp in W38 against −1.13 and
+−1.44pp in W39/W40. The acceleration half is a confirmed null: paired within
+token and within price band, accel-positive is better in 145 cells and worse
+in 145, median gap +0.016pp. Do not build a directional flag on the
+acceleration term.

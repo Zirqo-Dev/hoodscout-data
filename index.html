@@ -166,6 +166,49 @@ footer a{color:var(--accent)}
   <details open><summary>Tier summary <span class="count" id="tier-count"></span></summary>
     <div class="body" id="tier"></div></details>
 
+  <details><summary>How to read this <span class="count">what each tier means</span></summary>
+    <div class="body">
+    <p class="note">Tiers describe the market a token trades in, not whether to buy it.
+      Numbers below come from forward tests over the collected history and are stated so
+      they can be checked, not trusted.</p>
+
+    <div class="row"><div class="rhead"><span class="sym">PERSISTENT</span>
+      <span class="pill" style="color:var(--t-best)">best in the data</span></div>
+      <p class="note">Kept showing up healthy across at least 4 hours and holds real depth
+        against its own FDV. Not best performing: over the next 4-8 hours these showed no
+        edge over WATCH (paired within token: better for 30 tokens, worse for 42).</p></div>
+
+    <div class="row"><div class="rhead"><span class="sym">EMERGING</span>
+      <span class="pill" style="color:var(--t-emerging)">emerging</span></div>
+      <p class="note">Under 3 days old, trades not too concentrated, and buyer count rising
+        across recent snapshots. Lottery-shaped: in past data the median 4-8 h return was
+        about -7.5% but the mean was +1.5%, because a few big winners offset many
+        losers.</p></div>
+
+    <div class="row"><div class="rhead"><span class="sym">WATCH</span>
+      <span class="pill" style="color:var(--t-watch)">watch</span></div>
+      <p class="note">At least 300 trades in 24 hours, but short of a higher bar. Each row
+        carries a reason for which bar it missed.</p></div>
+
+    <div class="row"><div class="rhead"><span class="sym">SPECULATIVE</span>
+      <span class="pill" style="color:var(--t-spec)">speculative</span></div>
+      <p class="note">Thin, new or small, but with a venue to trade against. Kept rather
+        than discarded, and the least reliable bucket to read: only about half of these had
+        a price 4-8 hours later at all.</p></div>
+
+    <div class="row"><div class="rhead"><span class="sym">DEAD</span>
+      <span class="pill" style="color:var(--t-dead)">dead</span></div>
+      <p class="note">No liquidity at all, or past 14 days old with under 10 trades in 24
+        hours. In past data none of these had a price 4-8 hours later, so there is nothing
+        to measure and nothing to exit into.</p></div>
+
+    <div class="row"><div class="rhead"><span class="sym">AVOID</span>
+      <span class="pill" style="color:var(--t-avoid)">avoid</span></div>
+      <p class="note">Listed by hand with a reason. This tier overrides every other rule.
+        A ticker is not an identity here: impersonators reuse them, so the contract address
+        is what matters.</p></div>
+    </div></details>
+
   <details open><summary>PERSISTENT <span class="count" id="best-count"></span></summary>
     <div class="body" id="best"></div></details>
 
@@ -490,9 +533,8 @@ function renderPools(res){
   bm.appendChild(el("p", "note",
     "Persistent and liquid — not best performing. The tier means the token kept "
     + "showing up healthy across recent snapshots and holds depth against its own FDV. "
-    + "It says nothing about which way the price goes next: on the full history, 50% of "
-    + "these were falling over the last 6 hours and 52% over 24 hours, the closest to a "
-    + "coin flip of any tier. Still keyed BEST in the data. "
+    + "Over the next 4-8 hours, these showed no edge over WATCH (paired within token: "
+    + "better for 30 tokens, worse for 42). Still keyed BEST in the data. "
     + "The contract address is the identity; tickers repeat."));
   if (!best.length){ bm.appendChild(el("div", "empty", "No tokens in PERSISTENT.")); }
   best.forEach(function(t){
