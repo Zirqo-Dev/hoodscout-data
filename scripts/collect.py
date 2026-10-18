@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Collect Robinhood Chain pool data, aggregate by token, score."""
-import json, os, time, urllib.error, urllib.request
+import json, math, os, time, urllib.error, urllib.request
 from datetime import datetime, timezone, timedelta
 
 import stocks   # STOCKS is imported, never duplicated, so the two cannot drift
@@ -17,11 +17,41 @@ MAX_AGE_DAYS   = 14
 HISTORY_DAYS   = 15     # halved with the move to */15 to hold file size flat
 
 # tier thresholds.
-# PERSIST_RUNS counts SNAPSHOTS, not hours, so it is coupled to the collect
-# cadence: doubled from 8/5 when the cron went */30 -> */15, to keep the BEST
-# persistence bar spanning the same ~4h of wall clock rather than ~2h.
-PERSIST_RUNS     = 16    # snapshots looked back over for BEST (~4h at */15)
-PERSIST_MIN      = 10    # of which this many must show the token healthy
+# Persistence is measured in wall clock, not snapshots. A token qualifies when
+# its healthy appearances inside the last PERSIST_LOOKBACK_H span at least
+# PERSIST_SPAN_H, and cover at least PERSIST_MIN_FRAC of the snapshots that
+# actually landed in that window.
+#
+# What this replaces: "healthy in >= PERSIST_MIN of the last PERSIST_RUNS
+# snapshots", which was silently a function of the cron. At */30 ten of sixteen
+# asked for roughly 5h of span, at */15 for roughly 2.5h, so halving the poll
+# interval halved the bar without a line changing. Worse, it is unsatisfiable
+# rather than merely loose when the file is short: after the 15-day pause left
+# four snapshots in history.jsonl, no token could reach ten and BEST went to
+# zero. Both bars below are cadence-invariant -- one is hours, the other a
+# fraction of whatever landed -- so neither moves when the cron does, and a
+# fraction of four is still two. Replayed over 09-18..10-02 against 9,680
+# stored BEST prints, BEST per snapshot comes out:
+#
+#   cadence   stored   this rule   count 10/16   fixed >=6 in 6h
+#   */30        18.8      18.4         18.3           18.4
+#   */60        18.6      18.0         17.4           17.3
+#   */90        18.5      17.8         16.5            0.0
+#
+# -- the same answer at the cadence that produced the data, and the only one of
+# the three that still holds when the spacing triples. A fixed in-window
+# minimum is no better than a snapshot count: at */90 only five snapshots fit a
+# 6h window, so a minimum of six can never be met.
+#
+# PERSIST_RUNS and PERSIST_MIN are kept for one week of real delivery data, so
+# the old gate can be recomputed alongside the new one if the two disagree in
+# production; nothing reads them now.
+PERSIST_LOOKBACK_H = 6.0   # window the appearances are counted in
+PERSIST_SPAN_H     = 4.0   # earliest to latest healthy appearance must cover this
+PERSIST_MIN_FRAC   = 0.60  # of the snapshots that landed inside the window
+PERSIST_MIN_OBS    = 2     # floor, so the fraction can never ask for fewer
+PERSIST_RUNS     = 16    # retired: snapshots looked back over for BEST
+PERSIST_MIN      = 10    # retired: of which this many had to show it healthy
 BEST_MIN_AGE     = 2.0
 BEST_MIN_LIQ_FDV = 5.0
 BEST_MAX_TPT     = 4.0
@@ -236,18 +266,49 @@ def load_history(path="data/history.jsonl"):
     return rows
 
 
-def persistence(hist):
-    """Per-CA count of healthy appearances across the last PERSIST_RUNS snapshots."""
-    recent = set(sorted({r["ts"] for r in hist if r.get("ts")})[-PERSIST_RUNS:])
-    seen = {}
+def persistence(hist, now):
+    """Which CAs are persistent, and how many healthy prints each has.
+
+    Returns (ok, counts): a set of CAs clearing the bar, and the per-CA count of
+    healthy appearances inside the window -- published as persist_count, so the
+    number shown is the one the gate was decided on.
+
+    The bar is PERSIST_SPAN_H of span and PERSIST_MIN_FRAC coverage of the
+    snapshots that landed in the last PERSIST_LOOKBACK_H. Coverage is measured
+    against what actually arrived, not against what the cron nominally promised,
+    so dropped fires loosen the count in step with the span staying fixed.
+    """
+    cutoff = now - timedelta(hours=PERSIST_LOOKBACK_H)
+    rows, stamps = [], set()
     for r in hist:
+        ts = r.get("ts")
+        if not ts or not r.get("ca"):
+            continue
+        try:
+            dt = datetime.fromisoformat(ts)
+        except ValueError:
+            continue
+        if dt < cutoff or dt > now:
+            continue
+        stamps.add(dt)
         # only scored tokens are ever written to history, so presence is the
         # "scored" half of the test; rows predating the fattened format carry
         # no anomaly flag, and absent is read as healthy rather than dropping
         # the token — it self-corrects as new snapshots land
-        if r.get("ts") in recent and r.get("ca") and r.get("flag_liq_anomaly") is not True:
-            seen.setdefault(r["ca"], set()).add(r["ts"])
-    return {ca: len(ts) for ca, ts in seen.items()}
+        if r.get("flag_liq_anomaly") is not True:
+            rows.append((r["ca"], dt))
+
+    need = max(PERSIST_MIN_OBS, math.ceil(PERSIST_MIN_FRAC * len(stamps)))
+    seen = {}
+    for ca, dt in rows:
+        seen.setdefault(ca, set()).add(dt)
+    ok, counts = set(), {}
+    for ca, dts in seen.items():
+        counts[ca] = len(dts)
+        span = (max(dts) - min(dts)).total_seconds() / 3600
+        if len(dts) >= need and span >= PERSIST_SPAN_H:
+            ok.add(ca)
+    return ok, counts
 
 
 def buyer_rate_rising(ca, hist, window=5):
@@ -278,7 +339,7 @@ def last_byr24(ca, hist, n=5):
     return [r["byr24"] for r in rows]
 
 
-def classify(t, avoid, persist, hist):
+def classify(t, avoid, persist_ok, hist):
     """Assign exactly one tier. Nothing with a real signal is dropped."""
     if t["ca"] in avoid:
         return "AVOID"
@@ -286,7 +347,7 @@ def classify(t, avoid, persist, hist):
     contra, age = t["flag_contradiction"], t["age_days"]
     lf, tpt = t["liq_fdv_pct"], t["trades_per_trader"]
 
-    if (persist.get(t["ca"], 0) >= PERSIST_MIN and not contra
+    if (t["ca"] in persist_ok and not contra
             and lf is not None and lf >= BEST_MIN_LIQ_FDV
             and tpt is not None and tpt <= BEST_MAX_TPT
             and age is not None and age >= BEST_MIN_AGE):
@@ -310,7 +371,7 @@ def classify(t, avoid, persist, hist):
     return "SPECULATIVE"
 
 
-def watch_reason(t, persist, hist):
+def watch_reason(t, persist_ok, hist):
     """Why a WATCH token is not in a higher tier. Labelling only — this reads
     the same conditions classify() uses and never changes a tier."""
     if t["flag_contradiction"]:
@@ -319,7 +380,7 @@ def watch_reason(t, persist, hist):
     age, lf, tpt = t["age_days"], t["liq_fdv_pct"], t["trades_per_trader"]
 
     # would BEST or EMERGING have taken it but for trade concentration alone?
-    best_but_tpt = (persist.get(t["ca"], 0) >= PERSIST_MIN
+    best_but_tpt = (t["ca"] in persist_ok
                     and lf is not None and lf >= BEST_MIN_LIQ_FDV
                     and age is not None and age >= BEST_MIN_AGE
                     and (tpt is None or tpt > BEST_MAX_TPT))
@@ -332,7 +393,7 @@ def watch_reason(t, persist, hist):
     # old enough and seen often enough to have been judged: what holds it back
     # is pool depth, which is a quality bar rather than a maturity one
     if (age is not None and age >= BEST_MIN_AGE
-            and persist.get(t["ca"], 0) >= PERSIST_MIN
+            and t["ca"] in persist_ok
             and (lf is None or lf < BEST_MIN_LIQ_FDV)):
         return "thin_depth"
 
@@ -487,16 +548,16 @@ def main():
     tokens = [score_token(t) for t in aggregate(pools)]
 
     hist = load_history()
-    persist = persistence(hist)
+    persist_ok, persist_count = persistence(hist, now)
     for t in tokens:
-        t["tier"] = classify(t, avoid, persist, hist)
-        t["watch_reason"] = (watch_reason(t, persist, hist)
+        t["tier"] = classify(t, avoid, persist_ok, hist)
+        t["watch_reason"] = (watch_reason(t, persist_ok, hist)
                              if t["tier"] == "WATCH" else None)
         # additive only: nothing below reads back into tier or screen_score.
-        # persist_count is the exact number classify() compared against
-        # PERSIST_MIN; it was a local and so invisible in the output, which
+        # persist_count is the healthy-print count the persistence gate was
+        # decided on; it was a local and so invisible in the output, which
         # made "why is this BEST" unanswerable from the published files.
-        t["persist_count"] = persist.get(t["ca"], 0)
+        t["persist_count"] = persist_count.get(t["ca"], 0)
         t["last5_byr24"] = last_byr24(t["ca"], hist)
         rm, basis, accel = recent_move(t, hist)
         t["recent_move_score"], t["recent_move_basis"] = rm, basis
