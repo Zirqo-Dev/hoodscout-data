@@ -168,6 +168,35 @@ def verdict_at(hid, arms, gates, stable, fee):
     return None if g is None else rule["decide"](g, stable, gates)
 
 
+def known_only(hid, h, arms, stable):
+    """Re-run the hypothesis over fee_source == "name" rows alone.
+
+    The sweep asks what an unknown fee's LEVEL could do. This asks a different
+    question: whether the two groups differ in how much of them is unknown at
+    all. A metric can be insensitive to the first and turn on the second.
+
+    Stability is held fixed, as in the sweep, so the comparison isolates
+    composition rather than conflating it with a smaller sample's week count.
+
+    Returns (verdict, gates, gate_met). gate_met is the subset meeting its OWN
+    eff_n and token bars: restricting costs eff_n in proportion to the unknown
+    share, so a subset that has not earned a verdict must not overturn one.
+    """
+    rule = RULES[hid]
+    known = {k: [o for o in rows if o.get("fee_source") == "name"]
+             for k, rows in arms.items()}
+    kgates = {k: gates_for(known[k], h) for k in rule["gate_on"]}
+    worst = min(kgates.values(), key=lambda x: x["eff_n"])
+    met = all(x["eff_n"] >= h["min_eff_n"] and x["tokens"] >= h["min_n_tokens"]
+              for x in kgates.values())
+    if hid == "H-0003":
+        verdict = decide_h0003(known, worst)[0]
+    else:
+        g = rule["metric"](known)
+        verdict = None if g is None else rule["decide"](g, stable, worst)
+    return verdict, kgates, met
+
+
 def fee_sweep(hid, arms, gates, stable, base_verdict):
     """The verdict at each assumed unknown fee, and whether any of them differ.
 
@@ -246,14 +275,16 @@ def evaluate(h, labels, since):
     comp = {k: composition(arms[k]) for k in rule["gate_on"]}
     known = {k: [o for o in arms[k] if o.get("fee_source") == "name"]
              for k in arms}
-    kgates = {k: gates_for(known[k], h) for k in rule["gate_on"]}
     kg = rule["metric"](known) if h["id"] != "H-0003" else gap_vs_baseline(known)
+    kverdict, kgates, kmet = known_only(h["id"], h, arms, stable)
 
     res = {"id": h["id"], "rows": len(rows), "gates": gates, "worst": worst,
            "gates_met": met, "metric": g, "metric_label": rule["label"],
            "weekly": wk, "usable_weeks": len(usable), "stable": stable,
            "clauses": None, "composition": comp, "known_metric": kg,
-           "known_gates": kgates, "sweep": None, "sweep_crosses": False}
+           "known_gates": kgates, "known_verdict": kverdict,
+           "known_gate_met": kmet, "known_flips": False,
+           "sweep": None, "sweep_crosses": False}
     now = datetime.now(timezone.utc).isoformat()
     if not met:
         res["status"] = "expired" if now > h["stop_by"] else "waiting"
@@ -272,13 +303,21 @@ def evaluate(h, labels, since):
     else:
         res["status"] = rule["decide"](g, stable, worst)
 
-    # the gate: if the verdict is not the same everywhere in the observed fee
-    # range, the fee is deciding it and the market is not
+    # Two gates, both asking whether the fee is deciding the result rather
+    # than the market, from opposite directions. The first varies the unknown
+    # fee's level; the second removes the unknown rows entirely.
     res["sweep"], res["sweep_crosses"] = fee_sweep(
         h["id"], arms, worst, stable, res["status"])
+    res["known_flips"] = bool(kmet and kverdict is not None
+                              and kverdict != res["status"])
+    reasons = []
     if res["sweep_crosses"]:
+        reasons.append("fee uncertainty spans the threshold")
+    if res["known_flips"]:
+        reasons.append("known-only re-run flips the verdict")
+    if reasons:
         res["status"] = "inconclusive"
-        res["reason"] = "fee uncertainty spans the threshold"
+        res["reason"] = "; ".join(reasons)
     return res
 
 
@@ -353,12 +392,26 @@ def render(results, meta):
             L += [""]
             kg = r.get("known_metric")
             kn = next(iter(r["known_gates"].values()), {}) if r.get("known_gates") else {}
+            met = r.get("known_gate_met")
+            kv = r.get("known_verdict")
             L += [f"**Fee-known-only re-run** — {r['metric_label']} over "
                   f"`fee_source == name` rows alone: **{pp(kg)}pp** "
-                  f"(against {pp(r['metric'])}pp on all rows), eff_n "
-                  f"{kn.get('eff_n', 0)} of {kn.get('min_eff_n', '?')}. "
+                  f"(against {pp(r['metric'])}pp on all rows), verdict "
+                  f"`{kv}`, eff_n {kn.get('eff_n', 0)} of "
+                  f"{kn.get('min_eff_n', '?')} — **{'gate met' if met else 'gate NOT met'}**. "
                   "Restricting costs eff_n in proportion to the unknown share, "
                   "so this gate is reached later than the headline one.", ""]
+            if r.get("known_flips"):
+                L += ["> **The known-only re-run flips the verdict**, and that "
+                      "subset has met its own eff_n and token bars. The two "
+                      "groups differ in how much of them is unknown, not just "
+                      "in what the unknown costs. Status is `inconclusive`.", ""]
+            elif met is False and kv is not None and kv != r["status"]:
+                L += [f"> The known-only re-run gives `{kv}` against "
+                      f"`{r['status']}`, but has not met its own eff_n bar "
+                      f"({kn.get('eff_n', 0)} of {kn.get('min_eff_n', '?')}), "
+                      "so it is reported and not gated on. A subset that has "
+                      "not earned a verdict does not overturn one.", ""]
         if r.get("sweep"):
             L += ["**Swept bound** — the verdict at each assumed fee for "
                   "unknown-fee rows, over the range observed in the data "
@@ -450,7 +503,8 @@ def main(a):
               f"tokens {g.get('tokens', 0)}/{g.get('min_n_tokens', '?')}  "
               f"weeks {r.get('usable_weeks', 0)}/{SUBPERIODS}  "
               f"unknown-fee {c.get('unknown_pct', 0)}%"
-              + ("  [fee spans the threshold]" if r.get("sweep_crosses") else ""))
+              + ("  [fee spans the threshold]" if r.get("sweep_crosses") else "")
+              + ("  [known-only flips]" if r.get("known_flips") else ""))
 
     if a.report is not None:
         path = a.report or os.path.join(
