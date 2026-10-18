@@ -125,16 +125,54 @@ def num(v):
         return None
 
 
+# A pool object carries no picture of its base token; the token object does,
+# under attributes.image_url. Rather than spend 144 extra requests against a
+# rate-limited free tier, every pool request asks for the base token with it
+# (include=base_token), and the token objects come back in the response's
+# top-level "included" array. If the parameter is ignored, or the key is not
+# called image_url, the map below simply stays empty and every token's
+# image_url is null -- nothing else in the run changes.
+#
+# UNVERIFIED: this repo's committed data holds no image URL of any kind
+# (checked data/latest.json, stocks_latest.json, nft_latest.json,
+# nft_discover.json and avoid.json: zero image-ish keys, zero image URLs), and
+# api.geckoterminal.com is not reachable from the authoring environment. The
+# first real run is the proof. Run it and read the printed count.
+def _image_of(item):
+    """A token object's picture, or None. GeckoTerminal returns a placeholder
+    string rather than null for tokens with no art, so anything that is not an
+    absolute http(s) URL is treated as absent."""
+    url = ((item.get("attributes") or {}).get("image_url") or "")
+    url = url.strip() if isinstance(url, str) else ""
+    return url if url.startswith("http://") or url.startswith("https://") else None
+
+
+def _harvest_images(payload, images):
+    """Fill {ca: image_url} from a response's included[] token objects."""
+    for item in payload.get("included") or []:
+        if item.get("type") != "token":
+            continue
+        tid = item.get("id") or ""
+        ca = tid.split("_", 1)[1].lower() if "_" in tid else None
+        url = _image_of(item)
+        if ca and url and ca not in images:
+            images[ca] = url
+
+
 def collect():
-    pools, seen = [], set()
-    paths = ([f"/networks/{NETWORK}/trending_pools?page={i}" for i in range(1, TRENDING_PAGES+1)]
-           + [f"/networks/{NETWORK}/new_pools?page={i}" for i in range(1, NEW_POOL_PAGES+1)])
+    pools, seen, images = [], set(), {}
+    paths = ([f"/networks/{NETWORK}/trending_pools?page={i}&include=base_token"
+              for i in range(1, TRENDING_PAGES+1)]
+           + [f"/networks/{NETWORK}/new_pools?page={i}&include=base_token"
+              for i in range(1, NEW_POOL_PAGES+1)])
     for p in paths:
         try:
-            data = get(p).get("data", [])
+            payload = get(p)
+            data = payload.get("data", [])
         except Exception as e:
             print(f"WARN {p}: {e}")
             continue
+        _harvest_images(payload, images)
         for item in data:
             addr = (item.get("attributes") or {}).get("address")
             if addr and addr not in seen:
@@ -148,7 +186,9 @@ def collect():
     lookups = []
     for ca in sorted(POOL_LOOKUP_CAS):
         try:
-            data = get(f"/networks/{NETWORK}/tokens/{ca}/pools").get("data", [])
+            payload = get(f"/networks/{NETWORK}/tokens/{ca}/pools?include=base_token")
+            data = payload.get("data", [])
+            _harvest_images(payload, images)
         except Exception as e:
             print(f"WARN pools {ca}: {e}")
             lookups.append({"ca": ca, "ok": False, "pools_returned": 0,
@@ -165,7 +205,8 @@ def collect():
         lookups.append({"ca": ca, "ok": True, "pools_returned": len(data),
                         "pools_new": added, "error": None})
         time.sleep(2.5)
-    return pools, lookups
+    print(f"images: {len(images)} token image URLs harvested")
+    return pools, lookups, images
 
 
 # GeckoTerminal has no fee field on a pool. It puts the fee in the pool's
@@ -618,10 +659,146 @@ def write_log(tokens, now):
     return path, len(rows)
 
 
+# Rolling 48h diff, rewritten whole each run. It exists so the dashboard can
+# answer "what moved since I last looked" without the reader holding the last
+# snapshot in their head. It is derived: delete it and the next run rebuilds a
+# 1-run version of it, losing only the older events.
+CHANGES_PATH = "data/changes.json"
+CHANGES_WINDOW_H = 48.0
+CHANGES_MAX_BYTES = 20000
+# Arrivals are capped so they cannot crowd out the tier history, and floored
+# so the tier history cannot crowd them out entirely.
+CHANGES_MAX_NEW = 40
+CHANGES_MIN_NEW = 15
+# MEASURED, and the reason covers_h exists: over the 55 snapshots in
+# history.jsonl (26.5h) this chain produced 329 first appearances and 172 tier
+# changes, about 907 events per 48h. At ~135 bytes an event that is ~120KB, so
+# the byte budget binds long before the window does and the file holds roughly
+# the last 8-9 hours, not 48. The budget wins -- it is what keeps the repo and
+# the phone small -- and covers_h reports the span actually in the file so no
+# reader has to assume it got two days.
+
+
+def _changes_since(prev_tokens, tokens, now):
+    """Events between the previous latest.json and this run's tokens.
+
+    prev_tokens is read BEFORE latest.json is overwritten, so "previous" means
+    the last published snapshot, not the last history row. Three kinds:
+      new    a ca that was not in the previous snapshot at all
+      tier   a ca whose tier changed, carrying from -> to
+      avoid  a ca whose tier became AVOID (also emitted as a tier event, so a
+             reader can either show the AVOID list alone or the full set)
+    A token that drops out of the snapshot emits nothing: it may simply have
+    fallen off trending, which is not a change in the token.
+    """
+    # whole seconds, not microseconds: 12 fewer bytes on every event, and
+    # nothing reads this at sub-second resolution
+    ts = now.replace(microsecond=0).isoformat()
+    prev = {}
+    for t in prev_tokens:
+        ca = (t.get("ca") or "").lower()
+        if ca:
+            prev[ca] = t
+    out = []
+    for t in tokens:
+        ca = t["ca"]
+        sym, tier = t["symbol"], t.get("tier")
+        was = prev.get(ca)
+        if was is None:
+            out.append({"ts": ts, "kind": "new", "ca": ca, "sym": sym, "to": tier})
+            if tier == "AVOID":
+                out.append({"ts": ts, "kind": "avoid", "ca": ca, "sym": sym})
+            continue
+        before = was.get("tier")
+        if before != tier:
+            out.append({"ts": ts, "kind": "tier", "ca": ca, "sym": sym,
+                        "from": before, "to": tier})
+            if tier == "AVOID":
+                out.append({"ts": ts, "kind": "avoid", "ca": ca, "sym": sym})
+    return out
+
+
+def write_changes(prev_tokens, tokens, now, path=CHANGES_PATH):
+    """Append this run's events, drop anything older than the window, then drop
+    oldest-first until the file fits the byte budget. The budget is enforced on
+    the serialised bytes rather than on an event count, because an event's size
+    varies with the symbol."""
+    events = []
+    if os.path.exists(path):
+        try:
+            events = (json.load(open(path)) or {}).get("events") or []
+        except (ValueError, OSError) as e:
+            print(f"WARN changes read: {type(e).__name__}: {e}")
+            events = []
+
+    events = events + _changes_since(prev_tokens, tokens, now)
+
+    cutoff = now.timestamp() - CHANGES_WINDOW_H * 3600
+    kept = []
+    for e in events:
+        try:
+            if datetime.fromisoformat(e["ts"]).timestamp() >= cutoff:
+                kept.append(e)
+        except (KeyError, TypeError, ValueError):
+            continue
+    kept.sort(key=lambda e: e["ts"])
+
+    def covers(rows):
+        """Hours between the oldest event kept and now -- what the file really
+        spans once the byte budget has trimmed it."""
+        if not rows:
+            return 0.0
+        oldest = min(datetime.fromisoformat(r["ts"]).timestamp() for r in rows)
+        return round((now.timestamp() - oldest) / 3600, 2)
+
+    def dump(rows):
+        return json.dumps({"generated_at": now.isoformat(),
+                           "window_h": CHANGES_WINDOW_H,
+                           "covers_h": covers(rows),
+                           "max_bytes": CHANGES_MAX_BYTES,
+                           "events": rows},
+                          separators=(",", ":"))
+
+    # Trim to the budget, oldest first, but spend it on the tier history
+    # before the arrivals. MEASURED on the 55-snapshot replay: of 145 events
+    # that fit, 103 were "new" and almost all of those were a brand-new
+    # SPECULATIVE or DEAD pool appearing on this chain, which pushed the tier
+    # moves -- the part a reader is actually looking for -- out of the file
+    # after about four hours. Arrivals are dropped first, so a flood of new
+    # pools can no longer evict the transitions.
+    def split(rows):
+        return ([r for r in rows if r["kind"] == "new"],
+                [r for r in rows if r["kind"] != "new"])
+
+    fresh, moves = split(kept)
+    fresh = fresh[-CHANGES_MAX_NEW:]               # newest arrivals only
+    kept = sorted(fresh + moves, key=lambda e: e["ts"])
+    blob = dump(kept)
+    while len(blob.encode()) > CHANGES_MAX_BYTES and len(fresh) > CHANGES_MIN_NEW:
+        fresh = fresh[max(1, len(fresh) // 20):]
+        kept = sorted(fresh + moves, key=lambda e: e["ts"])
+        blob = dump(kept)
+    while len(blob.encode()) > CHANGES_MAX_BYTES and kept:
+        kept = kept[max(1, len(kept) // 20):]
+        blob = dump(kept)
+    open(path, "w").write(blob)
+    return len(kept), len(blob.encode()), json.loads(blob)["covers_h"]
+
+
 def main():
     now = datetime.now(timezone.utc)
     avoid = load_avoid()
-    raw, lookups = collect()
+
+    # read before anything can overwrite it: the diff is against the last
+    # published snapshot
+    prev_tokens = []
+    if os.path.exists("data/latest.json"):
+        try:
+            prev_tokens = (json.load(open("data/latest.json")) or {}).get("tokens") or []
+        except (ValueError, OSError) as e:
+            print(f"WARN previous latest.json: {type(e).__name__}: {e}")
+
+    raw, lookups, images = collect()
     pools = [parse_pool(p, now) for p in raw]
     tokens = [score_token(t) for t in aggregate(pools)]
 
@@ -640,6 +817,10 @@ def main():
         rm, basis, accel = recent_move(t, hist)
         t["recent_move_score"], t["recent_move_basis"] = rm, basis
         t["recent_move_accel_pct"] = accel   # age-guarded; discover's is not
+        # null whenever GeckoTerminal gave us nothing usable. The dashboard
+        # draws a generated avatar in that case, and no image is ever copied
+        # into this repo.
+        t["image_url"] = images.get(t["ca"])
 
     avoided = [{"symbol": t["symbol"], "ca": t["ca"], "reason": avoid[t["ca"]]}
                for t in tokens if t["ca"] in avoid]
@@ -688,6 +869,15 @@ def main():
     json.dump(out, open("data/latest.json", "w"), indent=2)
     json.dump(out, open(f"data/daily/{now:%Y-%m-%d}.json", "w"), indent=2)
     write_history(tokens, now)
+
+    # derived and non-critical, so a failure here must not cost the run its
+    # snapshot -- same rule as write_log below
+    try:
+        n_ev, n_bytes, cov = write_changes(prev_tokens, tokens, now)
+        print(f"changes: {n_ev} events, {n_bytes} bytes, covers {cov}h "
+              f"(window {CHANGES_WINDOW_H:.0f}h, cap {CHANGES_MAX_BYTES} bytes)")
+    except Exception as e:
+        print(f"WARN write_changes: {type(e).__name__}: {e}")
 
     # Last, after every file the pipeline depends on, and swallowed: nothing
     # reads the log, so a bug in it must not be able to cost a run its data

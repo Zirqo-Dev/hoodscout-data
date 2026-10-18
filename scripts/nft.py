@@ -92,6 +92,25 @@ def mint_key():
     return key
 
 
+# OpenSea's v2 collection object carries the collection art under image_url.
+# UNVERIFIED here: no committed file in this repo holds an image URL (checked
+# nft_latest.json and nft_discover.json: zero image-ish keys), and
+# api.opensea.io is not reachable from the authoring environment. banner_image_url
+# is read as a fallback so a collection that fills in only the banner still
+# gets a picture. Anything that is not an absolute http(s) URL -- including
+# OpenSea's "" for an unset field -- becomes null, and the dashboard draws its
+# generated avatar instead. The first real run is the proof; probe() prints
+# the detail keys if the field turns out to be named something else.
+def image_of(detail):
+    for k in ("image_url", "banner_image_url"):
+        url = detail.get(k)
+        if isinstance(url, str):
+            url = url.strip()
+            if url.startswith("http://") or url.startswith("https://"):
+                return url
+    return None
+
+
 def num(v):
     try:
         return float(v)
@@ -136,6 +155,7 @@ def measure(slug, key):
     listed = total.get("num_listed")
 
     return {"slug": slug, "name": coll.get("name"), "chains": chains,
+            "image_url": image_of(coll),
             "total_supply": supply,
             "floor_price": num(total.get("floor_price")),
             "floor_symbol": total.get("floor_price_symbol"),
@@ -233,6 +253,7 @@ def discover_row(item, key, now):
     filled = filled_meta(detail)
 
     r = {"slug": slug, "name": detail.get("name"),
+         "image_url": image_of(detail),
          "created_date": detail.get("created_date"), "age_days": age,
          "total_supply": supply, "num_owners": owners,
          "owner_supply_ratio": ratio,
@@ -323,7 +344,7 @@ def probe():
     print("detail keys:", sorted(detail) if isinstance(detail, dict) else None)
     for f in ["twitter_username", "project_url", "description", "discord_url",
               "is_verified", "safelist_status", "created_date", "opensea_url",
-              "total_supply", "owner"]:
+              "total_supply", "owner", "image_url", "banner_image_url"]:
         present = isinstance(detail, dict) and f in detail
         val = repr((detail or {}).get(f))[:80] if present else "-"
         print(f"    {f:18} present={present} value={val}")
