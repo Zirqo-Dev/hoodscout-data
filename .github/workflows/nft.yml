@@ -44,6 +44,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          # main's tip at job start rather than the trigger SHA, so a queued
+          # run never pushes from a stale checkout. See collect.yml for the
+          # full reasoning and the caveats. A dispatch from another branch now
+          # runs this file against main's contents.
+          ref: main
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"

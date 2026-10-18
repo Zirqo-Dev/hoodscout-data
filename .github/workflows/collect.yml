@@ -1,7 +1,26 @@
 name: collect
+# The schedule lives outside GitHub. cron-job.org calls workflow_dispatch at
+# :00/:15/:30/:45 UTC; to change the cadence, change it there, not here.
+#
+# GitHub's own `schedule:` was removed on 2026-10-18, for two reasons.
+#
+# It did not deliver: of the eight fires nominally due between 21:56 and 23:58
+# on 2026-10-17, one arrived, six minutes late, and nothing at all fired for
+# the four hours after. Moving the crons off the peak minutes (7162f6b) made
+# no difference, which ruled out contention as the explanation.
+#
+# And when it did deliver, it collided with the external dispatch. Run #1360
+# was created 51 seconds after a dispatch, queued behind it on the concurrency
+# group, and failed in Commit: whole-file rewrites of history.jsonl and
+# latest.json cannot be rebased, so the retry loop had nothing to do. Two
+# schedulers produce two near-identical snapshots and a guaranteed conflict
+# whenever they land within a run's ~3 minute duration.
+#
+# To go back to a GitHub schedule, restore:
+#   schedule:
+#     - cron: "7,22,37,52 * * * *"
+# and turn the cron-job.org job off first. Running both is what broke #1360.
 on:
-  schedule:
-    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -24,6 +43,25 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          # main's tip at job start, not the SHA this run was triggered on.
+          # actions/checkout defaults `ref` to "the reference or SHA for that
+          # event", which is fixed when the run is created. A run that queues
+          # behind another on the concurrency group therefore starts from a
+          # commit that is already stale, pushes against a moved remote and is
+          # rejected -- run #1360, 2026-10-18. Given a plain branch name,
+          # getRefSpec fetches +refs/heads/main*:refs/remotes/origin/main* and
+          # getCheckoutInfo checks out refs/remotes/origin/main, both at fetch
+          # time, so the tree is whatever main is when the job actually starts.
+          #
+          # This removes the stale-checkout half of that race. It does not make
+          # the Commit step below able to resolve a conflict, so two runs
+          # genuinely overlapping in time can still collide.
+          #
+          # Side effect: a dispatch from another branch now runs this file from
+          # that branch against main's contents. Nothing dispatches off main
+          # today; if that changes, this is the line to revisit.
+          ref: main
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"

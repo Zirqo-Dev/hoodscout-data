@@ -6,18 +6,22 @@ this repo, so every snapshot is a plain file with a git history behind it.
 
 | Pipeline | Script | Schedule | Source |
 |---|---|---|---|
-| Liquidity pools | `scripts/collect.py` | `:07 :22 :37 :52` every hour | GeckoTerminal |
+| Liquidity pools | `scripts/collect.py` | `:00 :15 :30 :45`, externally driven | GeckoTerminal |
 | Stock tokens | `scripts/stocks.py` | same run as the pools | GeckoTerminal + chain RPC |
 | NFT collections | `scripts/nft.py` | 13:17 and 21:17 UTC | OpenSea |
 
-Two workflows carry the schedules: `collect.yml` runs the pools and then the
-stock tokens in the same job, and `nft.yml` runs the NFT pipeline with
-`--with-discover`. `stocks.yml` has no schedule of its own -- it is the
-on-demand path for a ticker check or an off-cycle stocks run. All three accept
-`workflow_dispatch`.
+`collect.yml` runs the pools and then the stock tokens in the same job;
+`nft.yml` runs the NFT pipeline with `--with-discover`; `stocks.yml` has no
+schedule of its own and is the on-demand path for a ticker check or an
+off-cycle stocks run. All three accept `workflow_dispatch`.
 
-The quarter-hour offsets are deliberate: on the round minutes GitHub was
-dropping scheduled fires, so nothing here lands on `:00`.
+**Only `nft.yml` is scheduled by GitHub.** `collect.yml` is driven from
+outside, by a cron-job.org job calling `workflow_dispatch` every quarter
+hour, because GitHub's scheduler was dropping most fires -- one delivered of
+eight on the evening of 2026-10-17, and moving the crons off the peak minutes
+changed nothing. To change the collect cadence, change it at cron-job.org;
+`collect.yml` says so at the top and records how to restore a GitHub
+schedule.
 
 ## Dashboard
 

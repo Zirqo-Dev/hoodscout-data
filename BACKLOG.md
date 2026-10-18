@@ -90,13 +90,50 @@ seen, 49 of them a single zero-liquidity batch mint (tickers `5`..`53`, one
 contract and one pool each, FDV climbing monotonically with the number). DEAD
 went 25 -> 57 on composition alone; nothing was demoted into it.
 
-## The `Commit` step cannot resolve `data/` conflicts
+## The `Commit` step cannot resolve `data/` conflicts — mitigated, not fixed
 
 `git pull --rebase --autostash` in each workflow's Commit step fails on a
 content conflict in the data files rather than resolving it (seen on
 collect.yml run 665, 2026-09-17, caused by pushing code while runs were in
 flight). Exposure is lower since `stocks.yml` stopped being a scheduled
 writer, but `collect.yml` and `nft.yml` can still collide.
+
+**Fired for real: collect.yml run #1360, 2026-10-18T04:20Z.** Both scripts
+completed cleanly; the step that failed was `Commit`:
+
+```
+[main 8826a61] data: 2026-10-18T04:25Z
+ 5 files changed, 10355 insertions(+), 3809 deletions(-)
+ ! [rejected]        main -> main (fetch first)
+push rejected, rebasing (attempt 1)
+   171c9f6..ad86cd4  main       -> origin/main
+CONFLICT (add/add): Merge conflict in data/daily/2026-10-18.json
+CONFLICT (content): Merge conflict in data/history.jsonl
+CONFLICT (content): Merge conflict in data/latest.json
+CONFLICT (content): Merge conflict in data/stocks.jsonl
+CONFLICT (content): Merge conflict in data/stocks_latest.json
+error: could not apply 8826a61... data: 2026-10-18T04:25Z
+##[error]Process completed with exit code 1.
+```
+
+It was a collision: the scheduled run was created 51s after a manual
+dispatch, queued behind it on the concurrency group, and ran on the checkout
+pinned to the pre-push SHA. The `10355 insertions / 3809 deletions` is the
+tell — a 15-minute delta should be about fifty rows, and is that size only
+because `write_history()` rewrites the file whole.
+
+**Mitigated** by `ref: main` on `actions/checkout` in all three workflows: a
+queued run now takes main's tip when its job starts rather than the SHA it
+was triggered on, so the stale-checkout path that caused #1360 is closed.
+
+**Not fixed.** The retry loop still cannot resolve a whole-file conflict, so
+two runs that genuinely overlap in time — both fetch, both rewrite, second
+pushes — still fail exactly as above. The retry loop was written for a
+fast-forwardable race and whole-file rewrites are never fast-forwardable.
+The real repairs are either a merge strategy that knows the newer snapshot
+always wins (`-X theirs`, or re-running the collector after a pull instead of
+rebasing its commit), or the append-based `history.jsonl` design in the entry
+above, which would remove the conflict rather than resolve it.
 
 ## Evidence layer: forward-return baseline by tier
 
@@ -141,3 +178,32 @@ control, but **not regime** — the gap is +0.06pp in W38 against −1.13 and
 token and within price band, accel-positive is better in 145 cells and worse
 in 145, median gap +0.016pp. Do not build a directional flag on the
 acceleration term.
+
+## cron-job.org is the only scheduler, and a single point of failure
+
+GitHub's `schedule:` was removed from `collect.yml` on 2026-10-18. It is
+**not** paused or commented out — it is gone, and the file says how to put it
+back. `nft.yml` keeps its own `schedule:` (`17 13,21 * * *`) unchanged;
+`stocks.yml` has never had one.
+
+Collection now depends entirely on cron-job.org calling `workflow_dispatch`
+at :00/:15/:30/:45 UTC. Nothing else will start a collect run. If that job
+stops, the pipeline stops silently: `latest.json` simply stops advancing, and
+the only visible symptom is the dashboard's freshness chips going amber and
+then red, plus PERSISTENT emptying out as the 6h persistence window drains.
+There is no alert for "the scheduler died".
+
+Two known expiries to watch:
+
+- **The cron-job.org token expires in 90 days, around 2027-01-16.** When it
+  does, dispatches start returning 401 and collection stops. cron-job.org
+  emails on failure, so the first signal will be that email rather than
+  anything in this repo.
+- Failure notification is email only, to whoever owns the cron-job.org
+  account. Nothing routes it into the repo or the dashboard.
+
+Worth doing at some point: a staleness check that opens an issue when
+`latest.json`'s `generated_at` falls more than an hour behind, so the repo
+notices its own scheduler dying without depending on someone reading email.
+That cannot live in `collect.yml` — the whole point is that it has to run
+when collect does not.

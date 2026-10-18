@@ -1,7 +1,7 @@
 name: stocks
-# No schedule: the scheduled collection runs inside collect.yml, on its
-# :07/:22/:37/:52 cadence. This workflow is the on-demand path -- ticker
-# verification, and a manual stocks run when one is wanted off-cycle.
+# No schedule: the stocks collection runs inside collect.yml, which
+# cron-job.org dispatches at :00/:15/:30/:45. This workflow is the on-demand
+# path -- ticker verification, and a stocks run wanted off-cycle.
 on:
   workflow_dispatch:
     inputs:
@@ -30,6 +30,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          # main's tip at job start rather than the trigger SHA, so a queued
+          # run never pushes from a stale checkout. See collect.yml for the
+          # full reasoning and the caveats. A dispatch from another branch now
+          # runs this file against main's contents.
+          ref: main
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
