@@ -311,6 +311,69 @@ The $5,000 case matters most: at the median PERSISTENT liquidity it is a large
 enough fraction of the pool that the impact term dominates the signal, which is
 itself the finding.
 
+#### Where the fee comes from, and what it cannot tell us
+
+`fee_source` is on every outcome and has exactly two values.
+
+| value | when | coverage on 2026-10-18T14:00 |
+|---|---|---|
+| `name` | GeckoTerminal's pool name carried a trailing percentage | 41 of 138 rows (29.7%), 64.9% of liquidity |
+| `fallback` | everything else, charged 1% | 97 of 138 (70.3%) |
+
+There is deliberately no third value. A `dex_constant` would be defensible for
+`uniswap-v2-robinhood`, whose 0.30% is hard-coded as `mul(997)` over
+`mul(1000)` in `UniswapV2Library`, but not for `pons-v2` (third-party sources
+say fees are set per launch), and not at all for `pons-v2-dex` or
+`bankr-robinhood`, where no published fee was found. An invented constant would
+look like knowledge in this field and propagate silently.
+
+An `onchain` source is **not implementable**, and not only because the RPC is
+unreachable from the authoring environment. Of the 97 fee-less rows, 60 store a
+**32-byte pool id rather than an address** — `bankr-robinhood` 26,
+`pons-v2-dex` 17, Uniswap v4 17. A v4 pool id is `keccak256(poolKey, 0xa0)`
+(verified in `v4-core/src/types/PoolId.sol`) and the fee is one of the five
+hashed fields, so it cannot be recovered from the id. Recovering it needs the
+`PoolKey` from an Initialize event or an indexer. A v4 pool may also carry
+`DYNAMIC_FEE_FLAG = 0x800000` (`LPFeeLibrary.sol`), meaning the fee changes per
+swap and no constant exists even in principle.
+
+**ASSERTED, UNVERIFIED.** A Bitquery investigation titled *"Uniswap v4 Hooks on
+Robinhood Chain: The 0% Fee That Costs 1%"* reports that the chain's largest
+hook shows 0% on every swap while its contract takes a median of about one cent
+per dollar. `bitquery.io` is unreachable from this environment, so this comes
+from a search summary and has **not** been checked against the page, let alone
+against chain data. If it holds, a correctly-read v4 fee can still understate
+the real cost by roughly a point, and `fee_source == "name"` is not the same as
+"the cost is right". It is recorded here because a claim that would undercut
+the cost model deserves to be visible while unverified rather than forgotten
+until someone rediscovers it.
+
+#### How much the uncertainty actually matters
+
+A fee error moves `net500` by exactly `2 x` the error, independent of size. So
+it shifts a *level*, and largely cancels in a *difference* between two groups
+with similar unknown-fee shares. On the 2026-10-18T14:00 snapshot those shares
+were BEST 53.3%, the scored pile 53.7%, EMERGING 50.0% — near enough that the
+differential bias on H-0001's and H-0003's gaps is **under 0.1pp** against
+thresholds of 1.0pp and 3.0pp.
+
+The exposure is to *absolute* clauses. H-0003's clause (a) is a bar of −5.0pp
+on the EMERGING median with nothing to cancel against, and the same uncertainty
+moves that median by up to **±1.0pp** — a fifth of the bar.
+
+So `scripts/evaluate.py` reports, per hypothesis: the **composition** (rows and
+unknown-fee share per group), a **fee-known-only re-run** of the metric over
+`fee_source == "name"` rows alone, and a **swept bound** giving the verdict at
+assumed unknown fees of 0%, 0.3%, 1% and 1.9% — the range observed in the data.
+**If the verdict is not the same across that sweep, the status becomes
+`inconclusive` with the reason "fee uncertainty spans the threshold":** the fee
+is deciding the result and the market is not.
+
+Per-tier known rates diverge much more than the group rates do — SPECULATIVE
+14.1% against DEAD 58.6% — so a future hypothesis comparing those is not
+protected the way H-0001 happens to be. All of these figures are one snapshot
+of 138 rows and need recomputing as the sample grows.
+
 ### Baseline: same-pile random pick
 
 A score only means something against the alternative of not using it. For each

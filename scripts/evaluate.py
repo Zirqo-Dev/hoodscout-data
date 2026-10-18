@@ -53,30 +53,56 @@ def split_rms(rows):
 
 # -------------------------------------------------------------------- metrics
 
-def med_net(rows):
-    v = [o["ret_net_500"] for o in rows if o["ret_net_500"] is not None]
+def _nets(rows, fee):
+    """net500 for each row, with unknown-fee rows re-netted at `fee`.
+
+    fee=None means "use what was labelled", i.e. the 1% fallback.
+    """
+    v = [(o["ret_net_500"] if fee is None else label.net_at(o, fee))
+         for o in rows]
+    return [x for x in v if x is not None]
+
+
+def med_net(rows, fee=None):
+    v = _nets(rows, fee)
     return statistics.median(v) if v else None
 
 
-def mean_net(rows):
-    v = [o["ret_net_500"] for o in rows if o["ret_net_500"] is not None]
+def mean_net(rows, fee=None):
+    v = _nets(rows, fee)
     return statistics.mean(v) if v else None
 
 
-def med_base(rows):
-    v = [o["_base"] for o in rows if o.get("_base") is not None]
+def med_base(rows, fee=None):
+    """Median of the per-row baseline medians, re-netted at `fee`.
+
+    The baseline moves with the fee too: its peers are drawn from the same log
+    and carry the same mix of known and unknown fees, which is why a whole-
+    population fee error largely cancels in a difference.
+    """
+    v = []
+    for o in rows:
+        peers = o.get("_peers") or []
+        if fee is None:
+            b = o.get("_base")
+        else:
+            vals = [x for x in (label.net_at(q, fee) for q in peers)
+                    if x is not None]
+            b = statistics.median(vals) if vals else None
+        if b is not None:
+            v.append(b)
     return statistics.median(v) if v else None
 
 
-def gap_vs_baseline(arms):
+def gap_vs_baseline(arms, fee=None):
     """median(population) - median(per-row baseline medians)."""
     rows = arms["all"]
-    m, b = med_net(rows), med_base(rows)
+    m, b = med_net(rows, fee), med_base(rows, fee)
     return None if m is None or b is None else m - b
 
 
-def gap_between_arms(arms):
-    hi, lo = med_net(arms["rms>=+4"]), med_net(arms["rms<=-4"])
+def gap_between_arms(arms, fee=None):
+    hi, lo = med_net(arms["rms>=+4"], fee), med_net(arms["rms<=-4"], fee)
     return None if hi is None or lo is None else hi - lo
 
 
@@ -114,10 +140,10 @@ RULES = {
 }
 
 
-def decide_h0003(arms, gates):
+def decide_h0003(arms, gates, fee=None):
     rows = arms["all"]
-    a, b, c = med_net(rows), gap_vs_baseline(arms), None
-    mn = mean_net(rows)
+    a, b, c = med_net(rows, fee), gap_vs_baseline(arms, fee), None
+    mn = mean_net(rows, fee)
     if mn is not None and a is not None:
         c = mn - a
     clauses = [("(a) median <= -5.0pp", a is not None and a <= -0.05, pp(a)),
@@ -128,7 +154,46 @@ def decide_h0003(arms, gates):
     return ("pass" if all(ok for _, ok, _ in clauses) else "fail"), clauses
 
 
+def verdict_at(hid, arms, gates, stable, fee):
+    """The verdict this hypothesis's clauses give at an assumed unknown fee.
+
+    Stability is held fixed across the sweep: a fee error shifts levels, it
+    does not reorder weeks, so letting it move stability too would blame the
+    fee for something it did not do.
+    """
+    if hid == "H-0003":
+        return decide_h0003(arms, gates, fee)[0]
+    rule = RULES[hid]
+    g = rule["metric"](arms, fee)
+    return None if g is None else rule["decide"](g, stable, gates)
+
+
+def fee_sweep(hid, arms, gates, stable, base_verdict):
+    """The verdict at each assumed unknown fee, and whether any of them differ.
+
+    A fee error moves net500 by exactly 2x the error. That shifts a level and
+    largely cancels in a difference between groups with similar unknown-fee
+    shares -- so this usually agrees with itself, and when it does not, the
+    result is about the cost model rather than the market.
+    """
+    out = {}
+    for f in label.FEE_SWEEP:
+        out[f] = verdict_at(hid, arms, gates, stable, f)
+    seen = {v for v in out.values() if v is not None}
+    return out, (len(seen) > 1 or (base_verdict is not None
+                                   and seen and base_verdict not in seen))
+
+
 # ----------------------------------------------------------------- evaluation
+
+def composition(rows):
+    """Rows and unknown-fee share: the number that says whether a comparison is
+    exposed to the fee at all."""
+    n = len(rows)
+    unk = sum(1 for o in rows if o.get("fee_source") != "name")
+    return {"n": n, "unknown": unk,
+            "unknown_pct": round(100 * unk / n, 1) if n else 0.0}
+
 
 def gates_for(rows, h):
     hours = label.HORIZONS[h["horizon"]][0]
@@ -175,24 +240,45 @@ def evaluate(h, labels, since):
     stable = (len(usable) >= SUBPERIODS and g is not None
               and sum(1 for v in usable if (v > 0) == (g > 0)) >= 3)
 
+    # composition and the fee-known-only re-run: computed whatever the verdict,
+    # because "is this result about the market or about the cost model" is a
+    # question worth answering even while waiting
+    comp = {k: composition(arms[k]) for k in rule["gate_on"]}
+    known = {k: [o for o in arms[k] if o.get("fee_source") == "name"]
+             for k in arms}
+    kgates = {k: gates_for(known[k], h) for k in rule["gate_on"]}
+    kg = rule["metric"](known) if h["id"] != "H-0003" else gap_vs_baseline(known)
+
     res = {"id": h["id"], "rows": len(rows), "gates": gates, "worst": worst,
            "gates_met": met, "metric": g, "metric_label": rule["label"],
            "weekly": wk, "usable_weeks": len(usable), "stable": stable,
-           "clauses": None}
+           "clauses": None, "composition": comp, "known_metric": kg,
+           "known_gates": kgates, "sweep": None, "sweep_crosses": False}
     now = datetime.now(timezone.utc).isoformat()
     if not met:
         res["status"] = "expired" if now > h["stop_by"] else "waiting"
-    elif h["id"] == "H-0003":
+        return res
+    if h["id"] == "H-0003":
         res["status"], res["clauses"] = decide_h0003(arms, worst)
     elif g is None:
         res["status"] = "waiting"
+        return res
     elif len(usable) < SUBPERIODS and rule["decide"](g, True, worst) != \
             rule["decide"](g, False, worst):
         # the decision would turn on stability and there are not yet four
         # usable weeks to judge it by
         res["status"] = "waiting"
+        return res
     else:
         res["status"] = rule["decide"](g, stable, worst)
+
+    # the gate: if the verdict is not the same everywhere in the observed fee
+    # range, the fee is deciding it and the market is not
+    res["sweep"], res["sweep_crosses"] = fee_sweep(
+        h["id"], arms, worst, stable, res["status"])
+    if res["sweep_crosses"]:
+        res["status"] = "inconclusive"
+        res["reason"] = "fee uncertainty spans the threshold"
     return res
 
 
@@ -218,7 +304,13 @@ def render(results, meta):
     L += ["Nothing here has been traded. Every return is a modelled round trip:",
           "gross less two fees and constant-product impact against half the",
           "reported pool TVL, which is optimistic in every direction that",
-          "matters. See `docs/EVIDENCE_LAYER.md`.", ""]
+          "matters. See `docs/EVIDENCE_LAYER.md`.", "",
+          "The fee itself is known for only part of the sample. It is read from",
+          "the GeckoTerminal pool name where that name carries one, and is 1%",
+          "otherwise; `fee_source` records which. There is no third source: 60",
+          "of the 97 fee-less rows in the 2026-10-18T14:00 snapshot store a",
+          "32-byte pool id rather than an address, and a v4 pool id is",
+          "keccak256 of the PoolKey, so the fee cannot be recovered from it.", ""]
     L += [f"**{meta['n_hyp']} hypotheses are registered.** At a 5% threshold, "
           f"the chance at least one of {meta['n_hyp']} passes on noise alone is "
           f"{100*(1-0.95**meta['n_hyp']):.0f}%. Read any pass against that.", ""]
@@ -250,6 +342,36 @@ def render(results, meta):
                 L += [f"| {name} | {val}pp | {'✓' if ok else '✗'} |"]
             L += [""]
         decides = RULES.get(r["id"], {}).get("decide") is not None
+        if r.get("composition"):
+            L += ["**Fee composition** — a fee error moves `net500` by exactly "
+                  "2x the error, so it shifts a level and largely cancels in a "
+                  "difference between groups with similar unknown-fee shares.",
+                  "", "| group | rows | unknown fee | share |", "|---|---|---|---|"]
+            for arm, c in r["composition"].items():
+                L += [f"| {arm} | {c['n']} | {c['unknown']} | "
+                      f"**{c['unknown_pct']}%** |"]
+            L += [""]
+            kg = r.get("known_metric")
+            kn = next(iter(r["known_gates"].values()), {}) if r.get("known_gates") else {}
+            L += [f"**Fee-known-only re-run** — {r['metric_label']} over "
+                  f"`fee_source == name` rows alone: **{pp(kg)}pp** "
+                  f"(against {pp(r['metric'])}pp on all rows), eff_n "
+                  f"{kn.get('eff_n', 0)} of {kn.get('min_eff_n', '?')}. "
+                  "Restricting costs eff_n in proportion to the unknown share, "
+                  "so this gate is reached later than the headline one.", ""]
+        if r.get("sweep"):
+            L += ["**Swept bound** — the verdict at each assumed fee for "
+                  "unknown-fee rows, over the range observed in the data "
+                  "(0.01% to 1.9%):", "",
+                  "| assumed unknown fee | verdict |", "|---|---|"]
+            for f, v in sorted(r["sweep"].items()):
+                L += [f"| {100*f:g}% | `{v}` |"]
+            L += ["", ("> **The sweep crosses the threshold.** The verdict is "
+                       "not the same across the range, so the fee is deciding "
+                       "it and the market is not. Status is `inconclusive`."
+                       if r["sweep_crosses"] else
+                       "The verdict is the same at every assumed fee, so it "
+                       "does not turn on the unknown fees."), ""]
         L += [f"**Weekly subperiods** — {r['usable_weeks']} usable of "
               f"{SUBPERIODS} needed (a week under {MIN_SUBPERIOD_ROWS} rows "
               f"says nothing and is not counted); "
@@ -289,10 +411,13 @@ def main(a):
     labels, _ = label.label_all(rows, by_ca, times, latest, keep=keep)
     entry_of = {(r["ts"], r["ca"]): r for r in rows}
     cache = {}
+    import statistics as _st
     for o in labels:
-        o["_base"] = label.baseline_med(entry_of[(o["ts"], o["ca"])], o["h"],
-                                        a.pile, pile_idx, by_ca, times,
-                                        latest, cache)
+        o["_peers"] = label.baseline_rows(entry_of[(o["ts"], o["ca"])], o["h"],
+                                          a.pile, pile_idx, by_ca, times,
+                                          latest, cache)
+        v = [q["ret_net_500"] for q in o["_peers"] if q["ret_net_500"] is not None]
+        o["_base"] = _st.median(v) if v else None
 
     lv = label.labeler_version()
     registered = {h["labeler_version"] for h in hyps}
@@ -319,10 +444,13 @@ def main(a):
           f"log {len(rows)} rows  pile {a.pile}")
     for r in results:
         g = r.get("worst", {})
+        c = next(iter((r.get("composition") or {}).values()), {})
         print(f"  {r['id']}  {r['status']:14s} metric {pp(r.get('metric')):>7s}pp  "
               f"eff_n {g.get('eff_n', 0)}/{g.get('min_eff_n', '?')}  "
               f"tokens {g.get('tokens', 0)}/{g.get('min_n_tokens', '?')}  "
-              f"weeks {r.get('usable_weeks', 0)}/{SUBPERIODS}")
+              f"weeks {r.get('usable_weeks', 0)}/{SUBPERIODS}  "
+              f"unknown-fee {c.get('unknown_pct', 0)}%"
+              + ("  [fee spans the threshold]" if r.get("sweep_crosses") else ""))
 
     if a.report is not None:
         path = a.report or os.path.join(

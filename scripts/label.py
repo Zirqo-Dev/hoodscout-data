@@ -37,12 +37,22 @@ NOTIONALS = (500, 5000)   # the two round trips modelled, in USD
 THIN_LIQ = 5000.0         # below this, the larger notional is not exitable
 DRAWS = 20
 
-# Used only when the row carries no fee -- rows written before the pool fee was
-# logged, and any pool whose GeckoTerminal name has no trailing percentage. 1%
-# is the pessimistic end of what the data shows (0.025% to 1%), which is the
-# right way to be wrong, but a 0.05% pool charged 1% is wrong twentyfold. The
-# summary reports how many rows fell back.
+# Used only when the row carries no fee. 1% is near the top of the observed
+# range (0.01% to 1.9%), which is the right way to be wrong, but a 0.01% pool
+# charged 1% is wrong a hundredfold. Every outcome records fee_source so a
+# result can be re-run over known-fee rows alone and swept across the range.
+#
+# Only two sources exist, deliberately. A dex_constant would be defensible for
+# uniswap-v2-robinhood, whose 0.30% is hard-coded as mul(997)/mul(1000) in
+# UniswapV2Library, but not for pons-v2 (fees are set per launch), pons-v2-dex
+# or bankr-robinhood (no published fee found), and an invented constant would
+# look like knowledge in this field and propagate silently. An `onchain` source
+# is not implementable: 60 of the 97 fee-less rows in the 2026-10-18T14:00
+# snapshot store a 32-byte pool id rather than an address, and a v4 pool id is
+# keccak256 of the PoolKey -- the fee is one of the hashed fields, so it cannot
+# be recovered from the id.
 FEE_FALLBACK = 0.01
+FEE_SWEEP = (0.0, 0.003, 0.01, 0.019)   # the observed range, for the bound
 
 PILES = ("tier", "scored", "dashboard")
 MIN_SCORE_TXNS = 200      # mirrors collect.py; not imported, to stay uncoupled
@@ -118,6 +128,34 @@ def nets(gross, liq_in, liq_out, fee):
     return out
 
 
+def renet(o, fee, size=500):
+    """An outcome's net return recomputed at a different fee.
+
+    The same arithmetic nets() does with one input swapped. It reads the stored
+    ret_gross, which is rounded to 6dp, where nets() used the unrounded value,
+    so it agrees with the stored net to within 9.8e-7 -- 0.0001pp, measured
+    across every scored outcome in the live log. Deliberately not rounded
+    again: a second rounding doubles that error rather than hiding it.
+
+    A row already floored at -100% cannot move, so a sweep leaves it alone.
+    """
+    if o.get("ret_gross") is None:
+        return None
+    imp = sum(2.0 * size / l for l in (o.get("liq_in"), o.get("liq_out"))
+              if l and l > 0)
+    return max(-1.0, o["ret_gross"] - 2 * fee - imp)
+
+
+def net_at(o, fee, size=500):
+    """net500 for an outcome under an assumed fee for unknown-fee rows.
+
+    A row whose fee came from the pool name is already right and does not move.
+    """
+    if o.get("fee_source") == "name":
+        return o.get(f"ret_net_{size}")
+    return renet(o, fee, size)
+
+
 def outcome(entry, horizon, by_ca, times, latest):
     """One (row, horizon) outcome, or None while it is still pending.
 
@@ -144,7 +182,8 @@ def outcome(entry, horizon, by_ca, times, latest):
     base = {"ts": entry["ts"], "ca": entry["ca"], "h": horizon,
             "tier": entry.get("tier"), "rms": entry.get("rms"),
             "enterable": enterable, "fee": fee,
-            "fee_used": fee if fee is not None else FEE_FALLBACK}
+            "fee_used": fee if fee is not None else FEE_FALLBACK,
+            "fee_source": "name" if fee is not None else "fallback"}
     none3 = {"ret_gross": None, "ret_net_500": None, "ret_net_5000": None}
 
     # A matched print with no liquidity behind it is not an exit, it is a zero.
@@ -210,9 +249,13 @@ def peers(entry, pile, which, k=DRAWS):
         members, min(k, len(members)))
 
 
-def baseline_med(entry, horizon, which, pile, by_ca, times, latest, cache):
-    """Median net-500 of a same-pile random pick at the same instant, or None."""
-    vals = []
+def baseline_rows(entry, horizon, which, pile, by_ca, times, latest, cache):
+    """The same-pile random pick's outcomes at the same instant.
+
+    Returned rather than reduced to a median, so a caller can re-net them at a
+    swept fee. The draw is seeded, so this is reproducible and never stored.
+    """
+    out = []
     for ca in peers(entry, pile, which):
         key = (entry["ts"], ca, horizon)
         if key not in cache:
@@ -220,9 +263,17 @@ def baseline_med(entry, horizon, which, pile, by_ca, times, latest, cache):
             m = bisect.bisect_left(tl, entry["dt"])
             row = rs[m] if m < len(rs) and rs[m]["ts"] == entry["ts"] else None
             cache[key] = outcome(row, horizon, by_ca, times, latest) if row else None
-        o = cache[key]
-        if o and o["ret_net_500"] is not None:
-            vals.append(o["ret_net_500"])
+        if cache[key]:
+            out.append(cache[key])
+    return out
+
+
+def baseline_med(entry, horizon, which, pile, by_ca, times, latest, cache,
+                 fee=None):
+    """Median net-500 of a same-pile random pick, or None."""
+    rows = baseline_rows(entry, horizon, which, pile, by_ca, times, latest, cache)
+    vals = [v for v in (net_at(o, fee) if fee is not None else o["ret_net_500"]
+                        for o in rows) if v is not None]
     return statistics.median(vals) if vals else None
 
 
@@ -257,8 +308,10 @@ def run_label(out_dir=None):
     for k, v in sorted(counts.items(), key=lambda kv: -kv[1]):
         print(f"  {k:30s} {v:8d}")
     if labels:
-        fb = sum(1 for o in labels if o["fee"] is None)
-        print(f"  {'fee fell back to 1%':30s} {fb:8d}  ({100*fb/len(labels):.1f}%)")
+        src = Counter(o["fee_source"] for o in labels)
+        for k in ("name", "fallback"):
+            print(f"  {'fee_source=' + k:30s} {src[k]:8d}"
+                  f"  ({100*src[k]/len(labels):.1f}%)")
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
         by_day = defaultdict(list)
@@ -308,9 +361,12 @@ def run_summary(pile="scored"):
                                   pile_idx, by_ca, times, latest, cache)
         by[(o["tier"], o["h"])].append(o)
 
-    fb = sum(1 for o in labels if o["fee"] is None)
-    print(f"fee: {len(labels)-fb} rows used the pool's own fee, {fb} fell back "
-          f"to {FEE_FALLBACK:.0%}\n")
+    src = Counter(o["fee_source"] for o in labels)
+    print(f"fee_source: name {src['name']}, fallback {src['fallback']} "
+          f"({100*src['fallback']/len(labels):.1f}% at {FEE_FALLBACK:.0%}). "
+          "A fee error moves net500 by exactly 2x the error, so it shifts a\n"
+          "level and largely cancels in a difference between groups with "
+          "similar unknown-fee shares.\n")
 
     hdr = (f"{'tier':12s} {'h':>4s} {'n':>6s} {'eff_n':>6s} {'scored':>6s} "
            f"{'cens%':>6s} {'noliq%':>6s} {'gross~':>8s} {'net500~':>8s} "
