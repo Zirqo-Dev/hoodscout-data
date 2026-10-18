@@ -63,7 +63,6 @@ header{position:sticky;top:0;z-index:30;background:var(--bg);
 .s-warn .pdot,.s-warn.pdot{background:var(--warn)}
 .s-bad .pdot,.s-bad.pdot{background:var(--bad)}
 .spacer{flex:1 1 auto}
-.kpi{display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin:-4px 0 10px}
 .k{display:inline-flex;align-items:baseline;gap:4px;background:var(--surface);
   border:1px solid var(--line);border-radius:var(--r);padding:2px 7px;
   font-size:10.5px;color:var(--muted);white-space:nowrap}
@@ -75,19 +74,45 @@ button.k{cursor:pointer;min-height:40px}
 .tgl{cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:5px}
 @media (min-width:1000px){button.k,.tgl{min-height:26px}}
 
-/* ---- health ---- */
-.health{display:grid;gap:6px;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
-  margin-bottom:10px}
-.hc{background:var(--surface);border:1px solid var(--line);border-left-width:3px;
-  border-radius:var(--r);padding:6px 8px}
-.hc.s-ok{border-left-color:var(--ok)} .hc.s-warn{border-left-color:var(--warn)}
-.hc.s-bad{border-left-color:var(--bad)}
-.hc .hn{font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:5px}
-.hc .ha{font:600 13px var(--mono);font-variant-numeric:tabular-nums;margin-top:1px}
-.hc .hm{font-size:10px;color:var(--faint);margin-top:1px}
-.banner{background:color-mix(in srgb,var(--bad) 16%,var(--surface));
-  border:1px solid var(--bad);border-radius:var(--r);padding:7px 9px;
-  margin-bottom:10px;font-size:12px;font-weight:600}
+/* ---- status line ----
+   Four freshness cards became one line. A healthy feed is a dot and a word;
+   only a stale one earns a chip with its age, and only a stale one can be
+   opened for the detail the cards used to show all the time. */
+.statline{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;
+  margin:0 0 8px;font-size:10.5px;color:var(--muted)}
+.sd{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.sd i{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+.sd i.s-ok{background:var(--ok)} .sd i.s-warn{background:var(--warn)}
+.sd i.s-bad{background:var(--bad)}
+button.sd{min-height:40px;cursor:pointer;background:var(--surface2);
+  border:1px solid var(--warn);border-radius:var(--r);padding:0 8px;
+  color:var(--warn);font:600 10.5px var(--sans)}
+button.sd.s-bad{border-color:var(--bad);color:var(--bad)}
+button.sd[aria-expanded="true"]{background:var(--surface)}
+.sdet{flex:1 1 100%;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r);padding:6px 8px;font-size:10.5px;color:var(--faint)}
+.ibtn{min-width:40px;min-height:40px;cursor:pointer;background:var(--surface2);
+  border:1px solid var(--line);border-radius:50%;color:var(--muted);
+  font:600 12px var(--mono);line-height:1}
+.ibtn[aria-expanded="true"]{border-color:var(--accent);color:var(--accent)}
+.intro{background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r);padding:8px 10px;margin:0 0 8px}
+.intro .sub{margin:0}
+.intro .sub + .sub{margin-top:6px}
+
+/* ---- what changed ---- */
+/* One line that scrolls sideways, not a wrapping block. Wrapping, 14 events
+   stood 212px tall on a 390px screen and pushed the first token row off it. */
+.chg-strip{display:flex;flex-wrap:nowrap;align-items:center;gap:4px;margin:0 0 8px;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.chg-strip > *{flex:0 0 auto}
+.chg-strip .lab{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--faint);margin-right:2px}
+.ev{display:inline-flex;align-items:center;gap:4px;background:var(--surface2);
+  border:1px solid var(--line);border-radius:var(--r);padding:2px 6px;
+  font-size:10px;white-space:nowrap}
+.ev b{font:600 10.5px var(--mono)}
+.ev .arr{color:var(--faint)}
 
 /* ---- sections ---- */
 /* clip, not hidden: overflow:hidden makes this a scroll container, and a
@@ -151,7 +176,18 @@ tr.r.op td{background:var(--surface2)}
 .sym{font:600 12px var(--mono);letter-spacing:-.01em}
 .idc{display:flex;align-items:center;gap:6px;min-width:0}
 .idc .sym{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:13ch}
-.av{flex:0 0 auto}
+.av{flex:0 0 auto;display:inline-block;line-height:0}
+.av img{background:var(--surface2)}
+/* The star is a 40px tap target that does not push the row taller: the
+   padding provides the area, the negative margin gives the space back. */
+.star{flex:0 0 auto;cursor:pointer;background:none;border:0;padding:12px 4px;
+  margin:-12px -2px;min-width:22px;min-height:40px;line-height:1;
+  font-size:13px;color:var(--faint)}
+.star.on{color:var(--warn)}
+.star:hover{color:var(--text)}
+.why{font-size:11px;line-height:1.5;color:var(--muted);
+  border-left:2px solid var(--line);padding-left:8px;margin:0 0 8px}
+.why div + div{margin-top:3px}
 .pill{font:600 9px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;
   padding:3px 5px;border-radius:3px;border:1px solid currentColor;white-space:nowrap}
 .bd{font:600 9px/1 var(--sans);letter-spacing:.04em;padding:3px 5px;border-radius:3px;
@@ -265,16 +301,17 @@ footer{color:var(--faint);font-size:10.5px;border-top:1px solid var(--line);
     <span class="chain">Robinhood Chain</span>
     <span class="pulse" id="pulse"><i class="pdot"></i><span id="pulse-t">loading</span></span>
     <span class="spacer"></span>
-    <button class="k tgl" id="logos" type="button" aria-pressed="false">
-      <i style="background:var(--faint)"></i>Show logos</button>
+    <button class="ibtn" id="info" type="button" aria-expanded="false"
+            aria-controls="intro" aria-label="About this page">i</button>
   </div>
 </header>
-<div class="kpi" id="kpi"></div>
-<p class="sub">Market-data snapshots, collected on a schedule. Nothing here is financial
-  advice, and no flag is a verdict.</p>
-
-  <div id="banner"></div>
-  <div class="health" id="health"></div>
+<div class="statline" id="health"></div>
+<div class="intro" id="intro" hidden>
+  <p class="sub">Market-data snapshots, collected on a schedule. Nothing here is financial
+    advice, and no flag is a verdict.</p>
+  <p class="sub" id="intro-note"></p>
+</div>
+<div id="changed"></div>
 
   <details class="sec" open><summary>Tokens <span class="cnt" id="tok-count"></span></summary>
     <div class="body">
@@ -688,10 +725,11 @@ function hashCa(ca){
   for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
   return h;
 }
-function avatarSvg(ca){
+function avatarSvg(ca, size){
   var a = String(ca || "").replace(/^0x/i, "");
   var h = hashCa(ca), hue = h % 360, hue2 = (hue + 48) % 360;
   var s = svg(18, 18, "generated mark for " + ca);
+  if (size && size !== 18){ s.setAttribute("width", size); s.setAttribute("height", size); }
   var c = document.createElementNS(SVGNS, "circle");
   c.setAttribute("cx", 9); c.setAttribute("cy", 9); c.setAttribute("r", 8);
   c.setAttribute("fill", "none");
@@ -712,25 +750,30 @@ function avatarSvg(ca){
   s.appendChild(t);
   return s;
 }
-/* The avatar is the default and the only mark the data can currently produce:
-   no file under data/ carries an image URL. When Show logos is on and a record
-   does have one, it is lazy-loaded with no referrer and falls back to the
-   avatar on error. */
-function markFor(t){
+/* Always draws something. An image_url is loaded straight from wherever the
+   upstream API points, lazily, with no referrer sent, and the moment it fails
+   the generated avatar replaces it -- so a dead or blocked image URL costs a
+   row nothing. No image is ever copied into this repo. The `key` argument is
+   the seed for the generated mark: a contract address for a token, a slug for
+   an NFT collection. */
+function markFor(url, key, size){
+  var px = size || 18;
   var box = el("span", "av");
-  var url = t && (t.image_url || t.logo_url || t.icon_url);
-  if (SHOW_LOGOS && typeof url === "string" && url){
+  box.style.width = px + "px"; box.style.height = px + "px";
+  var fallback = function(){
+    box.textContent = "";
+    box.appendChild(avatarSvg(key, px));
+  };
+  if (typeof url === "string" && /^https?:\/\//.test(url)){
     var img = el("img");
-    img.src = url; img.width = 18; img.height = 18; img.loading = "lazy";
+    img.src = url; img.width = px; img.height = px; img.loading = "lazy";
     img.decoding = "async"; img.referrerPolicy = "no-referrer";
     img.alt = ""; img.style.borderRadius = "50%"; img.style.display = "block";
-    img.addEventListener("error", function(){
-      box.textContent = "";
-      box.appendChild(avatarSvg(t.ca));
-    });
+    img.style.objectFit = "cover";
+    img.addEventListener("error", fallback);
     box.appendChild(img);
   } else {
-    box.appendChild(avatarSvg(t ? t.ca : ""));
+    fallback();
   }
   return box;
 }
@@ -739,8 +782,29 @@ function markFor(t){
 var stamps = [];
 var TOKENS = [], PMAX = 1;
 var FILTER = {}, QUERY = "", SORT = {key: "liq_usd", dir: -1};
-var SHOW_LOGOS = false;
-try { SHOW_LOGOS = localStorage.getItem("hs.logos") === "1"; } catch(e){ SHOW_LOGOS = false; }
+/* Pins are a per-viewer convenience, so localStorage is the right home and
+   every access is guarded: it throws in a private window and comes back empty
+   with site data cleared. A pin is a contract address, which is the identity
+   here -- tickers repeat. */
+var PINS = {};
+function pinsLoad(){
+  try {
+    var raw = localStorage.getItem("hs.pins");
+    var arr = raw ? JSON.parse(raw) : [];
+    if (Object.prototype.toString.call(arr) === "[object Array]"){
+      arr.forEach(function(ca){ if (typeof ca === "string") PINS[ca] = 1; });
+    }
+  } catch(e){ PINS = {}; }
+}
+function pinsSave(){
+  try { localStorage.setItem("hs.pins", JSON.stringify(Object.keys(PINS))); } catch(e){}
+}
+function pinned(ca){ return !!PINS[ca]; }
+function pinToggle(ca){
+  if (PINS[ca]) delete PINS[ca]; else PINS[ca] = 1;
+  pinsSave();
+}
+pinsLoad();
 
 var COLS = [
   {k:"symbol",      t:"Token",  w:"",   sort:function(a){ return (a.symbol||"").toLowerCase(); }},
@@ -797,6 +861,91 @@ function badges(t, showAge){
     ? " warnb" : ""), feeBadge(t)));
   return b;
 }
+/* Two sentences built from fields already on the record -- nothing is
+   inferred and nothing is predicted. Field by field:
+     sentence 1  tier, persist_count, liq_fdv_pct, age_days, trades_per_trader,
+                 txns24, liq_usd, watch_reason, flag_contradiction,
+                 flag_liq_anomaly, and for AVOID the reason from
+                 latest.json's avoided[] (not on the token record itself)
+     sentence 2  recent_move_score, recent_move_basis, chg_h6, chg_h24,
+                 recent_move_accel_pct
+   The caveat fires at a move score of +4 or above, the same cut H-0002 in
+   data/hypotheses.jsonl registered as its high arm. Wording is descriptive on
+   purpose: it says what the tier is made of, never what to do about it. */
+var MOVE_CAVEAT_AT = 4;
+var AVOID_REASON = {};
+
+function whyLine(t){
+  var one, f = [];
+  var sc = t.persist_count, lf = t.liq_fdv_pct;
+  if (t.tier === "BEST"){
+    one = "PERSISTENT: healthy in " + num(sc) + " recent snapshots"
+        + (lf === null || lf === undefined ? "" : ", liquidity " + pct(lf, 1) + " of FDV")
+        + ".";
+  } else if (t.tier === "EMERGING"){
+    one = "EMERGING: " + (t.age_days === null || t.age_days === undefined
+            ? "age unknown" : num(t.age_days, 1) + " days old")
+        + ", buyer count rising across recent snapshots"
+        + (t.trades_per_trader === null || t.trades_per_trader === undefined
+            ? "" : ", " + num(t.trades_per_trader, 2) + " trades per trader")
+        + ".";
+  } else if (t.tier === "WATCH"){
+    one = "WATCH: " + num(t.txns24) + " txns in 24h, short of a higher bar"
+        + (t.watch_reason ? " on " + t.watch_reason : "") + ".";
+  } else if (t.tier === "SPECULATIVE"){
+    one = "SPECULATIVE: thin or new \u2014 " + usd(t.liq_usd) + " liquidity across "
+        + num(t.txns24) + " txns in 24h.";
+  } else if (t.tier === "DEAD"){
+    one = "DEAD: " + num(t.txns24) + " txns in the last 24 hours.";
+  } else if (t.tier === "AVOID"){
+    one = "AVOID: listed by hand"
+        + (AVOID_REASON[t.ca] ? " \u2014 " + AVOID_REASON[t.ca] : "") + ".";
+  } else {
+    one = String(t.tier || "unclassified") + ".";
+  }
+  if (t.flag_contradiction) f.push("contradiction");
+  if (t.flag_liq_anomaly) f.push("liquidity anomaly");
+  if (f.length) one += " Flagged: " + f.join(" and ") + ".";
+
+  var two, rms = t.recent_move_score;
+  if (rms === null || rms === undefined){
+    two = "No move score this run.";
+  } else {
+    two = "Move score " + rms
+        + (t.recent_move_basis ? " on " + t.recent_move_basis : "")
+        + ": 6h " + pct(t.chg_h6, 1) + ", 24h " + pct(t.chg_h24, 1)
+        + (t.recent_move_accel_pct === null || t.recent_move_accel_pct === undefined
+            ? "" : ", buyer acceleration " + pct(t.recent_move_accel_pct, 1))
+        + ".";
+    if (Number(rms) >= MOVE_CAVEAT_AT){
+      two += " High move scores tended to come before worse 4-8 h returns in"
+           + " past data.";
+    }
+  }
+  var box = el("div", "why");
+  box.appendChild(el("div", null, one));
+  box.appendChild(el("div", null, two));
+  return box;
+}
+
+function starBtn(ca){
+  var b = el("button", "star");
+  b.type = "button";
+  var paint = function(){
+    var on = pinned(ca);
+    b.textContent = on ? "\u2605" : "\u2606";      // filled vs outline star
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    b.setAttribute("aria-label", (on ? "Unpin " : "Pin ") + ca);
+  };
+  paint();
+  b.addEventListener("click", function(ev){
+    ev.stopPropagation();                            // the row toggles on click
+    pinToggle(ca);
+    renderTokens();
+  });
+  return b;
+}
 function tierPill(tier){
   var p = el("span", "pill", tierLabel(tier));
   p.style.color = tierColor(tier);
@@ -821,7 +970,13 @@ function renderTokens(){
         || (t.ca || "").toLowerCase().indexOf(q) >= 0;
   });
   var col = COLS.filter(function(c){ return c.k === SORT.key; })[0] || COLS[6];
-  rows = rows.slice().sort(function(a, b){ return cmp(a, b, col) * SORT.dir; });
+  /* pinned first, then whatever column the reader chose: a pin is a reading
+     aid, so it outranks the sort rather than replacing it */
+  rows = rows.slice().sort(function(a, b){
+    var pa = pinned(a.ca) ? 0 : 1, pb = pinned(b.ca) ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    return cmp(a, b, col) * SORT.dir;
+  });
 
   document.getElementById("tok-count").textContent =
     rows.length + " of " + TOKENS.length + " shown";
@@ -865,7 +1020,8 @@ function renderTokens(){
        mobile and their contents reappear in c-ind, which is hidden on desktop,
        so every layout shows each fact exactly once. */
     var idc = el("div", "idc");
-    idc.appendChild(markFor(t));
+    idc.appendChild(starBtn(t.ca));
+    idc.appendChild(markFor(t.image_url, t.ca));
     idc.appendChild(el("span", "sym", t.symbol === null ? "(no symbol)" : t.symbol));
     cell("c-id", idc);
     cell("c-tier", tierPill(t.tier));
@@ -892,6 +1048,7 @@ function renderTokens(){
     var xr = el("tr", "x");
     var xc = el("td");
     xc.colSpan = COLS.length;
+    xc.appendChild(whyLine(t));
     xc.appendChild(kv([
       ["healthy snapshots", t.persist_count === undefined || t.persist_count === null
                               ? "n/a" : num(t.persist_count)],
@@ -930,7 +1087,12 @@ function renderTokens(){
   mount.appendChild(tb);
 }
 
-function renderControls(counts){
+/* One row, not two. The KPI strip and the filter chips were printing the same
+   six tier counts twice; the chips keep the counts and the run totals join
+   them as plain chips, which also buys back the vertical space the token
+   table needs to start inside the first phone screen. */
+function renderControls(d){
+  var counts = (d && d.tier_counts) || {};
   var c = document.getElementById("ctl");
   c.textContent = "";
   var inp = el("input");
@@ -954,34 +1116,18 @@ function renderControls(counts){
     });
     c.appendChild(b);
   });
+  [["tokens", d ? d.tokens_seen : null],
+   ["pools", d ? d.pools_seen : null],
+   ["lookups failed", d ? d.pool_lookups_failed : null]].forEach(function(kv){
+    var k = el("span", "k");
+    k.appendChild(el("span", null, kv[0]));
+    k.appendChild(el("b", null, kv[1] === null || kv[1] === undefined ? "n/a" : kv[1]));
+    c.appendChild(k);
+  });
 }
 
 /* ---------- render ---------- */
 function renderHeader(d, ok, ageM){
-  var kpi = document.getElementById("kpi");
-  kpi.textContent = "";
-  var tc = (d && d.tier_counts) || {};
-  TIERS.forEach(function(t){
-    var k = el("span", "k");
-    var i = el("i"); i.style.background = tierColor(t);
-    k.appendChild(i);
-    k.appendChild(el("span", null, tierLabel(t)));
-    k.appendChild(el("b", null, tc[t] === undefined ? 0 : tc[t]));
-    kpi.appendChild(k);
-  });
-  var seen = el("span", "k");
-  seen.appendChild(el("span", null, "tokens"));
-  seen.appendChild(el("b", null, (d && d.tokens_seen) || 0));
-  kpi.appendChild(seen);
-  var pools = el("span", "k");
-  pools.appendChild(el("span", null, "pools"));
-  pools.appendChild(el("b", null, (d && d.pools_seen) || 0));
-  kpi.appendChild(pools);
-  var lf = el("span", "k");
-  lf.appendChild(el("span", null, "lookups failed"));
-  lf.appendChild(el("b", null, d ? d.pool_lookups_failed : "n/a"));
-  kpi.appendChild(lf);
-
   var dot = document.querySelector("#pulse .pdot");
   var cls = ok ? ageClass(ageM, 45, 180) : "s-bad";
   dot.className = "pdot " + cls;
@@ -989,30 +1135,80 @@ function renderHeader(d, ok, ageM){
     ok ? "last run " + ageText(ageM) : "no data";
 }
 
+/* One line instead of four cards, and instead of a separate stale banner. The
+   thresholds are unchanged -- each entry still carries its own amber and red
+   minutes and goes through ageClass. A green feed is a dot and a short name;
+   an amber or red one becomes a chip that names the feed and its age and can
+   be opened for the meta line the cards used to show permanently. */
 function renderHealth(entries){
   var mount = document.getElementById("health");
   mount.textContent = "";
-  var stale = [];
   entries.forEach(function(e){
     var m = e.ok ? ageMin(e.at) : null;
-    var card = el("div", "hc " + (e.ok ? ageClass(m, e.amber, e.red) : "s-bad"));
-    var n = el("div", "hn");
-    var dot = el("i", "pdot " + (e.ok ? ageClass(m, e.amber, e.red) : "s-bad"));
-    dot.style.width = "6px"; dot.style.height = "6px";
-    n.appendChild(dot);
-    n.appendChild(el("span", null, e.name));
-    card.appendChild(n);
-    card.appendChild(el("div", "ha", e.ok ? ageText(m) : "unavailable"));
-    card.appendChild(el("div", "hm", e.ok ? (e.meta || "") : (e.error || "fetch failed")));
-    mount.appendChild(card);
-    if (!e.ok) stale.push(e.name + " unavailable");
-    else if (m !== null && m >= e.red) stale.push(e.name + " " + ageText(m));
+    var cls = e.ok ? ageClass(m, e.amber, e.red) : "s-bad";
+    var detail = e.ok ? (ageText(m) + (e.meta ? "  \u00b7  " + e.meta : ""))
+                      : (e.error || "fetch failed");
+    if (cls === "s-ok"){
+      var span = el("span", "sd");
+      span.appendChild(el("i", "s-ok"));
+      span.appendChild(el("span", null, e.short + " " + (e.ok ? ageText(m) : "")));
+      span.title = e.name + " \u2014 " + detail;
+      mount.appendChild(span);
+      return;
+    }
+    var det = el("div", "sdet", e.name + " \u2014 " + detail);
+    det.hidden = true;
+    var b = el("button", "sd " + cls);
+    b.type = "button";
+    b.setAttribute("aria-expanded", "false");
+    b.appendChild(el("i", cls));
+    b.appendChild(el("span", null,
+      e.short + (e.ok ? " stale " + ageText(m).replace(" ago", "") : " unavailable")));
+    b.addEventListener("click", function(){
+      det.hidden = !det.hidden;
+      b.setAttribute("aria-expanded", det.hidden ? "false" : "true");
+    });
+    mount.appendChild(b);
+    mount.appendChild(det);
   });
-  var b = document.getElementById("banner");
-  b.textContent = "";
-  if (stale.length){
-    b.appendChild(el("div", "banner", "STALE DATA — " + stale.join(" · ")));
-  }
+}
+
+/* Hidden entirely when data/changes.json is absent -- it is derived, the
+   collector may not have written one yet, and an empty strip would just be a
+   label with nothing after it. */
+function renderChanges(res){
+  var mount = document.getElementById("changed");
+  mount.textContent = "";
+  if (!res.ok) return;
+  var ev = (res.data && res.data.events) || [];
+  if (!ev.length) return;
+  var strip = el("div", "chg-strip");
+  var cov = res.data.covers_h;
+  strip.appendChild(el("span", "lab",
+    "what changed" + (cov ? " \u00b7 last " + cov + "h" : "")));
+  ev.slice(-14).reverse().forEach(function(e){
+    var c = el("span", "ev");
+    c.appendChild(el("b", null, e.sym || "(no symbol)"));
+    if (e.kind === "new"){
+      c.appendChild(el("span", "arr", "new"));
+      var p = el("span", "pill", tierLabel(e.to));
+      p.style.color = tierColor(e.to);
+      c.appendChild(p);
+    } else if (e.kind === "tier"){
+      var f = el("span", "pill", tierLabel(e.from));
+      f.style.color = tierColor(e.from);
+      c.appendChild(f);
+      c.appendChild(el("span", "arr", "\u2192"));
+      var tt = el("span", "pill", tierLabel(e.to));
+      tt.style.color = tierColor(e.to);
+      c.appendChild(tt);
+    } else {
+      return;                       // avoid events duplicate their tier event
+    }
+    c.title = (e.ts || "").replace("T", " ").slice(0, 19) + " \u00b7 " + (e.ca || "");
+    strip.appendChild(c);
+  });
+  if (strip.children.length > 1) mount.appendChild(strip);
 }
 
 function renderPools(res){
@@ -1026,26 +1222,29 @@ function renderPools(res){
   stamps.push(["pools", d.generated_at]);
   renderHeader(d, true, ageMin(d.generated_at));
 
+  AVOID_REASON = {};
+  (d.avoided || []).forEach(function(a){
+    if (a && a.ca) AVOID_REASON[a.ca] = a.reason || "";
+  });
   TOKENS = d.tokens || [];
   PMAX = 1;
   TOKENS.forEach(function(t){
     if (typeof t.persist_count === "number" && t.persist_count > PMAX) PMAX = t.persist_count;
   });
-  renderControls(d.tier_counts || {});
+  renderControls(d);
   renderTokens();
 
+  /* Same sentence, same WATCH split, moved behind the info icon: on a 390px
+     screen it was four lines between the filter chips and the first token. */
   var wr = d.watch_reasons || {};
   var wrk = Object.keys(wr);
-  var ctl = document.getElementById("ctl");
-  var note = el("p", "note",
+  document.getElementById("intro-note").textContent =
     "Tier is a filter on market shape, not a signal. Sort any column; tap a row "
-    + "for the address and chart links. The contract address is the identity; "
-    + "tickers repeat. PERSISTENT is still keyed BEST in the data."
+    + "for the address and chart links. Tap a star to pin a token to the top. "
+    + "The contract address is the identity; tickers repeat. PERSISTENT is "
+    + "still keyed BEST in the data."
     + (wrk.length ? "  WATCH split: " + wrk.map(function(k){
-        return k + " " + wr[k]; }).join(" · ") : ""));
-  note.style.flex = "1 1 100%";
-  note.style.margin = "4px 0 0";
-  ctl.appendChild(note);
+        return k + " " + wr[k]; }).join(" · ") : "");
 
   /* Discover */
   var dv = d.discover || [];
@@ -1061,7 +1260,7 @@ function renderPools(res){
       var row = el("details", "drow");
       var sum = el("summary");
       var head = el("div", "rhead");
-      head.appendChild(markFor(r));
+      head.appendChild(markFor(r.image_url, r.ca));
       head.appendChild(el("span", "sym", r.symbol || "(no symbol)"));
       head.appendChild(tierPill(r.tier));
       if (r.watch_reason) head.appendChild(el("span", "bd", r.watch_reason));
@@ -1124,7 +1323,9 @@ function renderStocks(res){
     var c = el("div", "card" + (low ? " alarm" : ""));
     var top = el("div", "ctop");
     var left = el("div", "idc");
-    left.appendChild(markFor(t));
+    /* the stock tokens are Robinhood Chain tokens like any other, so their
+       icon comes from the same image_url the collector now records */
+    left.appendChild(markFor(t.image_url, t.ca || t.symbol));
     left.appendChild(el("span", "sym", t.symbol));
     top.appendChild(left);
     top.appendChild(el("span", "cnt n", usd(t.price_usd)));
@@ -1158,6 +1359,16 @@ function renderStocks(res){
   mount.appendChild(cards);
 }
 
+/* The collection's own art when OpenSea gave us one (image_url, added to
+   nft.py in the same change), the generated mark seeded on the slug when it
+   did not. Nothing is copied into the repo either way. */
+function collCell(r){
+  var d = el("div", "idc");
+  d.appendChild(markFor(r.image_url, r.slug || r.name));
+  d.appendChild(el("span", null, r.name || r.slug));
+  return d;
+}
+
 function table(cols, rows){
   var wrap = el("div", "scroll");
   var t = el("table", "g");
@@ -1168,7 +1379,11 @@ function table(cols, rows){
   rows.forEach(function(r){
     var row = el("tr");
     cols.forEach(function(c){
-      var cell = el("td", c.num ? "num" : null, c.get(r));
+      var v = c.get(r);
+      /* a column may return a node instead of a string -- the collection
+         column does, so it can put the icon next to the name */
+      var cell = el("td", c.num ? "num" : null, (v && v.nodeType) ? null : v);
+      if (v && v.nodeType) cell.appendChild(v);
       var cl = c.cls && c.cls(r);
       if (cl) cell.classList.add(cl);
       row.appendChild(cell);
@@ -1194,7 +1409,7 @@ function renderNft(tracked, disc){
     var tc = tracked.data.collections || [];
     if (!tc.length) mount.appendChild(el("div", "empty", "No tracked collections."));
     else mount.appendChild(table([
-      {label:"Collection", get:function(r){ return r.name || r.slug; }},
+      {label:"Collection", get:function(r){ return collCell(r); }},
       {label:"Floor", num:true, get:function(r){ return r.floor_price === null ? "n/a"
         : num(r.floor_price,4) + " " + (r.floor_symbol || ""); }},
       {label:"Floor chg", num:true, get:function(r){ return r.floor_chg_pct === null
@@ -1220,7 +1435,7 @@ function renderNft(tracked, disc){
     var dc = disc.data.collections || [];
     if (!dc.length) mount.appendChild(el("div", "empty", "Nothing surfaced."));
     else mount.appendChild(table([
-      {label:"Collection", get:function(r){ return r.name || r.slug; }},
+      {label:"Collection", get:function(r){ return collCell(r); }},
       {label:"Floor", num:true, get:function(r){ return r.floor_price === null ? "n/a"
         : num(r.floor_price,4) + " " + (r.floor_symbol || ""); }},
       {label:"Vol 24h", num:true, get:function(r){ return num(r.volume_24h,2); }},
@@ -1249,7 +1464,7 @@ function renderAvoid(res){
   list.forEach(function(e){
     var r = el("div", "row");
     var h = el("div", "rhead");
-    if (typeof e.ca === "string" && e.ca.trim()) h.appendChild(markFor(e));
+    if (typeof e.ca === "string" && e.ca.trim()) h.appendChild(markFor(e.image_url, e.ca));
     h.appendChild(el("span", "sym", e.symbol || "(no symbol)"));
     h.appendChild(tierPill("AVOID"));
     if (e.added) h.appendChild(el("span", "bd", "added " + e.added));
@@ -1284,23 +1499,12 @@ function renderFooter(){
   f.appendChild(d);
 }
 
-/* Show logos is a per-viewer convenience, so localStorage is the right home
-   and every access is guarded: it throws in a private window and comes back
-   empty with site data cleared. No file under data/ carries an image URL
-   today, so with it on every token still draws its generated mark. */
 (function(){
-  var b = document.getElementById("logos");
-  function paint(){
-    b.setAttribute("aria-pressed", SHOW_LOGOS ? "true" : "false");
-    b.classList.toggle("on", SHOW_LOGOS);
-    b.querySelector("i").style.background = SHOW_LOGOS ? "var(--accent)" : "var(--faint)";
-  }
-  paint();
+  var b = document.getElementById("info"), panel = document.getElementById("intro");
   b.addEventListener("click", function(){
-    SHOW_LOGOS = !SHOW_LOGOS;
-    try { localStorage.setItem("hs.logos", SHOW_LOGOS ? "1" : "0"); } catch(e){}
-    paint();
-    if (TOKENS.length) renderTokens();
+    panel.hidden = !panel.hidden;
+    b.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
+    measureHeader();
   });
 })();
 
@@ -1309,31 +1513,34 @@ Promise.all([
   load("data/stocks_latest.json"),
   load("data/nft_latest.json"),
   load("data/nft_discover.json"),
-  load("avoid.json")
+  load("avoid.json"),
+  load("data/changes.json")
 ]).then(function(r){
-  var pools = r[0], stocks = r[1], nftT = r[2], nftD = r[3], avoid = r[4];
+  var pools = r[0], stocks = r[1], nftT = r[2], nftD = r[3], avoid = r[4],
+      changes = r[5];
 
   renderHealth([
-    {name: "Pools (latest.json)", ok: pools.ok, at: pools.ok ? pools.data.generated_at : null,
+    {name: "Pools (latest.json)", short: "pools", ok: pools.ok, at: pools.ok ? pools.data.generated_at : null,
      error: pools.error, amber: 45, red: 180,
      meta: pools.ok ? ("pool lookups failed: " + pools.data.pool_lookups_failed
             + "  ·  " + pools.data.tokens_seen + " tokens") : null},
-    {name: "Stock tokens (stocks_latest.json)", ok: stocks.ok,
+    {name: "Stock tokens (stocks_latest.json)", short: "stocks", ok: stocks.ok,
      at: stocks.ok ? stocks.data.generated_at : null, error: stocks.error,
      amber: 45, red: 180,
      meta: stocks.ok ? ("measured " + stocks.data.measured + "/5  ·  failed "
             + (stocks.data.failed || []).length
             + "  ·  alerts " + (stocks.data.alerts || []).length) : null},
-    {name: "NFT tracked (nft_latest.json)", ok: nftT.ok,
+    {name: "NFT tracked (nft_latest.json)", short: "nft", ok: nftT.ok,
      at: nftT.ok ? nftT.data.generated_at : null, error: nftT.error,
      amber: 540, red: 840,
      meta: nftT.ok ? ((nftT.data.collections || []).length + " collections") : null},
-    {name: "NFT discover (nft_discover.json)", ok: nftD.ok,
+    {name: "NFT discover (nft_discover.json)", short: "discover", ok: nftD.ok,
      at: nftD.ok ? nftD.data.generated_at : null, error: nftD.error,
      amber: 540, red: 840,
      meta: nftD.ok ? ((nftD.data.collections || []).length + " surfaced") : null}
   ]);
 
+  renderChanges(changes);
   renderPools(pools);
   renderStocks(stocks);
   renderNft(nftT, nftD);
