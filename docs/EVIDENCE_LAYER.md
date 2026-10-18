@@ -361,12 +361,29 @@ The rules that make it worth anything:
    hypothesis may only be evaluated on rows *after* its watermark. This is what
    makes pre-registration mechanical rather than a promise — the evaluator
    filters on it, and backdating requires rewriting committed history.
-2. **`pass_if` and `fail_if` are both filled in before any result is seen**, and
-   between them they cover every outcome. "Inconclusive" is allowed only as
-   `min_n` not yet met.
-3. **Status moves one way**, `open → passed | failed | expired`, in a commit
-   that names the evaluation's output. `expired` when `stop_by` passes with
-   `min_n` unmet; that is a real result about the data rate, not a free pass.
+2. **`pass_if`, `fail_if` and `inconclusive_if` are all filled in before any
+   result is seen**, and between them they cover every outcome. The third is
+   not a hedge: a gap that clears the threshold but whose sign does not hold
+   across subperiods is a real and distinct outcome, and it is the shape the
+   earlier `chg_h6` finding had — +0.06pp in one week against −1.13 and
+   −1.44pp in the next two. Calling that a pass would have been wrong and
+   calling it a fail would have been wrong.
+3. **Status moves one way**, through exactly these values:
+
+   | status | meaning | set by |
+   |---|---|---|
+   | `registered` | written down, not yet decided | the registering commit |
+   | `waiting` | gates unmet — `min_eff_n`, `min_n_tokens`, or fewer than four usable weekly subperiods when the decision turns on stability | `scripts/evaluate.py` reports it; the registry only moves on |
+   | `inconclusive` | gates met, threshold cleared, sign unstable across subperiods | a person, naming the report |
+   | `passed` / `failed` | the registered clause fired | a person, naming the report |
+   | `expired` | `stop_by` reached with gates still unmet | a person, naming the report |
+
+   `waiting` is what the evaluator prints on every run until there is enough
+   data; it is a state of the evidence, not of the hypothesis, and a
+   hypothesis sitting at `registered` while the evaluator says `waiting` is
+   the normal case. `expired` is a real result about the data rate, not a free
+   pass. **The evaluator never writes to `data/hypotheses.jsonl`** — it emits a
+   report, and a person moves the status in a commit that names it.
 4. **Nothing is ever deleted from the file.** The denominator is the point, and
    it is arithmetic rather than etiquette. Test one hypothesis at a 5%
    threshold and a false pass happens 5% of the time. Test twenty and the
