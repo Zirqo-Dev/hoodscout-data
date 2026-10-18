@@ -67,6 +67,12 @@ details[open] summary::after{content:"\2212"}
 summary:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
 .body{padding:0 14px 14px}
 .note{font-size:12.5px; color:var(--muted); margin:0 0 10px}
+.sub-h{font-size:12.5px; font-weight:650; color:var(--text); margin:0 0 6px}
+ol.steps{margin:0; padding-left:1.4em; font-size:12.5px; line-height:1.5;
+  color:var(--muted)}
+ol.steps li{margin:0 0 5px}
+ol.steps li:last-child{margin-bottom:0}
+ol.steps b{color:var(--text); font-weight:600}
 .count{font-size:11.5px; color:var(--muted); font-weight:500}
 
 /* chips */
@@ -168,7 +174,8 @@ footer a{color:var(--accent)}
 
   <details><summary>How to read this <span class="count">what each tier means</span></summary>
     <div class="body">
-    <p class="note">Tiers describe the market a token trades in, not whether to buy it.
+    <p class="note">Tiers describe the market a token trades in, not whether it is worth
+      owning.
       Numbers below come from forward tests over the collected history and are stated so
       they can be checked, not trusted.</p>
 
@@ -207,6 +214,41 @@ footer a{color:var(--accent)}
       <p class="note">Listed by hand with a reason. This tier overrides every other rule.
         A ticker is not an identity here: impersonators reuse them, so the contract address
         is what matters.</p></div>
+
+    <div class="row">
+      <p class="sub-h">Daily routine</p>
+      <ol class="steps">
+        <li>Check the freshness chips are green.</li>
+        <li>Look at EMERGING and Discover for names you don't recognise.</li>
+        <li>Don't act on a name. Run the checklist.</li>
+      </ol>
+    </div>
+
+    <div class="row">
+      <p class="sub-h">Checklist before you care about any token</p>
+      <ol class="steps">
+        <li><b>Verify the contract address, not the ticker.</b> Use the Gecko and
+          DexScreener buttons on the row.</li>
+        <li><b>Check liquidity against your own size.</b> Can you get out?</li>
+        <li><b>Check who is trading.</b> Many different buyers is good; a few wallets
+          trading back and forth is a warning.</li>
+        <li><b>Check the source.</b> Who made it, is anyone talking about it?</li>
+        <li><b>Kill-test it.</b> What would make this worthless? If you can't answer, you
+          don't know enough yet.</li>
+      </ol>
+    </div>
+
+    <div class="row">
+      <p class="sub-h">Limits</p>
+      <p class="note" style="margin-bottom:0">It doesn't predict: high move scores tended
+        to come before worse 4-8 h returns in past data. It can miss a fake it hasn't seen
+        yet. It sees trading data, not whether the project is any good.</p>
+      <!-- TEMPORARY, safe to delete: this one <p> is the only thing about the delivery
+           gap anywhere on the page. Remove the whole element once scheduled runs land
+           reliably again; nothing reads it and nothing else depends on it. -->
+      <p class="note" id="gap-notice" style="margin:8px 0 0">After a gap in collection,
+        PERSISTENT is empty until about 4 hours of consecutive runs rebuild.</p>
+    </div>
     </div></details>
 
   <details open><summary>PERSISTENT <span class="count" id="best-count"></span></summary>
