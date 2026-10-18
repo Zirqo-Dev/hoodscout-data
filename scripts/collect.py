@@ -43,13 +43,27 @@ HISTORY_DAYS   = 15     # halved with the move to */15 to hold file size flat
 # minimum is no better than a snapshot count: at */90 only five snapshots fit a
 # 6h window, so a minimum of six can never be met.
 #
+# PERSIST_MIN_OBS is a floor under the count the fraction asks for, not a cap:
+# need = max(PERSIST_MIN_OBS, ceil(PERSIST_MIN_FRAC * snapshots_in_window)). It
+# binds only when the window is thin, which is precisely when the span test
+# stops meaning anything. At the current four runs an hour a 6h window holds up
+# to 24 prints and the fraction asks for 15, so this floor is inert; after a
+# delivery gap leaves two snapshots five hours apart, the fraction asks for
+# two, and a token seen at both ends of the gap and nowhere in between clears a
+# "4h of span" bar having been observed twice. Eight is roughly two hours of
+# real observations at the current cadence, so that token now fails -- and with
+# it the whole class of tokens that are only visible either side of an outage.
+# Measured on the live file (25 snapshots, 2026-10-18T09:00Z): identical sets
+# at 2 and at 8, 41 tokens each; on a window reduced to two snapshots 4.68h
+# apart, 40 tokens pass at 2 and 0 at 8.
+#
 # PERSIST_RUNS and PERSIST_MIN are kept for one week of real delivery data, so
 # the old gate can be recomputed alongside the new one if the two disagree in
 # production; nothing reads them now.
 PERSIST_LOOKBACK_H = 6.0   # window the appearances are counted in
 PERSIST_SPAN_H     = 4.0   # earliest to latest healthy appearance must cover this
 PERSIST_MIN_FRAC   = 0.60  # of the snapshots that landed inside the window
-PERSIST_MIN_OBS    = 2     # floor, so the fraction can never ask for fewer
+PERSIST_MIN_OBS    = 8     # floor on that count; see the note above
 PERSIST_RUNS     = 16    # retired: snapshots looked back over for BEST
 PERSIST_MIN      = 10    # retired: of which this many had to show it healthy
 BEST_MIN_AGE     = 2.0

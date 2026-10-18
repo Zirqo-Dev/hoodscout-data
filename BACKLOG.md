@@ -64,6 +64,21 @@ require the full window or scale the bar, not to leave it reading as a
 retired as of `2d6a4fb`; they are kept defined for one week so the old gate
 can be recomputed beside the time-based one.
 
+**Done 2026-10-18: `PERSIST_MIN_OBS` raised 2 -> 8.** The time-based gate
+replacing them has its own thin-window hole. `need` is
+`max(PERSIST_MIN_OBS, ceil(PERSIST_MIN_FRAC * snapshots_in_window))`, so after
+a delivery gap leaves two snapshots five hours apart the fraction asks for
+two — and a token seen at both ends of the gap and nowhere in between clears a
+"healthy across 4h" bar on two observations. Eight is about two hours of real
+prints at four runs an hour. Measured on the live file at 2026-10-18T09:00Z
+(25 snapshots, 20 inside the window, `need` = 12 either way): identical sets
+at 2 and at 8, 41 tokens each. On a window cut to two snapshots 4.68h apart:
+40 tokens pass at 2, none at 8. So it is inert at a healthy cadence and only
+bites after an outage, which is the intent.
+
+Still open in the same area: `buyer_rate_rising`'s `window` has the mirror of
+this bug and no floor at all.
+
 ## Scheduler delivery — off-peak minutes did not work, plan B in progress
 
 GitHub dropped ~9 collect fires and the 21:00 NFT run on 2026-10-17;
