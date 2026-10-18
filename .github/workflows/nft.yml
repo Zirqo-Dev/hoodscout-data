@@ -34,7 +34,14 @@ concurrency:
 
 jobs:
   nft:
-    runs-on: ubuntu-latest
+    # Pinned, not latest: ubuntu-latest moves to Ubuntu 26 on 2026-10-19 and
+    # this pipeline runs unattended, so an image swap would arrive as a red
+    # run rather than as something anyone chose. Nothing here needs the
+    # newer image: the only image-provided tools used are gh, git, bash and
+    # coreutils, and setup-python fetches 3.11 from the tool cache -- which
+    # is itself a reason to pin, rather than find out on the day whether 26
+    # still ships it. Revisit before 24.04 leaves GitHub's supported set.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
