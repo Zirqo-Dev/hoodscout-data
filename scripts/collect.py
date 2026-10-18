@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Collect Robinhood Chain pool data, aggregate by token, score."""
-import json, math, os, time, urllib.error, urllib.request
+import json, math, os, re, time, urllib.error, urllib.request
 from datetime import datetime, timezone, timedelta
 
 import stocks   # STOCKS is imported, never duplicated, so the two cannot drift
@@ -168,6 +168,26 @@ def collect():
     return pools, lookups
 
 
+# GeckoTerminal has no fee field on a pool. It puts the fee in the pool's
+# name, as a trailing percentage: "HIMS / USDG 0.3%", "amc / WETH 1%",
+# "SPY / NVDA 0.025%". Verified against this repo's own stocks_latest.json
+# rather than against the API, which is unreachable from the authoring
+# environment; nine distinct values appear in the data already collected
+# (0.025, 0.05, 0.1, 0.19, 0.24, 0.25, 0.3, 0.9, 1), so this is a number to
+# read rather than a tier to match against a list. Returns a fraction, or None
+# when the name carries no fee -- never a guess.
+POOL_FEE = re.compile(r"\s(\d+(?:\.\d+)?)%\s*$")
+MAX_POOL_FEE = 0.10   # no AMM charges more; above this the name is not a fee
+
+
+def parse_fee(name):
+    m = POOL_FEE.search(name or "")
+    if not m:
+        return None
+    fee = round(float(m.group(1)) / 100, 6)
+    return fee if 0 < fee <= MAX_POOL_FEE else None
+
+
 def parse_pool(item, now):
     a = item.get("attributes") or {}
     rel = item.get("relationships") or {}
@@ -193,6 +213,7 @@ def parse_pool(item, now):
         "symbol": name.split("/")[0].strip() if "/" in name else name,
         "quote": name.split("/")[1].strip().split()[0] if "/" in name else None,
         "pool": a.get("address"),
+        "fee": parse_fee(name),
         "dex": ((rel.get("dex") or {}).get("data") or {}).get("id"),
         "price": num(a.get("base_token_price_usd")),
         "fdv": num(a.get("fdv_usd")),
@@ -219,6 +240,7 @@ def aggregate(pools):
         out.append({
             "symbol": deep["symbol"], "ca": ca, "pool_count": len(ps),
             "main_pool": deep["pool"], "main_dex": deep["dex"], "main_quote": deep["quote"],
+            "main_fee": deep["fee"],
             "price_usd": deep["price"], "fdv_usd": deep["fdv"],
             "liq_usd": round(sum(x["liq"] for x in ps), 2),
             "vol24_usd": round(sum(x["vol24"] for x in ps), 2),
@@ -580,6 +602,10 @@ def write_log(tokens, now):
         "rms": t.get("recent_move_score"), "pc": t.get("persist_count"),
         "price": t["price_usd"], "liq": t["liq_usd"], "fdv": t["fdv_usd"],
         "txns": t["txns24"], "byr": t["buyers24"],
+        # the labeler models a round trip and cannot price one without these.
+        # Both are null on rows written before 2026-10-18 and on any pool whose
+        # name carries no fee; the labeler falls back to 1% and says so.
+        "pool": t.get("main_pool"), "fee": t.get("main_fee"),
     }, separators=(",", ":")) for t in tokens]
     if not rows:
         return None, 0
