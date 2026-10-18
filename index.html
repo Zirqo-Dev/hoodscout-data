@@ -5,174 +5,284 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>HoodScout</title>
+<!-- Inline so the page stays one file: without it the browser asks for
+     /favicon.ico on every load and logs a 404 in the console. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230a0d12'/%3E%3Cg stroke='%234c9aff' stroke-width='1.7' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.4 5.2 5.9 8l-2.5 2.8'/%3E%3Cpath d='M7.8 10.8h4.8'/%3E%3C/g%3E%3C/svg%3E">
 <style>
 :root{
   color-scheme: dark;
-  --bg:#0d1117; --surface:#161b22; --surface-2:#1c2128; --border:#30363d;
-  --text:#e6edf3; --muted:#8b949e; --faint:#6e7681;
-  --accent:#2f81f7;
-  /* semantic tier palette, deliberately distinct from --accent */
+  --bg:#0a0d12; --surface:#11151c; --surface2:#171c25; --line:#252c38;
+  --text:#dde5ef; --muted:#8a95a6; --faint:#5d6779;
+  --accent:#4c9aff;
   --ok:#3fb950; --warn:#d29922; --bad:#f85149; --neutral:#6e7681;
+  /* tier palette, unchanged from the previous page so the colours a reader
+     already associates with a tier keep meaning the same thing */
   --t-best:var(--ok); --t-emerging:var(--warn); --t-watch:#769fcd;
   --t-spec:var(--neutral); --t-dead:#8b5a56; --t-avoid:var(--bad);
-  --radius:10px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --r:6px;
 }
 @media (prefers-color-scheme: light){
   :root{
     color-scheme: light;
-    --bg:#f6f8fa; --surface:#ffffff; --surface-2:#f0f3f6; --border:#d0d7de;
-    --text:#1f2328; --muted:#59636e; --faint:#818b98;
-    --accent:#0969da;
-    --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; --neutral:#6e7781;
-    --t-watch:#3f6ea8; --t-dead:#8c5a55;
+    --bg:#f4f6f9; --surface:#ffffff; --surface2:#eceff4; --line:#d6dce5;
+    --text:#131820; --muted:#555f6b; --faint:#78828f;
+    --accent:#0b62d6;
+    --ok:#15803d; --warn:#8a5b09; --bad:#c62a22; --neutral:#5f6a76;
+    --t-watch:#2f5f9e; --t-dead:#8a544f;
   }
 }
 *{box-sizing:border-box}
-body{
-  margin:0; background:var(--bg); color:var(--text);
-  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  -webkit-text-size-adjust:100%;
-}
-.wrap{max-width:900px; margin:0 auto; padding:18px 16px 40px}
-header{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:4px}
-h1{font-size:20px; margin:0; letter-spacing:-.01em}
-.tag{font-size:11px; color:var(--muted); border:1px solid var(--border);
-  padding:2px 7px; border-radius:999px; text-transform:uppercase; letter-spacing:.06em}
-.sub{color:var(--muted); font-size:13px; margin:2px 0 18px}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:13px/1.45 var(--sans);padding-bottom:30px}
+.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:1360px;margin:0 auto;padding:0 10px}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
-/* health */
-.health{display:grid; grid-template-columns:1fr; gap:8px; margin-bottom:8px}
-@media(min-width:560px){.health{grid-template-columns:1fr 1fr}}
-.hcard{background:var(--surface); border:1px solid var(--border);
-  border-left:3px solid var(--neutral); border-radius:var(--radius); padding:10px 12px}
-.hcard.s-ok{border-left-color:var(--ok)} .hcard.s-warn{border-left-color:var(--warn)}
-.hcard.s-bad{border-left-color:var(--bad)}
-.hcard .hname{font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.02em}
-.hcard .hage{font-size:17px; font-weight:650; margin-top:2px}
-.hcard.s-ok .hage{color:var(--ok)} .hcard.s-warn .hage{color:var(--warn)}
-.hcard.s-bad .hage{color:var(--bad)}
-.hcard .hmeta{font-size:12px; color:var(--faint); margin-top:3px}
-.banner{background:color-mix(in srgb, var(--bad) 14%, var(--surface));
-  border:1px solid var(--bad); color:var(--text); border-radius:var(--radius);
-  padding:10px 12px; margin-bottom:12px; font-size:13.5px; font-weight:600}
+/* ---- header ---- */
+header{position:sticky;top:0;z-index:30;background:var(--bg);
+  border-bottom:1px solid var(--line);padding:8px 0 6px;margin-bottom:10px}
+.hrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.brand{font:600 15px/1 var(--mono);letter-spacing:.02em;white-space:nowrap}
+.brand span{color:var(--accent)}
+.chain{font-size:10.5px;color:var(--faint);border:1px solid var(--line);
+  border-radius:999px;padding:2px 7px;white-space:nowrap}
+.pulse{display:inline-flex;align-items:center;gap:5px;font-size:11px;
+  color:var(--muted);white-space:nowrap}
+.pdot{width:8px;height:8px;border-radius:50%;background:var(--neutral);
+  position:relative;flex:0 0 auto}
+.pdot::after{content:"";position:absolute;inset:0;border-radius:50%;
+  background:inherit;animation:pp 2.6s ease-out infinite}
+@keyframes pp{0%{transform:scale(1);opacity:.55}70%{transform:scale(2.6);opacity:0}
+  100%{transform:scale(2.6);opacity:0}}
+@media (prefers-reduced-motion: reduce){.pdot::after{animation:none;opacity:0}}
+.s-ok .pdot,.s-ok.pdot{background:var(--ok)}
+.s-warn .pdot,.s-warn.pdot{background:var(--warn)}
+.s-bad .pdot,.s-bad.pdot{background:var(--bad)}
+.spacer{flex:1 1 auto}
+.kpi{display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin:-4px 0 10px}
+.k{display:inline-flex;align-items:baseline;gap:4px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r);padding:2px 7px;
+  font-size:10.5px;color:var(--muted);white-space:nowrap}
+.k b{font:600 12px var(--mono);font-variant-numeric:tabular-nums;color:var(--text)}
+.k i{width:7px;height:7px;border-radius:2px;display:inline-block;flex:0 0 auto}
+.k.on{border-color:var(--accent);background:var(--surface2)}
+/* 40px is the touch floor; a mouse does not need it, so desktop goes dense */
+button.k{cursor:pointer;min-height:40px}
+.tgl{cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:5px}
+@media (min-width:1000px){button.k,.tgl{min-height:26px}}
 
-/* sections */
-details{background:var(--surface); border:1px solid var(--border);
-  border-radius:var(--radius); margin:12px 0; overflow:hidden}
-summary{cursor:pointer; padding:12px 14px; font-weight:650; font-size:14.5px;
-  display:flex; align-items:center; gap:9px; list-style:none}
+/* ---- health ---- */
+.health{display:grid;gap:6px;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
+  margin-bottom:10px}
+.hc{background:var(--surface);border:1px solid var(--line);border-left-width:3px;
+  border-radius:var(--r);padding:6px 8px}
+.hc.s-ok{border-left-color:var(--ok)} .hc.s-warn{border-left-color:var(--warn)}
+.hc.s-bad{border-left-color:var(--bad)}
+.hc .hn{font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.hc .ha{font:600 13px var(--mono);font-variant-numeric:tabular-nums;margin-top:1px}
+.hc .hm{font-size:10px;color:var(--faint);margin-top:1px}
+.banner{background:color-mix(in srgb,var(--bad) 16%,var(--surface));
+  border:1px solid var(--bad);border-radius:var(--r);padding:7px 9px;
+  margin-bottom:10px;font-size:12px;font-weight:600}
+
+/* ---- sections ---- */
+/* clip, not hidden: overflow:hidden makes this a scroll container, and a
+   scroll container captures position:sticky -- the table's header row would
+   then scroll away with the page. clip keeps the rounded corners without it. */
+details.sec{background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r);margin:0 0 10px;overflow:clip}
+details.sec>summary{cursor:pointer;padding:8px 10px;list-style:none;
+  display:flex;align-items:center;gap:8px;min-height:40px;
+  font:600 12px/1 var(--mono);letter-spacing:.04em;text-transform:uppercase}
 summary::-webkit-details-marker{display:none}
-summary::after{content:"+"; margin-left:auto; color:var(--muted); font-weight:400; font-size:17px}
-details[open] summary::after{content:"\2212"}
-summary:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
-.body{padding:0 14px 14px}
-.note{font-size:12.5px; color:var(--muted); margin:0 0 10px}
-.sub-h{font-size:12.5px; font-weight:650; color:var(--text); margin:0 0 6px}
-ol.steps{margin:0; padding-left:1.4em; font-size:12.5px; line-height:1.5;
-  color:var(--muted)}
-ol.steps li{margin:0 0 5px}
-ol.steps li:last-child{margin-bottom:0}
-ol.steps b{color:var(--text); font-weight:600}
-.count{font-size:11.5px; color:var(--muted); font-weight:500}
+summary::after{content:"+";margin-left:auto;color:var(--faint);font-weight:400;font-size:15px}
+details[open]>summary::after{content:"\2212"}
+.sec>.body{padding:0 10px 10px}
+.cnt{font:400 10.5px var(--mono);color:var(--faint);text-transform:none;letter-spacing:0}
+.note{font-size:11.5px;color:var(--muted);margin:0 0 8px}
+.empty{color:var(--faint);font-size:12px;padding:10px 0}
+.err{background:color-mix(in srgb,var(--bad) 12%,var(--surface));
+  border:1px solid var(--bad);border-radius:var(--r);padding:7px 9px;
+  font-size:11.5px;margin-bottom:8px}
 
-/* chips */
-.chips{display:flex; flex-wrap:wrap; gap:7px}
-.chip{display:flex; align-items:baseline; gap:6px; background:var(--surface-2);
-  border:1px solid var(--border); border-radius:999px; padding:5px 11px; font-size:12.5px}
-.chip b{font-size:14px; font-variant-numeric:tabular-nums}
-.chip .dot{width:7px; height:7px; border-radius:50%; align-self:center}
+/* ---- controls ---- */
+.ctl{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.ctl input{flex:1 1 150px;min-width:120px;min-height:40px;background:var(--surface2);
+  color:var(--text);border:1px solid var(--line);border-radius:var(--r);
+  padding:6px 9px;font:12px var(--mono)}
+.ctl input::placeholder{color:var(--faint)}
+.fchip{cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:5px;
+  background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
+  color:var(--muted);font:11px var(--sans);padding:0 9px}
+.fchip[aria-pressed="true"]{border-color:var(--accent);color:var(--text);
+  background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
+.fchip i{width:7px;height:7px;border-radius:2px;display:inline-block}
+.fchip b{font:600 11px var(--mono);font-variant-numeric:tabular-nums}
 
-/* rows */
-.row{border-top:1px solid var(--border); padding:11px 0}
-.row:first-child{border-top:0}
-.rhead{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap}
-.sym{font-weight:650}
-.pill{font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
-  padding:2px 6px; border-radius:4px; border:1px solid currentColor; font-weight:600}
-.addr{display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap}
-code{font:12px/1.4 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-  background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
-  padding:4px 6px; word-break:break-all; color:var(--text)}
-.copy{flex:0 0 auto; background:var(--surface-2); color:var(--muted);
-  border:1px solid var(--border); border-radius:6px; padding:4px 9px;
-  font-size:11.5px; cursor:pointer; font-weight:600}
-.copy:hover{color:var(--text); border-color:var(--accent)}
-.lnk{flex:0 0 auto; background:var(--surface-2); color:var(--accent);
-  border:1px solid var(--border); border-radius:6px; padding:4px 9px;
-  font-size:11.5px; font-weight:600; text-decoration:none; white-space:nowrap}
-.lnk:hover{border-color:var(--accent)}
-.copy.done{color:var(--ok); border-color:var(--ok)}
-.kv{display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:7px; font-size:12.5px; color:var(--muted)}
-.kv span b{color:var(--text); font-weight:600; font-variant-numeric:tabular-nums}
-.kv span.dim{opacity:.6}
-.kv span.dim b{color:var(--muted); font-weight:500}
+/* ---- token table ---- */
+/* Below the table breakpoint the wrapper scrolls sideways. Above it the table
+   fits (its minimum content width measured ~914px against a 958px column at
+   1000px), and the wrapper must NOT be a scroll container: an overflow box
+   captures position:sticky, and the sticky header row would scroll away with
+   the page instead of holding under the site header. */
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+@media (min-width:1000px){.tw{overflow:visible}}
+table.tk{width:100%;border-collapse:collapse;font-size:11.5px}
+/* --hh is written by JS from the header's measured height; the 46px is only
+   the value used before that first measurement lands. */
+table.tk th{position:sticky;top:var(--hh,46px);z-index:10;background:var(--surface2);
+  color:var(--muted);font:600 10px/1 var(--sans);letter-spacing:.05em;
+  text-transform:uppercase;text-align:left;padding:0;border-bottom:1px solid var(--line);
+  white-space:nowrap}
+table.tk th button{width:100%;min-height:40px;background:none;border:0;color:inherit;
+  font:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer;
+  padding:0 6px;text-align:left;display:flex;align-items:center;gap:3px}
+table.tk th.r button{justify-content:flex-end}
+table.tk th button[aria-sort]{color:var(--text)}
+table.tk td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.tk td.r{text-align:right}
+tr.r{cursor:pointer}
+tr.r:hover td{background:var(--surface2)}
+tr.r.op td{background:var(--surface2)}
+.sym{font:600 12px var(--mono);letter-spacing:-.01em}
+.idc{display:flex;align-items:center;gap:6px;min-width:0}
+.idc .sym{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:13ch}
+.av{flex:0 0 auto}
+.pill{font:600 9px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 5px;border-radius:3px;border:1px solid currentColor;white-space:nowrap}
+.bd{font:600 9px/1 var(--sans);letter-spacing:.04em;padding:3px 5px;border-radius:3px;
+  background:var(--surface2);border:1px solid var(--line);color:var(--muted);
+  white-space:nowrap;text-transform:uppercase}
+.bd.warnb{color:var(--warn);border-color:var(--warn)}
+.bd.badb{color:var(--bad);border-color:var(--bad)}
+.bds{display:flex;gap:3px;flex-wrap:wrap}
+.pos{color:var(--ok)} .neg{color:var(--bad)} .dim{color:var(--faint)}
+.chg{display:inline-flex;align-items:center;gap:2px;font-family:var(--mono);
+  font-variant-numeric:tabular-nums}
 
-/* meter (bars only -- no time series is fetched, so no sparklines) */
-.meter{height:5px; background:var(--surface-2); border-radius:3px;
-  overflow:hidden; margin-top:7px; border:1px solid var(--border)}
-.meter i{display:block; height:100%}
-.dv{display:flex; align-items:center; gap:7px; margin-top:7px; font-size:12px; color:var(--muted)}
-.dv .track{position:relative; flex:1; height:5px; background:var(--surface-2);
-  border:1px solid var(--border); border-radius:3px}
-.dv .track::before{content:""; position:absolute; left:50%; top:-2px; bottom:-2px;
-  width:1px; background:var(--border)}
-.dv .track i{position:absolute; top:0; bottom:0; border-radius:3px}
+/* expansion row */
+tr.x{display:none} tr.x.on{display:table-row}
+tr.x>td{background:var(--bg);padding:8px 6px 10px}
+.xg{display:grid;gap:4px 14px;grid-template-columns:repeat(auto-fit,minmax(118px,1fr))}
+.xg div{font-size:10.5px;color:var(--muted);display:flex;justify-content:space-between;
+  gap:8px;border-bottom:1px dotted var(--line);padding-bottom:2px}
+.xg b{font:600 11.5px var(--mono);font-variant-numeric:tabular-nums;color:var(--text)}
+.addr{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:8px}
+code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--line);
+  border-radius:4px;padding:4px 6px;word-break:break-all;color:var(--text)}
+.copy,.lnk{flex:0 0 auto;min-height:40px;display:inline-flex;align-items:center;
+  background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
+  padding:0 10px;font:600 11px var(--sans);cursor:pointer;text-decoration:none}
+.copy{color:var(--muted)} .lnk{color:var(--accent)}
+.copy:hover,.lnk:hover{border-color:var(--accent);color:var(--text)}
+.copy.done{color:var(--ok);border-color:var(--ok)}
 
-/* stock cards */
-.cards{display:grid; grid-template-columns:1fr; gap:10px}
-@media(min-width:560px){.cards{grid-template-columns:1fr 1fr}}
-.card{background:var(--surface-2); border:1px solid var(--border);
-  border-radius:var(--radius); padding:12px}
+/* ---- mobile: two-line rows ---- */
+/* Mobile keeps every fact the desktop table shows, moved onto a second line
+   inside one cell, so nothing is hidden on the phone -- only rearranged. */
+/* Every selector below carries the table.tk prefix on purpose: the
+   display:block reset is written as "table.tk tr" / "table.tk td", which
+   outweighs a bare "tr.r" or "td.c-tier". Without the prefix the rows stay
+   stacked blocks and the desktop-only cells never hide. */
+@media (max-width:999px){
+  table.tk thead{display:none}
+  table.tk,table.tk tbody,table.tk tr,table.tk td{display:block}
+  table.tk tr.x{display:none}
+  table.tk tr.x.on{display:block}
+  table.tk tr.r{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;
+    padding:7px 2px;border-bottom:1px solid var(--line);min-height:52px}
+  table.tk td{border:0;padding:0}
+  table.tk td.c-id{flex:1 1 40%;min-width:0;order:1}
+  table.tk td.c-h6{order:2} table.tk td.c-h24{order:3}
+  table.tk td.c-liq{order:4}
+  table.tk td.c-ind{flex:1 1 100%;order:5;display:flex;align-items:center;
+    gap:4px 9px;flex-wrap:wrap}
+  table.tk td.c-tier,table.tk td.c-persist,table.tk td.c-move,table.tk td.c-lf,
+  table.tk td.c-by,table.tk td.c-txns,table.tk td.c-age,
+  table.tk td.c-venue{display:none}
+  table.tk tr.x>td{padding:6px 2px 10px}
+}
+@media (min-width:1000px){
+  table.tk td.c-ind{display:none}
+  .mo{display:none}
+}
+.mo{font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;
+  margin-right:2px}
+
+/* ---- stocks ---- */
+.cards{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
+.card{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
+  padding:8px 9px}
 .card.alarm{border-color:var(--bad)}
-.card .ctop{display:flex; align-items:baseline; gap:8px}
-.card .big{font-size:21px; font-weight:680; font-variant-numeric:tabular-nums}
+.ctop{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
+.big{font:700 22px var(--mono);font-variant-numeric:tabular-nums;margin:2px 0 0}
+.meter{height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin:5px 0 7px}
+.meter i{display:block;height:100%}
 
-/* expandable discover rows -- readable at 400px, no clipped columns */
-details.drow{background:transparent; border:0; border-top:1px solid var(--border);
-  border-radius:0; margin:0}
-details.drow:first-of-type{border-top:0}
-details.drow summary{padding:11px 0; font-weight:400; display:block}
-details.drow summary::after{content:"+"; float:right; margin-top:-22px;
-  color:var(--muted); font-size:16px}
-details.drow[open] summary::after{content:"\2212"}
-details.drow summary .rhead{padding-right:20px}
-details.drow .dbody{padding:0 0 11px}
+/* ---- generic tables (NFT) ---- */
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;
+  border:1px solid var(--line);border-radius:var(--r)}
+table.g{width:100%;border-collapse:collapse;font-size:11.5px;min-width:560px}
+table.g th{background:var(--surface2);color:var(--muted);font:600 10px var(--sans);
+  letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:6px 8px;
+  border-bottom:1px solid var(--line);white-space:nowrap}
+table.g td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.g td.num,table.g th.num{text-align:right;font-family:var(--mono);
+  font-variant-numeric:tabular-nums}
+table.g tr:last-child td{border-bottom:0}
 
-/* scrollers */
-.scroll{overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -14px; padding:0 14px}
-table{border-collapse:collapse; font-size:12.5px; min-width:520px}
-th,td{text-align:left; padding:7px 10px 7px 0; white-space:nowrap;
-  border-top:1px solid var(--border)}
-th{color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase;
-  letter-spacing:.04em; border-top:0}
-td.num,th.num{text-align:right; font-variant-numeric:tabular-nums}
-
-.err{background:color-mix(in srgb, var(--bad) 12%, var(--surface));
-  border:1px solid var(--bad); border-radius:8px; padding:10px 12px; font-size:13px}
-.empty{color:var(--muted); font-size:13px; padding:4px 0}
-.reason{font-size:12.5px; color:var(--muted); margin-top:6px}
-footer{margin-top:26px; padding-top:14px; border-top:1px solid var(--border);
-  color:var(--muted); font-size:12.5px}
-footer a{color:var(--accent)}
-.neg{color:var(--bad)} .pos{color:var(--ok)}
+/* ---- how-to / list rows ---- */
+.row{border-top:1px solid var(--line);padding:9px 0}
+.row:first-child{border-top:0}
+.rhead{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.sub-h{font-size:11.5px;font-weight:650;color:var(--text);margin:0 0 5px}
+ol.steps{margin:0;padding-left:1.3em;font-size:11.5px;line-height:1.5;color:var(--muted)}
+ol.steps li{margin:0 0 4px} ol.steps li:last-child{margin-bottom:0}
+ol.steps b{color:var(--text);font-weight:600}
+.reason{font-size:11px;color:var(--faint);margin-top:4px}
+.drow{border-top:1px solid var(--line)}
+.drow>summary{cursor:pointer;list-style:none;padding:7px 0;min-height:40px}
+.drow>summary::after{content:"+";float:right;color:var(--faint)}
+.drow[open]>summary::after{content:"\2212"}
+/* The padding is the tap target, the negative margin keeps the line tight. */
+.flnk{display:inline-block;box-sizing:border-box;min-height:40px;
+  line-height:16px;padding:12px 6px;margin:-12px -6px}
+@media (min-width:1000px){.flnk{min-height:0;padding:0;margin:0}}
+.sub{color:var(--muted);font-size:11.5px;margin:0 0 10px}
+footer{color:var(--faint);font-size:10.5px;border-top:1px solid var(--line);
+  padding-top:8px;margin-top:4px}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>HoodScout</h1>
-    <span class="tag">Robinhood Chain</span>
-  </header>
-  <p class="sub">Market-data snapshots, collected on a schedule. Nothing here is financial advice,
-    and no flag is a verdict.</p>
+<header>
+  <div class="hrow">
+    <span class="brand">hood<span>scout</span></span>
+    <span class="chain">Robinhood Chain</span>
+    <span class="pulse" id="pulse"><i class="pdot"></i><span id="pulse-t">loading</span></span>
+    <span class="spacer"></span>
+    <button class="k tgl" id="logos" type="button" aria-pressed="false">
+      <i style="background:var(--faint)"></i>Show logos</button>
+  </div>
+</header>
+<div class="kpi" id="kpi"></div>
+<p class="sub">Market-data snapshots, collected on a schedule. Nothing here is financial
+  advice, and no flag is a verdict.</p>
 
   <div id="banner"></div>
   <div class="health" id="health"></div>
 
-  <details open><summary>Tier summary <span class="count" id="tier-count"></span></summary>
-    <div class="body" id="tier"></div></details>
+  <details class="sec" open><summary>Tokens <span class="cnt" id="tok-count"></span></summary>
+    <div class="body">
+      <div class="ctl" id="ctl"></div>
+      <div class="tw" id="tok"></div>
+    </div></details>
 
-  <details><summary>How to read this <span class="count">what each tier means</span></summary>
+  <details class="sec"><summary>How to read this <span class="cnt">what each tier means</span></summary>
     <div class="body">
     <p class="note">Tiers describe the market a token trades in, not whether it is worth
       owning.
@@ -246,24 +356,20 @@ footer a{color:var(--accent)}
     </div>
     </div></details>
 
-  <details open><summary>PERSISTENT <span class="count" id="best-count"></span></summary>
-    <div class="body" id="best"></div></details>
-
-  <details><summary>Discover <span class="count" id="disc-count"></span></summary>
+  <details class="sec"><summary>Discover <span class="cnt" id="disc-count"></span></summary>
     <div class="body" id="disc"></div></details>
 
-  <details open><summary>Stock squeeze board <span class="count" id="stk-count"></span></summary>
+  <details class="sec" open><summary>Stock squeeze board <span class="cnt" id="stk-count"></span></summary>
     <div class="body" id="stk"></div></details>
 
-  <details><summary>NFT <span class="count" id="nft-count"></span></summary>
+  <details class="sec"><summary>NFT <span class="cnt" id="nft-count"></span></summary>
     <div class="body" id="nft"></div></details>
 
-  <details><summary>Avoid list <span class="count" id="avoid-count"></span></summary>
+  <details class="sec"><summary>Avoid list <span class="cnt" id="avoid-count"></span></summary>
     <div class="body" id="avoid"></div></details>
 
   <footer id="footer"></footer>
 </div>
-
 <script>
 "use strict";
 var REPO = "https://github.com/Zirqo-Dev/hoodscout-data";
@@ -289,6 +395,7 @@ var TIER_VAR = {BEST:"--t-best",EMERGING:"--t-emerging",WATCH:"--t-watch",
    against its own FDV. */
 var TIER_LABEL = {BEST: "PERSISTENT"};
 function tierLabel(t){ return TIER_LABEL[t] || t; }
+function tierColor(t){ return "var(" + (TIER_VAR[t] || "--neutral") + ")"; }
 
 function el(tag, cls, text){
   var n = document.createElement(tag);
@@ -296,7 +403,6 @@ function el(tag, cls, text){
   if (text !== undefined && text !== null) n.textContent = String(text);
   return n;
 }
-function tierColor(t){ return "var(" + (TIER_VAR[t] || "--neutral") + ")"; }
 function num(v, dp){
   if (v === null || v === undefined || v === "" || isNaN(v)) return "n/a";
   return Number(v).toLocaleString(undefined, {minimumFractionDigits: dp||0,
@@ -336,7 +442,6 @@ function ageClass(m, amber, red){
   if (m < red) return "s-warn";
   return "s-bad";
 }
-
 function load(path){
   return fetch(path + "?t=" + Date.now(), {cache: "no-store"})
     .then(function(r){
@@ -355,7 +460,8 @@ function copyBtn(text){
   var b = el("button", "copy", "Copy");
   b.type = "button";
   b.setAttribute("aria-label", "Copy contract address " + text);
-  b.addEventListener("click", function(){
+  b.addEventListener("click", function(ev){
+    ev.stopPropagation();
     var done = function(){
       b.textContent = "Copied";
       b.classList.add("done");
@@ -409,9 +515,9 @@ function linkBtn(label, href, title){
   a.target = "_blank";
   a.rel = "noopener noreferrer";
   if (title) a.title = title;
+  a.addEventListener("click", function(ev){ ev.stopPropagation(); });
   return a;
 }
-
 /* tok is optional: when given, the chart links are built from the addresses
    in that record. Never from the ticker -- tickers repeat on this chain. */
 function addrRow(ca, tok){
@@ -428,18 +534,18 @@ function addrRow(ca, tok){
   return d;
 }
 function kv(pairs){
-  var d = el("div", "kv");
+  var d = el("div", "xg");
   pairs.forEach(function(p){
     if (p[1] === undefined) return;
-    var s = el("span", p[3] || null, p[0] + " ");
+    var row = el("div", p[3] || null);
+    row.appendChild(el("span", null, p[0]));
     var b = el("b", null, p[1]);
-    if (p[2]) b.className = p[2];
-    s.appendChild(b);
-    d.appendChild(s);
+    if (p[2]) b.classList.add(p[2]);
+    row.appendChild(b);
+    d.appendChild(row);
   });
   return d;
 }
-
 /* "2026-09-05T00:00:00+00:00" -> "Sep 5, 2026". Formatted explicitly rather
    than via toLocaleDateString so the label does not shift with the viewer's
    locale. */
@@ -450,28 +556,6 @@ function anchorDate(iso){
   var d = new Date(t);
   return MONTHS[d.getUTCMonth()] + " " + d.getUTCDate() + ", " + d.getUTCFullYear();
 }
-/* diverging bar for recent_move_score, which runs -10..+10 */
-function moveBar(score){
-  var d = el("div", "dv");
-  d.appendChild(el("span", null, "move"));
-  var track = el("div", "track");
-  if (score !== null && score !== undefined && !isNaN(score)){
-    var s = Math.max(-10, Math.min(10, Number(score)));
-    var i = el("i");
-    var half = Math.abs(s) / 10 * 50;
-    if (s >= 0){ i.style.left = "50%"; i.style.width = half + "%"; i.style.background = "var(--ok)"; }
-    else { i.style.right = "50%"; i.style.width = half + "%"; i.style.background = "var(--bad)"; }
-    track.appendChild(i);
-  }
-  d.appendChild(track);
-  var lab = el("b", null, (score === null || score === undefined) ? "n/a" :
-             (Number(score) > 0 ? "+" : "") + score);
-  lab.style.minWidth = "2.2em";
-  lab.style.textAlign = "right";
-  lab.style.color = "var(--text)";
-  d.appendChild(lab);
-  return d;
-}
 function meter(frac, color){
   var m = el("div", "meter");
   var i = el("i");
@@ -480,32 +564,430 @@ function meter(frac, color){
   m.appendChild(i);
   return m;
 }
-function table(cols, rows){
-  var wrap = el("div", "scroll");
-  var t = el("table");
-  var thead = el("thead"), tr = el("tr");
-  cols.forEach(function(c){
-    var th = el("th", c.num ? "num" : null, c.label);
-    tr.appendChild(th);
-  });
-  thead.appendChild(tr); t.appendChild(thead);
-  var tb = el("tbody");
-  rows.forEach(function(r){
-    var row = el("tr");
-    cols.forEach(function(c){
-      var cell = el("td", c.num ? "num" : null, c.get(r));
-      var cl = c.cls && c.cls(r);
-      if (cl) cell.classList.add(cl);
-      row.appendChild(cell);
+
+/* ---------- inline SVG indicators ----------
+   Hand-drawn, no library, no external request. Each is sized in CSS pixels so
+   a row stays dense, and each carries a <title> so the shape is never the only
+   way to read it. */
+var SVGNS = "http://www.w3.org/2000/svg";
+function svg(w, h, title){
+  var s = document.createElementNS(SVGNS, "svg");
+  s.setAttribute("width", w); s.setAttribute("height", h);
+  s.setAttribute("viewBox", "0 0 " + w + " " + h);
+  s.setAttribute("role", "img");
+  s.setAttribute("aria-label", title);
+  var t = document.createElementNS(SVGNS, "title");
+  t.textContent = title;
+  s.appendChild(t);
+  return s;
+}
+function rect(s, x, y, w, h, fill, rx){
+  var r = document.createElementNS(SVGNS, "rect");
+  r.setAttribute("x", x); r.setAttribute("y", y);
+  r.setAttribute("width", Math.max(0, w)); r.setAttribute("height", h);
+  r.setAttribute("fill", fill);
+  if (rx) r.setAttribute("rx", rx);
+  s.appendChild(r);
+  return r;
+}
+/* persistence: healthy snapshots against the deepest count in this snapshot.
+   The window size is not published in latest.json, so the denominator is the
+   observed maximum and the label says so rather than implying a fixed bar. */
+function persistSvg(v, max){
+  var W = 42, H = 9;
+  var s = svg(W, H, v === null || v === undefined
+    ? "persistence unknown"
+    : "healthy in " + v + " of a window whose deepest count here is " + max);
+  rect(s, 0, 2, W, 5, "var(--line)", 2);
+  if (v !== null && v !== undefined && max > 0){
+    var f = Math.max(0, Math.min(1, Number(v) / max));
+    rect(s, 0, 2, W * f, 5, f >= 0.6 ? "var(--ok)" : f >= 0.3 ? "var(--warn)" : "var(--neutral)", 2);
+  }
+  return s;
+}
+/* recent_move_score, which runs -10..+10, as a diverging gauge about a centre
+   tick. Direction only: the score is how far it just moved, never a call. */
+function moveSvg(v){
+  var W = 46, H = 9, C = W / 2;
+  var s = svg(W, H, v === null || v === undefined
+    ? "recent move score unknown"
+    : "recent move score " + v + " of -10 to +10");
+  rect(s, 0, 3, W, 3, "var(--line)", 1.5);
+  if (v !== null && v !== undefined && !isNaN(v)){
+    var n = Math.max(-10, Math.min(10, Number(v)));
+    var half = Math.abs(n) / 10 * (C - 1);
+    if (n >= 0) rect(s, C, 2, half, 5, "var(--ok)", 1);
+    else rect(s, C - half, 2, half, 5, "var(--bad)", 1);
+  }
+  rect(s, C - 0.5, 0, 1, H, "var(--faint)");
+  return s;
+}
+/* liquidity against FDV. Capped at 25% of FDV for the full bar: above that the
+   ratio stops discriminating and everything would read full. */
+function lfSvg(v){
+  var W = 30, H = 8, CAP = 25;
+  var s = svg(W, H, v === null || v === undefined
+    ? "liquidity against FDV unknown" : "liquidity is " + pct(v, 2) + " of FDV");
+  rect(s, 0, 1, W, 6, "var(--line)", 2);
+  if (v !== null && v !== undefined && !isNaN(v)){
+    var f = Math.max(0, Math.min(1, Number(v) / CAP));
+    rect(s, 0, 1, W * f, 6, Number(v) >= 5 ? "var(--ok)" : "var(--warn)", 2);
+  }
+  return s;
+}
+/* buyer trend: last5_byr24 as a sparkline. Flat when every value is equal, so
+   a straight line means "no change", not "no data" -- no data draws nothing. */
+function sparkSvg(arr){
+  var W = 44, H = 12;
+  var ok = arr && arr.length >= 2;
+  var s = svg(W, H, ok ? "24h buyer count over the last " + arr.length
+    + " snapshots: " + arr.join(", ") : "no buyer history yet");
+  if (!ok) return s;
+  var lo = Math.min.apply(null, arr), hi = Math.max.apply(null, arr);
+  var span = hi - lo || 1;
+  var pts = arr.map(function(v, i){
+    var x = (i / (arr.length - 1)) * (W - 2) + 1;
+    var y = H - 2 - ((v - lo) / span) * (H - 4);
+    return x.toFixed(1) + "," + y.toFixed(1);
+  }).join(" ");
+  var p = document.createElementNS(SVGNS, "polyline");
+  p.setAttribute("points", pts);
+  p.setAttribute("fill", "none");
+  p.setAttribute("stroke-width", "1.3");
+  p.setAttribute("stroke-linecap", "round");
+  p.setAttribute("stroke-linejoin", "round");
+  p.setAttribute("stroke", arr[arr.length-1] > arr[0] ? "var(--ok)"
+    : arr[arr.length-1] < arr[0] ? "var(--bad)" : "var(--neutral)");
+  s.appendChild(p);
+  return s;
+}
+/* a percentage change with a direction arrow, so colour is never the only
+   signal for up or down */
+function chgEl(v, dp){
+  var d = el("span", "chg");
+  if (v === null || v === undefined || isNaN(v)){
+    d.appendChild(el("span", "dim", "n/a"));
+    return d;
+  }
+  var n = Number(v), up = n > 0, flat = n === 0;
+  var a = svg(7, 7, up ? "up" : flat ? "flat" : "down");
+  var tri = document.createElementNS(SVGNS, "polygon");
+  tri.setAttribute("points", flat ? "0,3 7,3 7,4 0,4"
+    : up ? "3.5,0 7,6 0,6" : "0,1 7,1 3.5,7");
+  tri.setAttribute("fill", flat ? "var(--faint)" : up ? "var(--ok)" : "var(--bad)");
+  a.appendChild(tri);
+  d.appendChild(a);
+  d.appendChild(el("span", flat ? "dim" : up ? "pos" : "neg", pct(n, dp === undefined ? 1 : dp)));
+  return d;
+}
+/* Deterministic avatar from the contract address, never the ticker: tickers
+   repeat on this chain and two different tokens would otherwise get the same
+   mark. Hue and initials both come from the address. */
+function hashCa(ca){
+  var h = 5381, s = String(ca || "");
+  for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+function avatarSvg(ca){
+  var a = String(ca || "").replace(/^0x/i, "");
+  var h = hashCa(ca), hue = h % 360, hue2 = (hue + 48) % 360;
+  var s = svg(18, 18, "generated mark for " + ca);
+  var c = document.createElementNS(SVGNS, "circle");
+  c.setAttribute("cx", 9); c.setAttribute("cy", 9); c.setAttribute("r", 8);
+  c.setAttribute("fill", "none");
+  c.setAttribute("stroke", "hsl(" + hue + ",62%,52%)");
+  c.setAttribute("stroke-width", "2");
+  s.appendChild(c);
+  var c2 = document.createElementNS(SVGNS, "circle");
+  c2.setAttribute("cx", 9); c2.setAttribute("cy", 9); c2.setAttribute("r", 6);
+  c2.setAttribute("fill", "hsl(" + hue2 + ",38%,22%)");
+  s.appendChild(c2);
+  var t = document.createElementNS(SVGNS, "text");
+  t.setAttribute("x", 9); t.setAttribute("y", 12.2);
+  t.setAttribute("text-anchor", "middle");
+  t.setAttribute("font-size", "7");
+  t.setAttribute("font-family", "ui-monospace,monospace");
+  t.setAttribute("fill", "hsl(" + hue + ",70%,78%)");
+  t.textContent = (a.slice(0, 2) || "??").toUpperCase();
+  s.appendChild(t);
+  return s;
+}
+/* The avatar is the default and the only mark the data can currently produce:
+   no file under data/ carries an image URL. When Show logos is on and a record
+   does have one, it is lazy-loaded with no referrer and falls back to the
+   avatar on error. */
+function markFor(t){
+  var box = el("span", "av");
+  var url = t && (t.image_url || t.logo_url || t.icon_url);
+  if (SHOW_LOGOS && typeof url === "string" && url){
+    var img = el("img");
+    img.src = url; img.width = 18; img.height = 18; img.loading = "lazy";
+    img.decoding = "async"; img.referrerPolicy = "no-referrer";
+    img.alt = ""; img.style.borderRadius = "50%"; img.style.display = "block";
+    img.addEventListener("error", function(){
+      box.textContent = "";
+      box.appendChild(avatarSvg(t.ca));
     });
-    tb.appendChild(row);
+    box.appendChild(img);
+  } else {
+    box.appendChild(avatarSvg(t ? t.ca : ""));
+  }
+  return box;
+}
+
+/* ---------- state ---------- */
+var stamps = [];
+var TOKENS = [], PMAX = 1;
+var FILTER = {}, QUERY = "", SORT = {key: "liq_usd", dir: -1};
+var SHOW_LOGOS = false;
+try { SHOW_LOGOS = localStorage.getItem("hs.logos") === "1"; } catch(e){ SHOW_LOGOS = false; }
+
+var COLS = [
+  {k:"symbol",      t:"Token",  w:"",   sort:function(a){ return (a.symbol||"").toLowerCase(); }},
+  {k:"tier",        t:"Tier",   w:"",   sort:function(a){ return TIERS.indexOf(a.tier); }},
+  {k:"persist_count", t:"Persist", r:1, sort:function(a){ return a.persist_count; }},
+  {k:"recent_move_score", t:"Move", r:1, sort:function(a){ return a.recent_move_score; }},
+  {k:"chg_h6",      t:"6h",     r:1,    sort:function(a){ return a.chg_h6; }},
+  {k:"chg_h24",     t:"24h",    r:1,    sort:function(a){ return a.chg_h24; }},
+  {k:"liq_usd",     t:"Liq",    r:1,    sort:function(a){ return a.liq_usd; }},
+  {k:"liq_fdv_pct", t:"Liq/FDV",r:1,    sort:function(a){ return a.liq_fdv_pct; }},
+  {k:"last5_byr24", t:"Buyers", r:0,    sort:function(a){
+     var v = a.last5_byr24; return (v && v.length) ? v[v.length-1] : null; }},
+  {k:"txns24",      t:"Txns",   r:1,    sort:function(a){ return a.txns24; }},
+  {k:"age_days",    t:"Age",    r:1,    sort:function(a){ return a.age_days; }},
+  {k:"main_dex",    t:"Venue",  r:0,    sort:function(a){ return (a.main_dex||"").toLowerCase(); }}
+];
+
+function cmp(a, b, col){
+  var x = col.sort(a), y = col.sort(b);
+  var xn = x === null || x === undefined || x === "" || (typeof x === "number" && isNaN(x));
+  var yn = y === null || y === undefined || y === "" || (typeof y === "number" && isNaN(y));
+  if (xn && yn) return 0;
+  if (xn) return 1;          /* missing values sink, in either direction */
+  if (yn) return -1;
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+
+function feeBadge(t){
+  if (t.main_fee === null || t.main_fee === undefined || isNaN(t.main_fee)){
+    return "fee ?";
+  }
+  var p = Number(t.main_fee) * 100;
+  return "fee " + (p < 0.1 ? p.toFixed(3) : p < 1 ? p.toFixed(2) : p.toFixed(1)) + "%";
+}
+/* showAge is false where the layout already has an age column, so the same
+   number is not printed twice in one row. The watch_reason badge is dropped
+   when a flag above it already carries that word -- same reason. */
+function badges(t, showAge){
+  var b = el("div", "bds");
+  var flagged = {};
+  if (t.flag_contradiction){ flagged.contradiction = 1;
+    b.appendChild(el("span", "bd badb", "contradiction")); }
+  if (t.flag_liq_anomaly){ flagged.liq_anomaly = 1;
+    b.appendChild(el("span", "bd badb", "liq anomaly")); }
+  if (t.watch_reason && !flagged[t.watch_reason]){
+    b.appendChild(el("span", "bd", t.watch_reason));
+  }
+  if (showAge){
+    b.appendChild(el("span", "bd", t.age_days === null || t.age_days === undefined
+      ? "age n/a" : num(t.age_days, 1) + "d"));
+  }
+  if (t.main_dex) b.appendChild(el("span", "bd", t.main_dex));
+  b.appendChild(el("span", "bd" + (t.main_fee === null || t.main_fee === undefined
+    ? " warnb" : ""), feeBadge(t)));
+  return b;
+}
+function tierPill(tier){
+  var p = el("span", "pill", tierLabel(tier));
+  p.style.color = tierColor(tier);
+  return p;
+}
+function labelled(txt, node){
+  var w = el("span");
+  w.appendChild(el("span", "mo", txt));
+  w.appendChild(node);
+  return w;
+}
+
+function renderTokens(){
+  var mount = document.getElementById("tok");
+  mount.textContent = "";
+  var q = QUERY.trim().toLowerCase();
+  var act = TIERS.filter(function(t){ return FILTER[t]; });
+  var rows = TOKENS.filter(function(t){
+    if (act.length && act.indexOf(t.tier) < 0) return false;
+    if (!q) return true;
+    return (t.symbol || "").toLowerCase().indexOf(q) >= 0
+        || (t.ca || "").toLowerCase().indexOf(q) >= 0;
   });
-  t.appendChild(tb); wrap.appendChild(t);
-  return wrap;
+  var col = COLS.filter(function(c){ return c.k === SORT.key; })[0] || COLS[6];
+  rows = rows.slice().sort(function(a, b){ return cmp(a, b, col) * SORT.dir; });
+
+  document.getElementById("tok-count").textContent =
+    rows.length + " of " + TOKENS.length + " shown";
+
+  if (!rows.length){
+    mount.appendChild(el("div", "empty", "No token matches that filter."));
+    return;
+  }
+  var tb = el("table", "tk");
+  var thead = el("thead"), htr = el("tr");
+  COLS.forEach(function(c){
+    var th = el("th", c.r ? "r" : null);
+    var btn = el("button", null, c.t);
+    btn.type = "button";
+    if (c.k === SORT.key){
+      btn.setAttribute("aria-sort", SORT.dir < 0 ? "descending" : "ascending");
+      btn.appendChild(el("span", "dim", SORT.dir < 0 ? "▾" : "▴"));
+    }
+    btn.addEventListener("click", function(){
+      if (SORT.key === c.k) SORT.dir = -SORT.dir;
+      else { SORT.key = c.k; SORT.dir = -1; }
+      renderTokens();
+    });
+    th.appendChild(btn);
+    htr.appendChild(th);
+  });
+  thead.appendChild(htr); tb.appendChild(thead);
+
+  var body = el("tbody");
+  rows.forEach(function(t){
+    var tr = el("tr", "r");
+    tr.tabIndex = 0;
+    tr.setAttribute("aria-expanded", "false");
+    function cell(cls, node, right){
+      var td = el("td", cls + (right ? " r" : ""));
+      if (node) td.appendChild(node);
+      tr.appendChild(td);
+      return td;
+    }
+    /* one td per column, in COLS order. The desktop-only cells are hidden on
+       mobile and their contents reappear in c-ind, which is hidden on desktop,
+       so every layout shows each fact exactly once. */
+    var idc = el("div", "idc");
+    idc.appendChild(markFor(t));
+    idc.appendChild(el("span", "sym", t.symbol === null ? "(no symbol)" : t.symbol));
+    cell("c-id", idc);
+    cell("c-tier", tierPill(t.tier));
+    cell("c-persist", persistSvg(t.persist_count, PMAX), 1);
+    cell("c-move", moveSvg(t.recent_move_score), 1);
+    cell("c-h6", chgEl(t.chg_h6), 1);
+    cell("c-h24", chgEl(t.chg_h24), 1);
+    cell("c-liq", el("span", "n", usd(t.liq_usd)), 1);
+    cell("c-lf", lfSvg(t.liq_fdv_pct), 1);
+    cell("c-by", sparkSvg(t.last5_byr24));
+    cell("c-txns", el("span", "n", num(t.txns24)), 1);
+    cell("c-age", el("span", "n", t.age_days === null || t.age_days === undefined
+      ? "n/a" : num(t.age_days, 1) + "d"), 1);
+    cell("c-venue", badges(t, 0));
+
+    var ind = cell("c-ind");
+    ind.appendChild(tierPill(t.tier));
+    ind.appendChild(labelled("persist", persistSvg(t.persist_count, PMAX)));
+    ind.appendChild(labelled("move", moveSvg(t.recent_move_score)));
+    ind.appendChild(labelled("liq/fdv", lfSvg(t.liq_fdv_pct)));
+    ind.appendChild(labelled("buyers", sparkSvg(t.last5_byr24)));
+    ind.appendChild(badges(t, 1));
+
+    var xr = el("tr", "x");
+    var xc = el("td");
+    xc.colSpan = COLS.length;
+    xc.appendChild(kv([
+      ["healthy snapshots", t.persist_count === undefined || t.persist_count === null
+                              ? "n/a" : num(t.persist_count)],
+      ["age", t.age_days === null ? "n/a" : num(t.age_days, 1) + " d"],
+      ["liq", usd(t.liq_usd)],
+      ["liq/FDV", pct(t.liq_fdv_pct, 2)],
+      ["trades/trader", t.trades_per_trader === null ? "n/a" : num(t.trades_per_trader, 2)],
+      ["txns 24h", num(t.txns24)],
+      ["24h vol", usd(t.vol24_usd)],
+      ["buyers 24h", num(t.buyers24)],
+      ["6h", pct(t.chg_h6, 1), Number(t.chg_h6) < 0 ? "neg" : "pos"],
+      ["24h", pct(t.chg_h24, 1), Number(t.chg_h24) < 0 ? "neg" : "pos"],
+      ["move score", t.recent_move_score === null || t.recent_move_score === undefined
+        ? "n/a" : String(t.recent_move_score)],
+      ["venue", (t.main_dex || "n/a") + " \u00b7 " + feeBadge(t)]
+    ]));
+    if (t.recent_move_basis){
+      xc.appendChild(el("div", "reason", "move basis: " + t.recent_move_basis));
+    }
+    xc.appendChild(addrRow(t.ca, t));
+    xr.appendChild(xc);
+
+    var toggle = function(){
+      var on = xr.classList.toggle("on");
+      tr.classList.toggle("op", on);
+      tr.setAttribute("aria-expanded", on ? "true" : "false");
+    };
+    tr.addEventListener("click", toggle);
+    tr.addEventListener("keydown", function(ev){
+      if (ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); toggle(); }
+    });
+    body.appendChild(tr);
+    body.appendChild(xr);
+  });
+  tb.appendChild(body);
+  mount.appendChild(tb);
+}
+
+function renderControls(counts){
+  var c = document.getElementById("ctl");
+  c.textContent = "";
+  var inp = el("input");
+  inp.type = "search";
+  inp.placeholder = "filter by symbol or address";
+  inp.setAttribute("aria-label", "Filter tokens by symbol or contract address");
+  inp.addEventListener("input", function(){ QUERY = inp.value; renderTokens(); });
+  c.appendChild(inp);
+  TIERS.forEach(function(t){
+    var b = el("button", "fchip");
+    b.type = "button";
+    b.setAttribute("aria-pressed", FILTER[t] ? "true" : "false");
+    var i = el("i"); i.style.background = tierColor(t);
+    b.appendChild(i);
+    b.appendChild(el("span", null, tierLabel(t)));
+    b.appendChild(el("b", null, counts[t] === undefined ? 0 : counts[t]));
+    b.addEventListener("click", function(){
+      FILTER[t] = !FILTER[t];
+      b.setAttribute("aria-pressed", FILTER[t] ? "true" : "false");
+      renderTokens();
+    });
+    c.appendChild(b);
+  });
 }
 
 /* ---------- render ---------- */
-var stamps = [];
+function renderHeader(d, ok, ageM){
+  var kpi = document.getElementById("kpi");
+  kpi.textContent = "";
+  var tc = (d && d.tier_counts) || {};
+  TIERS.forEach(function(t){
+    var k = el("span", "k");
+    var i = el("i"); i.style.background = tierColor(t);
+    k.appendChild(i);
+    k.appendChild(el("span", null, tierLabel(t)));
+    k.appendChild(el("b", null, tc[t] === undefined ? 0 : tc[t]));
+    kpi.appendChild(k);
+  });
+  var seen = el("span", "k");
+  seen.appendChild(el("span", null, "tokens"));
+  seen.appendChild(el("b", null, (d && d.tokens_seen) || 0));
+  kpi.appendChild(seen);
+  var pools = el("span", "k");
+  pools.appendChild(el("span", null, "pools"));
+  pools.appendChild(el("b", null, (d && d.pools_seen) || 0));
+  kpi.appendChild(pools);
+  var lf = el("span", "k");
+  lf.appendChild(el("span", null, "lookups failed"));
+  lf.appendChild(el("b", null, d ? d.pool_lookups_failed : "n/a"));
+  kpi.appendChild(lf);
+
+  var dot = document.querySelector("#pulse .pdot");
+  var cls = ok ? ageClass(ageM, 45, 180) : "s-bad";
+  dot.className = "pdot " + cls;
+  document.getElementById("pulse-t").textContent =
+    ok ? "last run " + ageText(ageM) : "no data";
+}
 
 function renderHealth(entries){
   var mount = document.getElementById("health");
@@ -513,10 +995,15 @@ function renderHealth(entries){
   var stale = [];
   entries.forEach(function(e){
     var m = e.ok ? ageMin(e.at) : null;
-    var card = el("div", "hcard " + (e.ok ? ageClass(m, e.amber, e.red) : "s-bad"));
-    card.appendChild(el("div", "hname", e.name));
-    card.appendChild(el("div", "hage", e.ok ? ageText(m) : "unavailable"));
-    card.appendChild(el("div", "hmeta", e.ok ? (e.meta || "") : (e.error || "fetch failed")));
+    var card = el("div", "hc " + (e.ok ? ageClass(m, e.amber, e.red) : "s-bad"));
+    var n = el("div", "hn");
+    var dot = el("i", "pdot " + (e.ok ? ageClass(m, e.amber, e.red) : "s-bad"));
+    dot.style.width = "6px"; dot.style.height = "6px";
+    n.appendChild(dot);
+    n.appendChild(el("span", null, e.name));
+    card.appendChild(n);
+    card.appendChild(el("div", "ha", e.ok ? ageText(m) : "unavailable"));
+    card.appendChild(el("div", "hm", e.ok ? (e.meta || "") : (e.error || "fetch failed")));
     mount.appendChild(card);
     if (!e.ok) stale.push(e.name + " unavailable");
     else if (m !== null && m >= e.red) stale.push(e.name + " " + ageText(m));
@@ -530,80 +1017,35 @@ function renderHealth(entries){
 
 function renderPools(res){
   if (!res.ok){
-    ["tier","best","disc"].forEach(function(id){ fail(id, "data/latest.json", res.error); });
+    fail("tok", "data/latest.json", res.error);
+    fail("disc", "data/latest.json", res.error);
+    renderHeader(null, false, null);
     return;
   }
   var d = res.data;
   stamps.push(["pools", d.generated_at]);
+  renderHeader(d, true, ageMin(d.generated_at));
 
-  /* tier chips */
-  var tc = d.tier_counts || {};
-  var tm = document.getElementById("tier");
-  tm.textContent = "";
-  var chips = el("div", "chips");
-  TIERS.forEach(function(t){
-    var c = el("div", "chip");
-    var dot = el("span", "dot");
-    dot.style.background = tierColor(t);
-    c.appendChild(dot);
-    c.appendChild(el("span", null, tierLabel(t)));
-    c.appendChild(el("b", null, tc[t] === undefined ? 0 : tc[t]));
-    chips.appendChild(c);
+  TOKENS = d.tokens || [];
+  PMAX = 1;
+  TOKENS.forEach(function(t){
+    if (typeof t.persist_count === "number" && t.persist_count > PMAX) PMAX = t.persist_count;
   });
-  tm.appendChild(chips);
+  renderControls(d.tier_counts || {});
+  renderTokens();
+
   var wr = d.watch_reasons || {};
   var wrk = Object.keys(wr);
-  if (wrk.length){
-    var p = el("p", "note", "WATCH split: " + wrk.map(function(k){
-      return k + " " + wr[k]; }).join(" · "));
-    p.style.marginTop = "10px"; p.style.marginBottom = "0";
-    tm.appendChild(p);
-  }
-  document.getElementById("tier-count").textContent =
-    (d.tokens_seen || 0) + " tokens · " + (d.pools_seen || 0) + " pools";
-
-  /* BEST */
-  var best = (d.tokens || []).filter(function(t){ return t.tier === "BEST"; });
-  var bm = document.getElementById("best");
-  bm.textContent = "";
-  document.getElementById("best-count").textContent = best.length + "";
-  bm.appendChild(el("p", "note",
-    "Persistent and liquid — not best performing. The tier means the token kept "
-    + "showing up healthy across recent snapshots and holds depth against its own FDV. "
-    + "Over the next 4-8 hours, these showed no edge over WATCH (paired within token: "
-    + "better for 30 tokens, worse for 42). Still keyed BEST in the data. "
-    + "The contract address is the identity; tickers repeat."));
-  if (!best.length){ bm.appendChild(el("div", "empty", "No tokens in PERSISTENT.")); }
-  best.forEach(function(t){
-    var r = el("div", "row");
-    var h = el("div", "rhead");
-    h.appendChild(el("span", "sym", t.symbol === null ? "(no symbol)" : t.symbol));
-    var p = el("span", "pill", tierLabel("BEST"));
-    p.style.color = tierColor("BEST");
-    h.appendChild(p);
-    r.appendChild(h);
-    r.appendChild(addrRow(t.ca, t));
-    r.appendChild(moveBar(t.recent_move_score));
-    /* The fields the tier actually turns on: healthy snapshots, age, liquidity
-       depth against FDV and trade concentration. persist_count is the count
-       classify() compared against its threshold; it reads n/a on output from a
-       collector that did not yet publish it. */
-    r.appendChild(kv([
-      ["healthy snapshots", t.persist_count === undefined || t.persist_count === null
-                              ? "n/a" : num(t.persist_count)],
-      ["age", t.age_days === null ? "n/a" : num(t.age_days, 1) + " d"],
-      ["liq", usd(t.liq_usd)],
-      ["liq/FDV", pct(t.liq_fdv_pct, 2)],
-      ["trades/trader", t.trades_per_trader === null ? "n/a" : num(t.trades_per_trader, 2)],
-      ["txns 24h", num(t.txns24)],
-      ["6h", pct(t.chg_h6, 1), Number(t.chg_h6) < 0 ? "neg" : "pos"],
-      ["24h", pct(t.chg_h24, 1), Number(t.chg_h24) < 0 ? "neg" : "pos"]
-    ]));
-    if (t.recent_move_basis){
-      r.appendChild(el("div", "reason", "move basis: " + t.recent_move_basis));
-    }
-    bm.appendChild(r);
-  });
+  var ctl = document.getElementById("ctl");
+  var note = el("p", "note",
+    "Tier is a filter on market shape, not a signal. Sort any column; tap a row "
+    + "for the address and chart links. The contract address is the identity; "
+    + "tickers repeat. PERSISTENT is still keyed BEST in the data."
+    + (wrk.length ? "  WATCH split: " + wrk.map(function(k){
+        return k + " " + wr[k]; }).join(" · ") : ""));
+  note.style.flex = "1 1 100%";
+  note.style.margin = "4px 0 0";
+  ctl.appendChild(note);
 
   /* Discover */
   var dv = d.discover || [];
@@ -614,34 +1056,25 @@ function renderPools(res){
     "Discovery only, not promoted. Surfaced by buyer-rate acceleration; never auto-added anywhere."));
   if (!dv.length){ dm.appendChild(el("div", "empty", "Nothing surfaced.")); }
   else {
-    /* Cards, not a table: eight columns clipped at 400px and the address was
-       the first thing cut off. Each row expands to the full address. */
     dm.appendChild(el("p", "note", "Tap a row for the full contract address."));
     dv.forEach(function(r){
       var row = el("details", "drow");
       var sum = el("summary");
       var head = el("div", "rhead");
+      head.appendChild(markFor(r));
       head.appendChild(el("span", "sym", r.symbol || "(no symbol)"));
-      var tp = el("span", "pill", tierLabel(r.tier));
-      tp.style.color = tierColor(r.tier);
-      head.appendChild(tp);
-      if (r.watch_reason){
-        var rp = el("span", "pill", r.watch_reason);
-        rp.style.color = "var(--muted)";
-        head.appendChild(rp);
-      }
+      head.appendChild(tierPill(r.tier));
+      if (r.watch_reason) head.appendChild(el("span", "bd", r.watch_reason));
+      head.appendChild(labelled("accel", chgEl(r.buyer_accel_pct)));
       sum.appendChild(head);
       sum.appendChild(kv([
-        ["accel", r.buyer_accel_pct === null || r.buyer_accel_pct === undefined
-          ? "n/a" : pct(r.buyer_accel_pct, 1),
-          Number(r.buyer_accel_pct) < 0 ? "neg" : "pos"],
         ["txns 24h", num(r.txns24)],
         ["liq", usd(r.liq_usd)],
         ["24h vol", usd(r.vol24_usd)],
         ["age", r.age_days === null ? "n/a" : num(r.age_days, 1) + " d"]
       ]));
       row.appendChild(sum);
-      var inner = el("div", "dbody");
+      var inner = el("div");
       inner.appendChild(addrRow(r.ca, r));
       row.appendChild(inner);
       dm.appendChild(row);
@@ -690,14 +1123,17 @@ function renderStocks(res){
               && Number(t.locked_pct_est) < 40;
     var c = el("div", "card" + (low ? " alarm" : ""));
     var top = el("div", "ctop");
-    top.appendChild(el("span", "sym", t.symbol));
-    var pr = el("span", "count", usd(t.price_usd));
-    top.appendChild(pr);
+    var left = el("div", "idc");
+    left.appendChild(markFor(t));
+    left.appendChild(el("span", "sym", t.symbol));
+    top.appendChild(left);
+    top.appendChild(el("span", "cnt n", usd(t.price_usd)));
     c.appendChild(top);
     var big = el("div", "big", pct(t.locked_pct_est, 1));
     big.style.color = low ? "var(--bad)" : "var(--ok)";
     c.appendChild(big);
-    c.appendChild(el("div", "count", "locked share"));
+    c.appendChild(el("div", "cnt", low ? "locked share — below the 40% floor"
+                                      : "locked share"));
     if (t.locked_pct_est !== null && t.locked_pct_est !== undefined){
       c.appendChild(meter(Number(t.locked_pct_est) / 100,
                     low ? "var(--bad)" : "var(--ok)"));
@@ -720,6 +1156,27 @@ function renderStocks(res){
     cards.appendChild(c);
   });
   mount.appendChild(cards);
+}
+
+function table(cols, rows){
+  var wrap = el("div", "scroll");
+  var t = el("table", "g");
+  var thead = el("thead"), tr = el("tr");
+  cols.forEach(function(c){ tr.appendChild(el("th", c.num ? "num" : null, c.label)); });
+  thead.appendChild(tr); t.appendChild(thead);
+  var tb = el("tbody");
+  rows.forEach(function(r){
+    var row = el("tr");
+    cols.forEach(function(c){
+      var cell = el("td", c.num ? "num" : null, c.get(r));
+      var cl = c.cls && c.cls(r);
+      if (cl) cell.classList.add(cl);
+      row.appendChild(cell);
+    });
+    tb.appendChild(row);
+  });
+  t.appendChild(tb); wrap.appendChild(t);
+  return wrap;
 }
 
 function renderNft(tracked, disc){
@@ -755,7 +1212,7 @@ function renderNft(tracked, disc){
   var p2 = el("p", "note", "Discovery only, not promoted — ranked by "
     + (disc.ok ? (disc.data.order_by || "volume") : "volume")
     + ". social_presence_score counts filled listing fields and says nothing about legitimacy.");
-  p2.style.marginTop = "14px";
+  p2.style.marginTop = "12px";
   mount.appendChild(p2);
   if (!disc.ok){
     mount.appendChild(el("div", "err", "Could not load data/nft_discover.json — " + disc.error));
@@ -792,11 +1249,10 @@ function renderAvoid(res){
   list.forEach(function(e){
     var r = el("div", "row");
     var h = el("div", "rhead");
+    if (typeof e.ca === "string" && e.ca.trim()) h.appendChild(markFor(e));
     h.appendChild(el("span", "sym", e.symbol || "(no symbol)"));
-    var p = el("span", "pill", "avoid");
-    p.style.color = tierColor("AVOID");
-    h.appendChild(p);
-    if (e.added) h.appendChild(el("span", "count", "added " + e.added));
+    h.appendChild(tierPill("AVOID"));
+    if (e.added) h.appendChild(el("span", "bd", "added " + e.added));
     r.appendChild(h);
     /* No entry in avoid.json carries a pool, so every Gecko link here takes
        the /tokens/<address> fallback. An entry with no usable address gets no
@@ -820,13 +1276,33 @@ function renderFooter(){
   });
   f.appendChild(el("div", null, "data as of — " + (parts.length ? parts.join("  ·  ") : "no data loaded")));
   var d = el("div");
-  d.style.marginTop = "6px";
-  var a = el("a", null, "Zirqo-Dev/hoodscout-data");
+  d.style.marginTop = "5px";
+  var a = el("a", "flnk", "Zirqo-Dev/hoodscout-data");
   a.href = REPO; a.rel = "noopener";
   d.appendChild(el("span", null, "source: "));
   d.appendChild(a);
   f.appendChild(d);
 }
+
+/* Show logos is a per-viewer convenience, so localStorage is the right home
+   and every access is guarded: it throws in a private window and comes back
+   empty with site data cleared. No file under data/ carries an image URL
+   today, so with it on every token still draws its generated mark. */
+(function(){
+  var b = document.getElementById("logos");
+  function paint(){
+    b.setAttribute("aria-pressed", SHOW_LOGOS ? "true" : "false");
+    b.classList.toggle("on", SHOW_LOGOS);
+    b.querySelector("i").style.background = SHOW_LOGOS ? "var(--accent)" : "var(--faint)";
+  }
+  paint();
+  b.addEventListener("click", function(){
+    SHOW_LOGOS = !SHOW_LOGOS;
+    try { localStorage.setItem("hs.logos", SHOW_LOGOS ? "1" : "0"); } catch(e){}
+    paint();
+    if (TOKENS.length) renderTokens();
+  });
+})();
 
 Promise.all([
   load("data/latest.json"),
@@ -863,7 +1339,21 @@ Promise.all([
   renderNft(nftT, nftD);
   renderAvoid(avoid);
   renderFooter();
+  measureHeader();
 });
+
+/* The table's sticky header row has to sit directly under the sticky page
+   header, whose height depends on how the brand row wraps. Measuring beats
+   guessing a constant: at 390px the row is one line, at 1280px it is also
+   one but a narrower desktop window can wrap it. */
+function measureHeader(){
+  var h = document.querySelector("header");
+  if (!h) return;
+  document.documentElement.style.setProperty(
+    "--hh", Math.round(h.getBoundingClientRect().height) + "px");
+}
+window.addEventListener("resize", measureHeader);
+measureHeader();
 </script>
 </body>
 </html>
