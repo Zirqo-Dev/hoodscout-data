@@ -217,14 +217,45 @@ horizons:  1h   ± 15 min
           24h   ± 2 h
 ```
 
-Output `data/outcomes/2026-10-18/0900.jsonl`, same per-run layout, same
-non-conflicting property.
+**Labels are not committed.** They are derived data: deterministic from the
+log, rebuildable in seconds, and at three horizons per row they came to
+22.8 MB/day — 8.5x the log itself, 684 MB a month — which is a great deal of
+git for something a seed and a log already determine. `scripts/label.py`
+computes them in memory; `--out` dumps them to `.labels/`, which is gitignored.
+Baselines are computed at summary time for the same reason: the draw is
+seeded, so storing it would add bytes and a second thing to keep in sync.
+
+The sketch below shows the shape of one outcome, not a file that exists.
 
 ```json
 {"ts":"2026-10-18T09:00:27…","ca":"0x5b81…","h":"6h",
  "status":"ok","ret_gross":-0.0312,"ret_net_500":-0.0421,"ret_net_5000":-0.0588,
  "t_actual":"2026-10-18T15:02:11…","dt_h":6.03}
 ```
+
+### Thinning, and what n means
+
+A 6h horizon sampled every 15 minutes gives up to 24 overlapping observations
+for every independent one, and reporting those as 24 data points is the most
+common way to turn noise into a finding. So summaries thin the *entry
+snapshots* — every token in a kept snapshot is kept, only the frequency drops:
+
+| horizon | entry snapshots used | on the 686-snapshot replay |
+|---|---|---|
+| 1h | every one | 686 |
+| 6h | one per hour | 346 |
+| 24h | one per 4 hours | 89 |
+
+Thinning is not enough on its own, because the kept snapshots still overlap. So
+every row of a summary carries **`eff_n`**: distinct `(ca, horizon-bucket)`
+cells, which is what survives collapsing the overlap. On the replay, BEST at 6h
+showed 6,418 thinned rows and **1,223** cells — a 5.2x gap, and the second
+number is the one any claim should be read against. Hypotheses therefore set
+`min_eff_n`, not a row count.
+
+Status histograms are computed over the thinned population and never filtered:
+thinning changes how often a token is sampled, never which outcomes are
+counted.
 
 ### Dead and delisted tokens — the part that decides whether any of this is honest
 
@@ -336,13 +367,49 @@ The rules that make it worth anything:
 3. **Status moves one way**, `open → passed | failed | expired`, in a commit
    that names the evaluation's output. `expired` when `stop_by` passes with
    `min_n` unmet; that is a real result about the data rate, not a free pass.
-4. **Nothing is ever deleted from the file.** The denominator is the point: ten
-   hypotheses with one pass is a very different claim from one hypothesis with
-   one pass, and only an append-only registry can tell them apart. Any report
-   states how many were open over the period.
+4. **Nothing is ever deleted from the file.** The denominator is the point, and
+   it is arithmetic rather than etiquette. Test one hypothesis at a 5%
+   threshold and a false pass happens 5% of the time. Test twenty and the
+   chance that at least one passes on noise alone is 1 − 0.95²⁰ ≈ **64%** —
+   so "we found one that worked" is the expected outcome of looking twenty
+   times at nothing. A deleted or unregistered hypothesis shrinks the
+   denominator without shrinking the search, which is the one edit that turns
+   this file from evidence into advertising.
+
+   So: every report states how many hypotheses were open over the period, not
+   just how many passed. Three registered and one passed is a claim worth
+   making. Twenty registered and one passed is a coin landing heads. The file
+   is the only thing that can tell those apart afterwards, and it cannot do it
+   if anything was ever removed.
 5. **A hypothesis that was not registered cannot be reported**, however good it
    looks. Things noticed while looking go in as new hypotheses with a fresh
    watermark, and get tested on data that does not exist yet.
+6. **Every hypothesis records `labeler_version`**, the `git hash-object` of
+   `scripts/label.py` at registration. The arithmetic that produces a number is
+   part of the claim: change the cost model or the thinning and the same rows
+   give a different answer, so a result evaluated under a different labeler is
+   a different result and has to say so.
+
+### Disclosure: the thresholds were not chosen blind
+
+H-0001 to H-0003 were registered at watermark `2026-10-18T13:30:25Z` with a
+`pass_if` and `fail_if` chosen by someone who had **already seen in-sample
+numbers** — both the pre-log backtest over `history.jsonl` and a synthetic
+replay of 43,365 of those rows through this exact labeler. That replay showed,
+among other things, EMERGING at 6h with a −15.65% median against a −4.35%
+baseline, and BEST at 6h with a −2.67% median against −4.17%.
+
+The watermark makes the *evaluation* out of sample: only rows after it count,
+and the replay is a different and earlier period. It does not make the
+*thresholds* blind. A −5.0pp bar set after seeing −15.65% is a bar chosen to be
+clearable, and +1.0pp for H-0001 was likewise picked knowing roughly how big
+the gap was not.
+
+This is recorded rather than fixed because the alternative — thresholds pulled
+from nowhere — is worse, and because the honest response is to read a pass as
+weaker evidence than a pass on a blind threshold would be. Future hypotheses
+about a quantity nobody has measured yet do not carry this caveat, and should
+say so explicitly when they do not.
 
 ---
 

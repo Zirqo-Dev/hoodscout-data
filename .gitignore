@@ -7,3 +7,6 @@ ALERT.txt
 # derived, rebuilt from the tracked JSON/JSONL by scripts/build_db.py
 hoodscout.db
 *.db
+
+# derived: labels are recomputed from data/log/ on demand, never committed
+.labels/
