@@ -554,6 +554,44 @@ def write_history(tokens, now):
         f.write("\n".join(kept) + "\n")
 
 
+def write_log(tokens, now):
+    """One row per token per run, written once and never touched again.
+
+    The evidence layer's raw material. history.jsonl is a 15-day working set
+    the collector reads and prunes; this is the permanent record nothing reads.
+    Ten fields with short keys, because at ~140 rows a run the key names are a
+    material share of the bytes. See docs/EVIDENCE_LAYER.md.
+
+    One file per run rather than a daily partition, for a reason specific to
+    committing data to git: a file appended 96 times costs git 96 blobs, a file
+    written once costs one -- 48x the blob bytes for identical content on disk.
+    The second reason matters more: a per-run filename cannot collide, so
+    unlike history.jsonl this is immune to the Commit-step conflict that failed
+    run #1360.
+
+    Every token is logged, not just the ones above MIN_SCORE_TXNS that reach
+    history.jsonl. Nothing here can be backfilled: a row not written now is
+    gone, and over-capturing is the reversible mistake.
+
+    Returns (path, rows). Raises only to its caller, which swallows it.
+    """
+    rows = [json.dumps({
+        "ts": now.isoformat(), "ca": t["ca"], "tier": t.get("tier"),
+        "rms": t.get("recent_move_score"), "pc": t.get("persist_count"),
+        "price": t["price_usd"], "liq": t["liq_usd"], "fdv": t["fdv_usd"],
+        "txns": t["txns24"], "byr": t["buyers24"],
+    }, separators=(",", ":")) for t in tokens]
+    if not rows:
+        return None, 0
+    # seconds in the name, not just HHMM: two dispatches landed 3m43s apart on
+    # 2026-10-18, and a filename that can repeat is a filename that can conflict
+    path = f"data/log/{now:%Y-%m-%d}/{now:%H%M%S}.jsonl"
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write("\n".join(rows) + "\n")
+    return path, len(rows)
+
+
 def main():
     now = datetime.now(timezone.utc)
     avoid = load_avoid()
@@ -624,6 +662,17 @@ def main():
     json.dump(out, open("data/latest.json", "w"), indent=2)
     json.dump(out, open(f"data/daily/{now:%Y-%m-%d}.json", "w"), indent=2)
     write_history(tokens, now)
+
+    # Last, after every file the pipeline depends on, and swallowed: nothing
+    # reads the log, so a bug in it must not be able to cost a run its data
+    # commit or move a tier. A missing log file is recoverable; a missing
+    # snapshot is not.
+    try:
+        log_path, log_rows = write_log(tokens, now)
+        print(f"log: {log_rows} rows -> {log_path}")
+    except Exception as e:
+        print(f"WARN write_log: {type(e).__name__}: {e}")
+
     bad = [l["ca"][:10] for l in lookups if not l["ok"]]
     print(f"{len(pools)} pools -> {len(tokens)} tokens, "
           f"{len(cands)} candidates, {len(avoided)} avoided")

@@ -82,30 +82,89 @@ add/add and content conflict on files two runs both rewrote. Two runs writing
 `0900.jsonl` and `0915.jsonl` have nothing to collide over. The log is immune
 to the bug that still takes `history.jsonl` down.
 
-The cost is file count: 96/day, ~35,000/year. Mitigation is to roll closed days
-into one file per day on a weekly job (`data/log/2026-10-18.jsonl.gz`), once
-nothing can append to them. That is a separate change and not part of the first
-commit.
+The cost is file count: 96/day, ~35,000/year. Compaction is below.
 
 ### Growth, measured
 
-Built from the 1,252 real rows currently in `history.jsonl`, reduced to the ten
-fields above:
+The implementation logs **every** token, not only the ~50 above
+`MIN_SCORE_TXNS` that reach `history.jsonl`. Nothing here can be backfilled —
+a row not written now is gone — and over-capturing is the reversible mistake.
+It costs about 2.7x on disk. Earlier drafts of this document sized the log on
+the scored set, and those figures were too low; these replace them.
 
-- **209 bytes/row** raw, **35 bytes/row** gzipped (5.9x)
-- 50.1 rows/run (observed range 46–55), 96 runs/day at the current cadence
-- **4,810 rows/day**
+One real run, 141 tokens: **28,017 bytes, 199 B/row**, 8,186 gzipped (3.4x on
+a single file).
 
-| | raw | packed (est. at 5.9x) |
+Gzip of one file understates what git stores, because consecutive runs are
+nearly identical and git deltas them. Measured properly — 27 real snapshots
+committed one run at a time into a scratch repo, then `git gc --aggressive`:
+
+| | on disk | in the pack | per run |
+|---|---|---|---|
+| scored set (measured) | 0.29 MB | **0.07 MB** | **2.8 KB** |
+
+| | raw/day | packed/day | packed/30d | packed/year |
+|---|---|---|---|---|
+| scored set (measured) | 1.00 MB | 0.27 MB | 8.0 MB | **97 MB** |
+| all tokens (estimated) | 2.69 MB | ~0.3–0.7 MB | 8–20 MB | **100–260 MB** |
+
+The all-tokens row is a **range, not a measurement**. The simulation could only
+produce extra rows by duplicating real ones, which git deltas away perfectly
+and would have flattered the result; the true figure is bounded below by the
+measured scored-set number and above by scaling it 2.7x with no delta benefit
+at all. Item 3 of this plan is to re-measure it against real runs after 24h,
+and that number replaces this range.
+
+**Baseline for that re-measurement, taken 2026-10-18 before the log existed:**
+a full (non-shallow) clone of `Zirqo-Dev/hoodscout-data` reports
+`size-pack: 48.95 MiB`, 14,766 objects, 2,392 commits, 50 MB `.git`. The
+working checkout's 10.24 MiB is a shallow clone and understates the real repo
+by about 5x — any size comparison has to use a full clone.
+
+So a year of log adds somewhere between a doubling and a sixfold increase of
+today's pack. That is the price of being able to answer "did this ever work",
+and it is the reason compaction is designed now rather than later.
+
+### Compaction
+
+Per-run files are optimal for *writing* and bad for *reading*: 96 files a day,
+~35,000 a year, and a labeler that wants a week has to open 672 of them.
+
+**Nightly merge, `scripts/compact_log.py`, on its own schedule.** For every day
+directory older than the current UTC day — so nothing can still be appending —
+concatenate its files in filename order into `data/log/YYYY-MM-DD.jsonl.gz`,
+verify the line count matches the sum of the parts, commit that, and only then
+delete the directory.
+
+- **Separate commit from the delete.** Write and verify the archive in one
+  commit, remove the directory in the next. A crash between them leaves
+  duplicate data, which is recoverable; the other order loses it.
+- **Never touches today.** A run landing at 23:59 must not race the compactor.
+- **Gzip, not plain.** At 3.4x on a single file and better across a day, a day
+  becomes a few hundred KB.
+- **Idempotent.** Re-running over an already-compacted day is a no-op.
+- The pack cost is already paid — compaction frees working-tree inodes and
+  makes reads cheap; it does not shrink history, because git keeps the
+  per-run blobs forever. That is fine: they are small and they are the record.
+
+Not in the first commit. The log is useful from the first run; compaction only
+matters once there are thousands of files.
+
+### Who reads the log
+
+| reader | reads | writes |
 |---|---|---|
-| per run | 10 KB | 2 KB |
-| per day | 1.01 MB | 0.17 MB |
-| per 30 days | 30.2 MB | 5.1 MB |
-| per year | 367 MB | 62 MB |
+| `collect.py` | **never** | one file per run |
+| `compact_log.py` | closed day directories | one archive per day |
+| `label.py` (3b) | log + archives | `data/outcomes/` |
+| hypothesis evaluators (3c) | outcomes, filtered by `log_watermark` | a result, never the log |
+| people, ad hoc | everything | nothing |
+| the dashboard | **never** | — |
 
-The repo's pack is currently 10.24 MiB with a 30 MB `.git`. A year of log adds
-roughly 60 MB packed. That is real but not alarming, and it is the price of
-being able to answer "did this ever work".
+The one rule that matters: **nothing that writes the log may read it, and
+nothing that reads it may feed back into a tier or a score.** The moment
+`classify()` reads the log, the log stops being evidence and becomes an input,
+and the next forward test has nothing independent to check against.
 
 ### Interaction with `history.jsonl`
 
@@ -426,6 +485,36 @@ token cost, so the cadence question answers itself the same way as before:
   pathological response cannot spend the month in a single call.
 - `cost_usd` is xAI's number, not the invoice. Reconcile against the real bill
   in week one.
+
+### Kill conditions
+
+Written before the pilot runs, so that abandoning it is a decision that was
+already made rather than an argument had later. **Any one of these ends the
+pilot**; it does not trigger a workaround.
+
+Each has a check that can be computed from the stored rows, so none of them
+depends on anyone noticing.
+
+| # | condition | why it is fatal |
+|---|---|---|
+| 1 | **Derived post times disagree with the model's `created_at` by more than an hour** on run one | the Snowflake epoch constant is wrong, so every `first_mention_ts` is silently wrong. Stop before storing a second row |
+| 2 | **Zero posts for 20/20 tokens on three consecutive runs** | searching for a bare contract address does not retrieve. The premise is false and no amount of tuning fixes it |
+| 3 | **Over 80% of searches return the 10-post ceiling** | the measure is saturated, every token looks identical, and it cannot discriminate |
+| 4 | **Over 20% of model-reported posts are absent from the citation list** | the model is inventing posts faster than citation-filtering removes them |
+| 5 | **Monthly `cost_usd` reaches the cap** | already designed to fail closed; the pilot stops for the month, not "just this once" |
+| 6 | **One run costs more than 4x the median run** | something is looping or fetching far more than intended. Stop and read it before the next run |
+| 7 | **Over half the pilot's tokens are older than 30 days** | first-mention is unanswerable for most of the population, so the pilot cannot address its own question |
+| 8 | **Any first-mention traces back to this project's own dashboard or repo** | the measurement is measuring itself, and nothing separates the two afterwards |
+| 9 | **Anything outside `attention.py` reads the attention data** before a 3c hypothesis covering it is registered | the signal has become an input without ever being tested; that is the failure mode this whole document exists to prevent |
+| 10 | **Six weeks with no registered hypothesis reaching `min_n`** | the data rate is too low to answer anything. Retire it and say so |
+
+Conditions 1–4 are about whether the data means anything. 5–6 are about money.
+7–8 are about whether the question is answerable at all. 9–10 are about
+discipline, and 9 is the one most likely to be violated quietly.
+
+A kill is recorded in `docs/hypotheses.jsonl` as an `expired` entry with the
+condition that fired, the same as any other result. "We stopped because it was
+not working" is a finding and belongs in the record.
 
 ### The secret
 
