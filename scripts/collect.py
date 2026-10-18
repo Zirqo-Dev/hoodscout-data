@@ -265,6 +265,19 @@ def buyer_rate_rising(ca, hist, window=5):
     return all(b > a for a, b in zip(vals, vals[1:]))
 
 
+def last_byr24(ca, hist, n=5):
+    """The last n byr24 prints for a CA, oldest first.
+
+    Published alongside persist_count so the two gates that depend on how much
+    history exists can be read off latest.json. buyer_rate_rising tests exactly
+    this list and, below `window` prints, tests fewer increases rather than
+    failing -- so a thin history makes the EMERGING gate easier to pass, not
+    harder, and nothing in the tier alone shows that."""
+    rows = sorted([r for r in hist if r.get("ca") == ca and r.get("byr24") is not None],
+                  key=lambda r: r.get("ts") or "")[-n:]
+    return [r["byr24"] for r in rows]
+
+
 def classify(t, avoid, persist, hist):
     """Assign exactly one tier. Nothing with a real signal is dropped."""
     if t["ca"] in avoid:
@@ -479,7 +492,12 @@ def main():
         t["tier"] = classify(t, avoid, persist, hist)
         t["watch_reason"] = (watch_reason(t, persist, hist)
                              if t["tier"] == "WATCH" else None)
-        # additive only: nothing below reads back into tier or screen_score
+        # additive only: nothing below reads back into tier or screen_score.
+        # persist_count is the exact number classify() compared against
+        # PERSIST_MIN; it was a local and so invisible in the output, which
+        # made "why is this BEST" unanswerable from the published files.
+        t["persist_count"] = persist.get(t["ca"], 0)
+        t["last5_byr24"] = last_byr24(t["ca"], hist)
         rm, basis, accel = recent_move(t, hist)
         t["recent_move_score"], t["recent_move_basis"] = rm, basis
         t["recent_move_accel_pct"] = accel   # age-guarded; discover's is not

@@ -1,7 +1,7 @@
 name: stocks
-# No schedule: the scheduled collection runs inside collect.yml on its 30-min
-# cadence. This workflow is the on-demand path -- ticker verification, and a
-# manual stocks run when one is wanted off-cycle.
+# No schedule: the scheduled collection runs inside collect.yml, on its
+# :07/:22/:37/:52 cadence. This workflow is the on-demand path -- ticker
+# verification, and a manual stocks run when one is wanted off-cycle.
 on:
   workflow_dispatch:
     inputs:

@@ -6,11 +6,18 @@ this repo, so every snapshot is a plain file with a git history behind it.
 
 | Pipeline | Script | Schedule | Source |
 |---|---|---|---|
-| Liquidity pools | `scripts/collect.py` | every 30 min | GeckoTerminal |
-| Stock tokens | `scripts/stocks.py` | every 15 min | GeckoTerminal + chain RPC |
-| NFT collections | `scripts/nft.py` | 13:00 and 21:00 UTC | OpenSea |
+| Liquidity pools | `scripts/collect.py` | `:07 :22 :37 :52` every hour | GeckoTerminal |
+| Stock tokens | `scripts/stocks.py` | same run as the pools | GeckoTerminal + chain RPC |
+| NFT collections | `scripts/nft.py` | 13:17 and 21:17 UTC | OpenSea |
 
-All three also accept `workflow_dispatch` for an on-demand run.
+Two workflows carry the schedules: `collect.yml` runs the pools and then the
+stock tokens in the same job, and `nft.yml` runs the NFT pipeline with
+`--with-discover`. `stocks.yml` has no schedule of its own -- it is the
+on-demand path for a ticker check or an off-cycle stocks run. All three accept
+`workflow_dispatch`.
+
+The quarter-hour offsets are deliberate: on the round minutes GitHub was
+dropping scheduled fires, so nothing here lands on `:00`.
 
 ## Dashboard
 
@@ -135,8 +142,10 @@ Discovery output never feeds `WATCHLIST` automatically.
 
 ### Modes
 
-Both extra modes are `workflow_dispatch` inputs on `nft.yml`, not part of the
-schedule.
+Discovery runs on the schedule: the scheduled job calls
+`nft.py --with-discover`, so one minted key serves both halves. The two modes
+below are `workflow_dispatch` inputs on `nft.yml` for running either on its
+own.
 
 - `--discover` ranks Robinhood Chain collections by 7-day volume
   (1-day selectable) into `data/nft_discover.json`. It records
