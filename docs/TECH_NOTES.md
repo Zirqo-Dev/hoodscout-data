@@ -25,7 +25,7 @@ stores the delta rather than a new whole-file blob each time.
 wall-clock meaning depends on how many scheduled runs GitHub actually
 delivers. It was set assuming `*/15` delivers ~96/day, but observed delivery
 at `*/30` was 22.9 snapshots/day against a nominal 48 — under half, and the
-2026-10-18 measurement above is worse still. If `*/15` lands nearer 46/day
+2026-10-18 measurement below is worse still. If `*/15` lands nearer 46/day
 than 96, the window is roughly 2x too short in time terms. Same for
 `HISTORY_DAYS = 15`, which was halved to hold file size flat on the
 assumption of doubled delivery.
@@ -282,25 +282,31 @@ tests it, Pete approves it, and it is registered in `data/hypotheses.jsonl`
 with its own pass, fail and inconclusive conditions. Anything that changes a
 threshold without passing through that step is a bug, not a feature.
 
-## Deferred and rejected: DexScreener cross-check, boosts, DexPaprika
+## Deferred: DexScreener cross-check, boosts, DexPaprika
 
-Three adjacent data sources, all turned down for the same reason.
+Three adjacent data sources, none of them adopted. The cross-check and the
+backup are deferred for the same reason; boosts is deferred with a rule
+attached.
 
 - **DexScreener as a price/liquidity cross-check** — deferred. It would be a
   second opinion on numbers GeckoTerminal already gives us, and the evidence
   layer's hypotheses are registered against the GeckoTerminal series. Swapping
   or blending sources mid-stream changes what the registered numbers mean.
   Worth doing as a *separate* logged series if ever, never as a replacement.
-- **DexScreener boosts as a "promoted" flag** — **rejected**, and this is the
-  important one. Boosts are paid placement. A flag derived from them is a flag
-  for "someone spent money on visibility", which is exactly the kind of signal
-  that contaminates a forward-return test: it correlates with promotion
-  campaigns, and a promotion campaign is a cause of the price move being
-  measured, not an independent observation of it. Adding it would make any
-  hypothesis using it untestable rather than merely weak.
-  NOTE: Board card HS-48 currently says Parked pending the Layer 2 decision,
-  which conflicts with this REJECTED. Pete to resolve; do not edit this text
-  until he does.
+- **DexScreener boosts as a "promoted" flag** — **deferred to the Layer 2
+  go/no-go**, and this is the one with a rule attached. Boosts are paid
+  placement, so a flag derived from them is a flag for "someone spent money on
+  visibility". Used **as a predictor** that contaminates a forward-return test:
+  it correlates with promotion campaigns, and a promotion campaign is a cause
+  of the price move being measured, not an independent observation of it. A
+  hypothesis built on it that way would be untestable rather than merely weak.
+  Recording it is a different act from acting on it, so the rule is precise:
+  boosts may be **logged as a separate raw annotation** — for example, to
+  separate paid attention from organic attention in Layer 2 — and must **never
+  feed tier logic or act as a signal** unless a pre-registered hypothesis that
+  Pete approved says so. The risk is using the flag as a predictor, not writing
+  it down.
+  Decided 2026-10-19 (HS-48): deferred, log-only.
 - **DexPaprika as a backup source** — deferred for the same reason as the
   cross-check, plus an unverified cost and coverage story for Robinhood Chain.
   A backup that returns slightly different numbers is not a backup.
