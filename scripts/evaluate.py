@@ -252,6 +252,15 @@ def weekly(rows, metric, arms_fn):
 
 
 def evaluate(h, labels, since):
+    # A null log_watermark means the hypothesis has not started. Its
+    # population is "rows after the watermark", so without one there is no
+    # defined start and nothing to evaluate. H-0004 and H-0005 are
+    # registered this way on purpose, waiting for the first holders row.
+    # Checked against the registry rather than against `since`, so that
+    # --since cannot invent a start date for a hypothesis that has none.
+    if h.get("log_watermark") is None:
+        return {"id": h["id"], "status": "not started", "rows": 0,
+                "no_watermark": True}
     rows = [o for o in labels
             if o["h"] == h["horizon"] and o["ts"] > since]
     rule = RULES.get(h["id"])
@@ -332,7 +341,8 @@ def render(results, meta):
           f"{meta['span']} |",
           f"| baseline pile | `{meta['pile']}` |",
           f"| registry | {meta['n_hyp']} hypotheses, "
-          f"{meta['n_open']} not yet decided |", ""]
+          f"{meta['n_open']} not yet decided, "
+          f"{meta['n_unstarted']} not started |", ""]
     if meta["mismatch"]:
         L += ["> **Labeler mismatch.** " + meta["mismatch"], ""]
     if meta["since_override"]:
@@ -358,6 +368,14 @@ def render(results, meta):
         h = meta["by_id"][r["id"]]
         L += [f"## {r['id']} — `{r['status']}`", "",
               f"> {h['statement']}", ""]
+        if r.get("no_watermark"):
+            L += ["**Not started.** `log_watermark` is null in "
+                  "`data/hypotheses.jsonl`, so this hypothesis has no "
+                  "population yet and nothing was evaluated against it. It "
+                  "takes the `ts` of its first row when one arrives, in a "
+                  "commit a person makes. `--since` does not override this: "
+                  "a start date it has never had is not one to borrow.", ""]
+            continue
         if "gates" not in r:
             L += [f"No rule implemented in `scripts/evaluate.py` for {r['id']}.",
                   ""]
@@ -488,6 +506,8 @@ def main(a):
             "span": f"{min(all_ts)[:19]} .. {max(all_ts)[:19]}",
             "pile": a.pile, "n_hyp": len(hyps),
             "n_open": sum(1 for h in hyps if h["status"] == "registered"),
+            "n_unstarted": sum(1 for h in hyps
+                               if h.get("log_watermark") is None),
             "mismatch": mismatch, "since_override": a.since,
             "by_id": {h["id"]: h for h in hyps}}
 
