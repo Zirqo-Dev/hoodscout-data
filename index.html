@@ -637,9 +637,11 @@ var SHORTLISTS = [
      return (a === "NEW" || a === "YOUNG") && (d === "OK" || d === "DEEP")
          && persistFull(t); }},
   {id: "heating", label: "Heating up",
-   why: "Moved up on the recent-move score.",
-   test: function(t){ var h = bandWord(t,"heat");
-                      return h === "HOT" || h === "WARM"; }},
+   why: "Moved up on the recent-move score, and deep enough to trade against: "
+      + "DEPTH must be OK or DEEP.",
+   test: function(t){
+     var h = bandWord(t,"heat"), d = bandWord(t,"depth");
+     return (h === "HOT" || h === "WARM") && (d === "OK" || d === "DEEP"); }},
   {id: "cooling", label: "Cooling",
    why: "Moved down on the recent-move score.",
    test: function(t){ var h = bandWord(t,"heat");
@@ -1141,6 +1143,10 @@ function whyLine(t){
 function gapsBadge(t){
   var v = t.persist_count;
   if (v === null || v === undefined || PMAX <= 0 || Number(v) >= PMAX) return null;
+  /* 0 is not a gap, it is a token with no history at all -- almost always a
+     brand-new pool, which the AGE chip already says. Badging those put the
+     warning on 92 of 135 rows and buried the 9 that have real gaps. */
+  if (Number(v) === 0) return null;
   var b = el("span", "bd warnb", "gaps " + num(v) + "/" + PMAX);
   b.title = "healthy in " + num(v) + " of the last " + PMAX
           + " snapshots (persist_count)";
