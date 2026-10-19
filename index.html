@@ -284,7 +284,27 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
 .nchip.ne{color:var(--n-event)}
 .nchip.ns{color:var(--n-standout)}
 .nchip.nx{color:var(--n-fact)}
-.bds{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+/* 8px between wrapped lines, not 4. A chip's 40px hit area reaches 11.75px
+   past its own 16.5px box, so two wrapped lines need more than 3.5px between
+   them or the lower chip's target swallows the centre of the one above it --
+   measured at 360px, where one row wraps and two chips became unreachable. */
+.bds{display:flex;gap:8px 4px;flex-wrap:wrap;align-items:center}
+/* The liquidity cell stacks its two figures, and both line-heights are
+   pinned to 1 with no gap: the default 16.7px leading on the liquidity
+   number alone made the row's first line 28.7px where it had been 18. The
+   FDV line is deliberately quieter than the number above it, and takes its
+   40px finger target from the same transparent ::after the notable chips
+   use, so it costs no height. */
+.liqc{display:flex;flex-direction:column;align-items:flex-end;gap:0}
+.liqc .n{line-height:1}
+.fdvb{position:relative;cursor:pointer;background:none;border:0;padding:0;
+  color:var(--faint);font:9.5px/1 var(--mono);font-variant-numeric:tabular-nums;
+  white-space:nowrap}
+.fdvb::after{content:"";position:absolute;left:-4px;right:-4px;top:50%;
+  transform:translateY(-50%);height:40px}
+.fdvb:hover{color:var(--text)}
+td.c-fdv .fdvb{font-size:11.5px;color:var(--muted)}
+td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
 
 /* ---- chip popover ---- */
 .pop{position:absolute;z-index:60;background:var(--surface);
@@ -366,13 +386,14 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
   table.tk td.c-ind{flex:1 1 100%;order:5;display:flex;flex-direction:column;
     align-items:flex-start;gap:3px}
   table.tk td.c-tier,table.tk td.c-age,table.tk td.c-depth,table.tk td.c-heat,
-  table.tk td.c-buy,table.tk td.c-txns,
+  table.tk td.c-buy,table.tk td.c-txns,table.tk td.c-fdv,
   table.tk td.c-notable{display:none}
   table.tk tr.x>td{padding:6px 2px 10px}
 }
 @media (min-width:1000px){
   table.tk td.c-ind{display:none}
   .mo{display:none}
+  .fdv-m{display:none}            /* the desktop has its own FDV column */
 }
 .mo{font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;
   margin-right:2px}
@@ -583,6 +604,10 @@ var BANDS = {
     key: "age", label: "Age",
     plain: "How long this token's oldest pool has existed.",
     fields: ["age_days"],
+    /* The chip prints the number; the three bands below still colour the
+       ladder and are still what the popover explains. A word that was one of
+       three said less than the figure it stood for. */
+    display: function(t){ return ageLabel(t.age_days); },
     missing: {word: "–", why: "no pool creation time reported"},
     bands: [
       {word: "NEW",     cvar: "--b-age1", rule: "age_days < 3",
@@ -686,8 +711,20 @@ var NOTE_KINDS = {
                            + "the board on this measure. Unusual, not good "
                            + "or bad: on the collected history, big recent "
                            + "moves tended to come before worse 4-8h returns."},
-  fact:     {cls: "nx", what: "A plain fact about the token, always shown."}
+  /* not a chip kind: the shared popover uses it for the FDV figure */
+  info:     {cls: "nx", what: "A figure taken straight from the collector's "
+                           + "snapshot, with no judgement attached."}
 };
+
+/* latest.json carries no market cap field of any kind -- fdv_usd is the only
+   valuation figure in it, on 135 of 135 tokens -- so this is labelled FDV and
+   never "market cap". Those are different numbers whenever a supply is not
+   fully circulating, which on this chain is most of the time. */
+var FDV_WHY = "Fully diluted value: the price multiplied by the whole supply, "
+  + "not just the part trading today (fdv_usd). It is not market cap, and for "
+  + "the stock tokens it can mislead badly -- the supply figure is the "
+  + "token's own, which has no particular relationship to the shares behind "
+  + "it. Read it next to liquidity rather than on its own.";
 
 /* Percentile metrics for the standout chips. `get` returns null when the
    token cannot be scored, and those rows are left out of the ranking rather
@@ -1138,6 +1175,7 @@ var COLS = [
   {k:"chg_h6",      t:"6h",     r:1,    sort:function(a){ return a.chg_h6; }},
   {k:"chg_h24",     t:"24h",    r:1,    sort:function(a){ return a.chg_h24; }},
   {k:"liq_usd",     t:"Liq",    r:1,    sort:function(a){ return a.liq_usd; }},
+  {k:"fdv_usd",     t:"FDV",    r:1,    sort:function(a){ return a.fdv_usd; }},
   {k:"txns24",      t:"Txns",   r:1,    sort:function(a){ return a.txns24; }},
   /* was Venue. The venue and fee moved into the expanded row -- they are
      reference, not something to scan a list by -- and this column now shows
@@ -1293,28 +1331,43 @@ function standoutChips(t){
   out.sort(function(a, b){ return b.extreme - a.extreme; });
   return out.slice(0, NOTE_MAX_STANDOUTS);
 }
-function ageChip(t){
-  var a = t.age_days;
-  return {kind: "fact",
-    text: (a === null || a === undefined) ? "AGE N/A" : num(a, 1) + "D",
-    why: (a === null || a === undefined)
-       ? "No pool creation time was reported for this token (age_days)."
-       : "The oldest pool seen for this token is " + num(a, 1)
-       + " days old (age_days)."};
-}
+/* No age chip here any more: the age signal on line 2 prints the number, and
+   repeating it was the only thing many rows had to say. A row with nothing
+   notable now returns an empty list, and notableEl renders no line at all
+   rather than an empty one, so those rows are shorter. */
 function notableFor(t){
   var flags = flagChips(t);
-  var age = ageChip(t);
-  var left = Math.max(0, NOTE_BUDGET - 1 - flags.length);   /* 1 for the age */
+  var left = Math.max(0, NOTE_BUDGET - flags.length);
   var rest = [];
   var ev = left > 0 ? eventChip(t) : null;
   if (ev){ rest.push(ev); left--; }
   if (left > 0) rest = rest.concat(standoutChips(t).slice(0, left));
-  return flags.concat(rest, [age]);
+  return flags.concat(rest);
 }
+/* Same figure in both layouts: a sub-line under the liquidity number on the
+   phone, its own sortable column on the desktop. Both open the same popover,
+   and a missing value reads as a dash rather than a zero. */
+function fdvEl(t, cls){
+  var v = t.fdv_usd;
+  var b = el("button", "fdvb" + (cls ? " " + cls : ""));
+  b.type = "button";
+  b.textContent = (v === null || v === undefined || isNaN(v))
+    ? "\u2013" : (cls === "fdv-m" ? "FDV " : "") + usd(v);
+  b.setAttribute("aria-label", "FDV "
+    + (v === null || v === undefined ? "not reported" : usd(v)));
+  b.addEventListener("click", function(ev){
+    ev.stopPropagation();
+    showNotePop(b, {kind: "info", text: "FDV "
+      + (v === null || v === undefined ? "\u2013" : usd(v)), why: FDV_WHY});
+  });
+  return b;
+}
+
 function notableEl(t){
+  var list = notableFor(t);
+  if (!list.length) return null;
   var b = el("div", "bds");
-  notableFor(t).forEach(function(c){
+  list.forEach(function(c){
     var x = el("button", "nchip " + NOTE_KINDS[c.kind].cls, c.text);
     x.type = "button";
     x.setAttribute("aria-label", c.kind + ": " + c.text);
@@ -1434,6 +1487,15 @@ function dupCount(t){
 /* one place that decides which layout is live, so the SVG widths and the CSS
    breakpoint cannot disagree */
 function MOBILE(){ return window.matchMedia("(max-width:999px)").matches; }
+/* "7H" under a day, "8.3D" under ten days, "49D" after that. One decimal
+   only where it carries information: at 49 days the tenth is noise. */
+function ageLabel(a){
+  if (a === null || a === undefined || isNaN(a)) return "\u2013";
+  var d = Number(a);
+  if (d < 1) return Math.max(1, Math.round(d * 24)) + "H";
+  if (d < 10) return num(d, 1) + "D";
+  return num(Math.round(d)) + "D";
+}
 function sixTotal(t){
   if (t.buys6 === null || t.buys6 === undefined) return null;
   if (t.sells6 === null || t.sells6 === undefined) return null;
@@ -1499,7 +1561,7 @@ function chipFor(t, key){
     shape = (key === "buyers") ? splitSvg(null)
                                : ladderSvg(-1, g.bands.length, "var(--faint)");
   } else {
-    word = b.short || b.word;
+    word = g.display ? g.display(t) : (b.short || b.word);
     color = "var(" + b.cvar + ")";
     if (key === "buyers"){
       shape = splitSvg(buyShare(t));
@@ -1515,7 +1577,8 @@ function chipFor(t, key){
   var w = el("span", "cw", word);
   w.style.color = color;
   btn.appendChild(w);
-  btn.setAttribute("aria-label", g.label + ": " + word);
+  btn.setAttribute("aria-label",
+    g.label + ": " + word + (g.display && b ? " (" + b.word + ")" : ""));
   btn.addEventListener("click", function(ev){
     ev.stopPropagation();
     showChipPop(btn, t, key);
@@ -1698,9 +1761,15 @@ function renderTokens(){
     cell("c-buy", chipFor(t, "buyers"));
     cell("c-h6", chgEl(t.chg_h6), 1);
     cell("c-h24", chgEl(t.chg_h24), 1);
-    cell("c-liq", el("span", "n", usd(t.liq_usd)), 1);
+    /* the phone gets FDV as a second line inside this cell; the desktop gets
+       the column below, and each hides the other's copy */
+    var liq = el("div", "liqc");
+    liq.appendChild(el("span", "n", usd(t.liq_usd)));
+    liq.appendChild(fdvEl(t, "fdv-m"));
+    cell("c-liq", liq, 1);
+    cell("c-fdv", fdvEl(t), 1);
     cell("c-txns", el("span", "n", num(t.txns24)), 1);
-    cell("c-notable", notableEl(t));
+    cell("c-notable", notableEl(t));          /* null when nothing is notable */
 
     /* two sub-lines, not one wrapping blob: the four chips get a line to
        themselves so they read as a row of signals, and the badges follow. */
@@ -1709,7 +1778,8 @@ function renderTokens(){
     line1.appendChild(tierPill(t.tier));
     BAND_ORDER.forEach(function(k){ line1.appendChild(chipFor(t, k)); });
     ind.appendChild(line1);
-    ind.appendChild(notableEl(t));
+    var note = notableEl(t);
+    if (note) ind.appendChild(note);
 
     var xr = el("tr", "x");
     var xc = el("td");
@@ -1778,9 +1848,10 @@ function renderChipHelp(){
   mount.textContent = "";
   mount.appendChild(el("p", "sub-h", "What these chips mean"));
   mount.appendChild(el("p", "note",
-    "Four chips on every row. Each is one word, a shape showing where that "
-    + "word sits in its scale, and a colour. Tap a chip on a row for the rule "
-    + "behind it."));
+    "Four chips on every row: a shape showing where the token sits in that "
+    + "scale, a label, and a colour. Three of them label a band; the age "
+    + "chip prints the age itself and the bands below are what its popover "
+    + "explains. Tap a chip on a row for the rule behind it."));
 
   var wrap = el("div", "scroll");
   var tb = el("table", "g");
@@ -1823,8 +1894,9 @@ function renderChipHelp(){
 
   mount.appendChild(el("p", "sub-h", "Line 3 = what's notable"));
   mount.appendChild(el("p", "note",
-    "Under the chips, each row shows at most three chips saying what stands "
-    + "out about that token, in this order. Tap any of them for the reason."));
+    "Under the chips, a row shows up to three chips saying what stands out "
+    + "about that token, in this order. Tap any of them for the reason. A "
+    + "row with nothing notable shows no third line at all."));
   var nl = el("div", "gloss");
   [["Flags",
     "Red outline. Warnings the collector raised: liquidity anomaly, "
@@ -1843,8 +1915,12 @@ function renderChipHelp(){
     + "Purple means unusual, not good: on the collected history big recent "
     + "moves tended to come before worse 4-8 h returns."],
    ["Age",
-    "Grey outline. The age of the oldest pool, always shown, always last. A "
-    + "token with nothing else notable shows only this."]
+    "Not a chip. The age signal on line 2 prints the figure itself -- 7H "
+    + "under a day, 8.3D under ten days, 49D after that -- and its three "
+    + "bands still colour the ladder and are what its popover explains."],
+   ["FDV",
+    "Under the liquidity figure on a phone, its own sortable column on a "
+    + "desktop. " + FDV_WHY]
   ].forEach(function(r){
     var d = el("div");
     d.appendChild(el("b", null, r[0]));
