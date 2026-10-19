@@ -208,8 +208,14 @@ tr.r.op td{background:var(--surface2)}
 .why{font-size:11px;line-height:1.5;color:var(--muted);
   border-left:2px solid var(--line);padding-left:8px;margin:0 0 8px}
 .why div + div{margin-top:3px}
-.pill{font:600 9px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;
-  padding:3px 5px;border-radius:3px;border:1px solid currentColor;white-space:nowrap}
+/* The tier pill and the line-3 notable chips are the same object at
+   different colours, so their geometry lives in one place. Both read these
+   four properties and neither hard-codes a size; the row-scoped override in
+   the mobile block below moves both at once. */
+:root{--pill-f:9px; --pill-ls:.06em; --pill-pad:3px 5px; --pill-r:3px}
+.pill{font:600 var(--pill-f)/1 var(--sans);letter-spacing:var(--pill-ls);
+  text-transform:uppercase;padding:var(--pill-pad);border-radius:var(--pill-r);
+  border:1px solid currentColor;white-space:nowrap}
 .bd{font:600 9px/1 var(--sans);letter-spacing:.04em;padding:3px 5px;border-radius:3px;
   background:var(--surface2);border:1px solid var(--line);color:var(--muted);
   white-space:nowrap;text-transform:uppercase}
@@ -240,9 +246,15 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
    A chip is a shape, then a word, then colour -- in that order of
    importance. Dropping the colour leaves the chip readable, which is the
    test that matters. */
-.chip{display:inline-flex;align-items:center;gap:4px;cursor:pointer;
-  background:none;border:0;border-radius:4px;padding:11px 3px;margin:-11px 0;
-  min-height:40px;font:inherit;line-height:1;white-space:nowrap}
+/* z-index, because the row is tight: the notable chips below draw at pill
+   size but keep a 40px finger target, which overhangs upward into this line.
+   Without this the overlap went to whichever painted last -- line 3 -- and a
+   tap on VETERAN opened the age chip's popover instead. Line 2 wins the
+   contested band; both lines' own centres stay reachable, which the
+   elementFromPoint check asserts. */
+.chip{position:relative;z-index:1;display:inline-flex;align-items:center;gap:4px;
+  cursor:pointer;background:none;border:0;border-radius:4px;padding:11px 3px;
+  margin:-11px 0;min-height:40px;font:inherit;line-height:1;white-space:nowrap}
 .chip:hover{background:var(--surface2)}
 .chip .cw{font:600 9.5px var(--sans);letter-spacing:.05em;text-transform:uppercase}
 @media (max-width:999px){
@@ -252,26 +264,26 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
 /* the chips own one line; the badges take the next */
 .ind-chips{display:flex;align-items:center;gap:3px 5px;flex-wrap:nowrap;
   width:100%;overflow:hidden}
-.ind-chips .pill{padding:3px 4px;font-size:8.5px}
 
 /* ---- line 3: notable chips ----
-   Outline only, so the row stays quiet; the colour of the outline is the
-   kind. 11px is the floor, and the vertical padding carries each chip to a
-   40px tap target without making the row taller than the text needs. */
+   Outline only, so the row stays quiet, and the same geometry as .pill down
+   to the border colour following the text: beside the tier pill on line 2
+   the only difference is which colour it is. The chip draws at that size;
+   the finger still gets 40px from a transparent pseudo-element that costs no
+   layout, centred on the chip and exactly as wide, so it never reaches a
+   neighbour sideways. */
 .nchip{position:relative;display:inline-flex;align-items:center;cursor:pointer;
-  background:none;border:1px solid var(--line);border-radius:4px;padding:4px 6px;
-  min-height:22px;font:600 11px/1 var(--sans);letter-spacing:.03em;
-  white-space:nowrap;color:var(--muted)}
-/* The chip draws 22px so the row stays short; the finger gets 40px from a
-   transparent pseudo-element that costs no layout. It is centred on the chip
-   and exactly as wide, so it never reaches a neighbour sideways. */
+  background:none;font:600 var(--pill-f)/1 var(--sans);
+  letter-spacing:var(--pill-ls);text-transform:uppercase;padding:var(--pill-pad);
+  border-radius:var(--pill-r);border:1px solid currentColor;white-space:nowrap;
+  color:var(--muted)}
 .nchip::after{content:"";position:absolute;left:0;right:0;top:50%;
   transform:translateY(-50%);height:40px}
 .nchip:hover{background:var(--surface2)}
-.nchip.nf{border-color:var(--n-flag);color:var(--n-flag)}
-.nchip.ne{border-color:var(--n-event);color:var(--n-event)}
-.nchip.ns{border-color:var(--n-standout);color:var(--n-standout)}
-.nchip.nx{border-color:var(--line);color:var(--n-fact)}
+.nchip.nf{color:var(--n-flag)}
+.nchip.ne{color:var(--n-event)}
+.nchip.ns{color:var(--n-standout)}
+.nchip.nx{color:var(--n-fact)}
 .bds{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
 
 /* ---- chip popover ---- */
@@ -343,7 +355,10 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
   table.tk tr.x{display:none}
   table.tk tr.x.on{display:block}
   table.tk tr.r{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;
-    padding:7px 2px;border-bottom:1px solid var(--line);min-height:52px}
+    padding:7px 2px;border-bottom:1px solid var(--line);min-height:52px;
+    /* scoped to the row, not :root, so the how-to card and the what-changed
+       strip keep their full-size pills */
+    --pill-f:8.5px; --pill-pad:3px 4px}
   table.tk td{border:0;padding:0}
   table.tk td.c-id{flex:1 1 40%;min-width:0;order:1}
   table.tk td.c-h6{order:2} table.tk td.c-h24{order:3}
