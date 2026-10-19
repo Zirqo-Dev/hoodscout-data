@@ -19,6 +19,15 @@
      already associates with a tier keep meaning the same thing */
   --t-best:var(--ok); --t-emerging:var(--warn); --t-watch:#769fcd;
   --t-spec:var(--neutral); --t-dead:#8b5a56; --t-avoid:var(--bad);
+  /* Band palettes. Deliberately not green/red: on this page green and red
+     already mean price up and price down, and none of these bands is a
+     verdict. AGE and DEPTH are sequential ramps, HEAT is a blue-to-orange
+     temperature scale, BUYERS is one hue against a muted counterpart. */
+  --b-age1:#a78bfa; --b-age2:#7f8cf0; --b-age3:#6b7686;
+  --b-dep1:#6b7280; --b-dep2:#2f9aa3; --b-dep3:#14b8a6;
+  --b-cold:#5b8fd6; --b-cool:#7ba3c9; --b-flat:#8a95a6;
+  --b-warm:#d59a4e; --b-hot:#e2703a;
+  --b-buy:#4c9aff; --b-sell:#8a95a6;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --r:6px;
@@ -31,6 +40,11 @@
     --accent:#0b62d6;
     --ok:#15803d; --warn:#8a5b09; --bad:#c62a22; --neutral:#5f6a76;
     --t-watch:#2f5f9e; --t-dead:#8a544f;
+    --b-age1:#6d28d9; --b-age2:#3f4fc4; --b-age3:#4a5566;
+    --b-dep1:#4b5563; --b-dep2:#0f7a82; --b-dep3:#0d8f82;
+    --b-cold:#1f5fab; --b-cool:#3c71a4; --b-flat:#5f6a76;
+    --b-warm:#9a6412; --b-hot:#b24a1c;
+    --b-buy:#0b62d6; --b-sell:#5f6a76;
   }
 }
 *{box-sizing:border-box}
@@ -217,6 +231,80 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
 .copy:hover,.lnk:hover{border-color:var(--accent);color:var(--text)}
 .copy.done{color:var(--ok);border-color:var(--ok)}
 
+/* ---- band chips ----
+   A chip is a shape, then a word, then colour -- in that order of
+   importance. Dropping the colour leaves the chip readable, which is the
+   test that matters. */
+.chip{display:inline-flex;align-items:center;gap:4px;cursor:pointer;
+  background:none;border:0;border-radius:4px;padding:11px 3px;margin:-11px 0;
+  min-height:40px;font:inherit;line-height:1;white-space:nowrap}
+.chip:hover{background:var(--surface2)}
+.chip .cw{font:600 9.5px var(--sans);letter-spacing:.05em;text-transform:uppercase}
+@media (max-width:999px){
+  .chip{padding:11px 1px;gap:3px}
+  .chip .cw{font-size:8.5px;letter-spacing:.03em}
+}
+/* the chips own one line; the badges take the next */
+.ind-chips{display:flex;align-items:center;gap:3px 5px;flex-wrap:nowrap;
+  width:100%;overflow:hidden}
+.ind-chips .pill{padding:3px 4px;font-size:8.5px}
+
+/* ---- chip popover ---- */
+.pop{position:absolute;z-index:60;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r);padding:9px 10px;
+  box-shadow:0 6px 22px rgba(0,0,0,.35);font-size:11px;color:var(--muted)}
+.pop-h{display:flex;align-items:baseline;gap:6px;font:600 10px var(--sans);
+  letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.pop-h b{font:700 12px var(--mono);letter-spacing:0;text-transform:none}
+.pop-p{margin:5px 0 0;line-height:1.45}
+.pop-r{margin:5px 0 0;font:11px var(--mono);color:var(--text)}
+.pop-f{margin:3px 0 0;font:10px var(--mono);color:var(--faint)}
+.pop-all{margin-top:7px;border-top:1px dotted var(--line);padding-top:6px}
+.pop-all > div{display:flex;gap:7px;align-items:baseline;margin-top:3px}
+.pop-w{font:700 9.5px var(--sans);letter-spacing:.05em;flex:0 0 66px}
+.pop-c{font:10px var(--mono);color:var(--faint)}
+.pop-x{margin-top:8px;min-height:40px;width:100%;cursor:pointer;
+  background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
+  color:var(--muted);font:600 11px var(--sans)}
+
+/* ---- shortlists ---- */
+.shorts{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0 0 6px}
+.shorts .lab{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--faint);margin-right:2px}
+.sl{display:inline-flex;align-items:center;gap:5px;cursor:pointer;min-height:40px;
+  background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
+  padding:0 9px;color:var(--muted);font:11px var(--sans)}
+.sl b{font:600 11px var(--mono);font-variant-numeric:tabular-nums}
+.sl.on{border-color:var(--accent);color:var(--text);
+  background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
+
+/* ---- heat grid ---- */
+#heat:empty{display:none}
+.hg-h{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:0 0 5px}
+.hg-h .lab{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--faint)}
+.hg-leg{display:inline-flex;align-items:center;gap:3px;font-size:9.5px;
+  color:var(--faint)}
+.hg-leg i{width:12px;height:8px;border-radius:2px;border:1px solid var(--line);
+  display:inline-block}
+.hg{display:grid;gap:3px;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));
+  margin:0 0 10px}
+.hgt{cursor:pointer;border:1px solid var(--line);border-radius:4px;
+  padding:4px 3px;min-height:40px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:1px;overflow:hidden}
+.hgs{font:600 10px var(--mono);color:var(--text);max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hgv{font:10px var(--mono);font-variant-numeric:tabular-nums;color:var(--text);
+  opacity:.8}
+.hgt:hover{border-color:var(--accent)}
+
+/* ---- glossary ---- */
+.gloss > div{display:flex;gap:8px;align-items:baseline;padding:4px 0;
+  border-bottom:1px dotted var(--line);font-size:11px;color:var(--muted)}
+.gloss > div:last-child{border-bottom:0}
+.gloss b{font:600 11px var(--mono);color:var(--text);flex:0 0 108px}
+.warn-t{color:var(--warn)}
+
 /* ---- mobile: two-line rows ---- */
 /* Mobile keeps every fact the desktop table shows, moved onto a second line
    inside one cell, so nothing is hidden on the phone -- only rearranged. */
@@ -235,10 +323,10 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
   table.tk td.c-id{flex:1 1 40%;min-width:0;order:1}
   table.tk td.c-h6{order:2} table.tk td.c-h24{order:3}
   table.tk td.c-liq{order:4}
-  table.tk td.c-ind{flex:1 1 100%;order:5;display:flex;align-items:center;
-    gap:4px 9px;flex-wrap:wrap}
-  table.tk td.c-tier,table.tk td.c-persist,table.tk td.c-move,table.tk td.c-lf,
-  table.tk td.c-by,table.tk td.c-txns,table.tk td.c-age,
+  table.tk td.c-ind{flex:1 1 100%;order:5;display:flex;flex-direction:column;
+    align-items:flex-start;gap:3px}
+  table.tk td.c-tier,table.tk td.c-age,table.tk td.c-depth,table.tk td.c-heat,
+  table.tk td.c-buy,table.tk td.c-txns,
   table.tk td.c-venue{display:none}
   table.tk tr.x>td{padding:6px 2px 10px}
 }
@@ -313,8 +401,11 @@ footer{color:var(--faint);font-size:10.5px;border-top:1px solid var(--line);
 </div>
 <div id="changed"></div>
 
+  <div id="heat"></div>
+
   <details class="sec" open><summary>Tokens <span class="cnt" id="tok-count"></span></summary>
     <div class="body">
+      <div class="shorts" id="shorts"></div>
       <div class="ctl" id="ctl"></div>
       <div class="tw" id="tok"></div>
     </div></details>
@@ -385,6 +476,8 @@ footer{color:var(--faint);font-size:10.5px;border-top:1px solid var(--line);
       </ol>
     </div>
 
+    <div class="row" id="chip-help"></div>
+
     <div class="row">
       <p class="sub-h">Limits</p>
       <p class="note" style="margin-bottom:0">It doesn't predict: high move scores tended
@@ -430,6 +523,148 @@ var TIER_VAR = {BEST:"--t-best",EMERGING:"--t-emerging",WATCH:"--t-watch",
    trailing 6h and 52% over 24h, the closest to a coin flip of any tier. What
    the tier certifies is that the token kept showing up healthy and holds depth
    against its own FDV. */
+/* ======================= ONE CONFIG =======================
+   Every band, word, colour and rule sentence lives here. The row chips, the
+   chip popovers, the shortlist buttons and the "What these chips mean" table
+   in the how-to card are all generated from this object, so they cannot drift
+   apart: change a threshold here and all four follow.
+
+   Each band carries
+     word    the one short word shown on the chip
+     cvar    its CSS custom property
+     rule    the exact rule, in field names, shown in the popover and the table
+     test    the predicate, taking the token record
+   and each group carries a plain-English meaning plus the fields it reads.
+   `missing` is used when a required field is null -- the chip then shows a
+   dash rather than guessing a band.
+   None of these bands is a verdict: they describe market shape. */
+var BANDS = {
+  age: {
+    key: "age", label: "Age",
+    plain: "How long this token's oldest pool has existed.",
+    fields: ["age_days"],
+    missing: {word: "–", why: "no pool creation time reported"},
+    bands: [
+      {word: "NEW",     cvar: "--b-age1", rule: "age_days < 3",
+       test: function(t){ return t.age_days < 3; }},
+      {word: "YOUNG",   cvar: "--b-age2", rule: "3 ≤ age_days ≤ 14",
+       test: function(t){ return t.age_days <= 14; }},
+      {word: "VETERAN", cvar: "--b-age3", rule: "age_days > 14",
+       test: function(){ return true; }}
+    ],
+    has: function(t){ return t.age_days !== null && t.age_days !== undefined; }
+  },
+  depth: {
+    key: "depth", label: "Depth",
+    plain: "How much money is in the pool, and how big that is next to the "
+         + "token's whole notional value.",
+    fields: ["liq_usd", "liq_fdv_pct"],
+    missing: {word: "–", why: "liq/FDV not reported for this token"},
+    bands: [
+      {word: "DEEP", cvar: "--b-dep3",
+       rule: "liq_usd ≥ $500K and liq_fdv_pct ≥ 10%",
+       test: function(t){ return t.liq_usd >= 500000 && t.liq_fdv_pct >= 10; }},
+      {word: "OK",   cvar: "--b-dep2",
+       rule: "liq_usd ≥ $100K and liq_fdv_pct ≥ 5%",
+       test: function(t){ return t.liq_usd >= 100000 && t.liq_fdv_pct >= 5; }},
+      {word: "THIN", cvar: "--b-dep1", rule: "everything else",
+       test: function(){ return true; }}
+    ],
+    has: function(t){
+      return t.liq_usd !== null && t.liq_usd !== undefined
+          && t.liq_fdv_pct !== null && t.liq_fdv_pct !== undefined;
+    }
+  },
+  heat: {
+    key: "heat", label: "Heat",
+    plain: "How much this token has moved recently, on the collector's own "
+         + "-10..+10 score. It is a description of the past few hours, not a "
+         + "forecast.",
+    fields: ["recent_move_score"],
+    missing: {word: "–", why: "no move score this run"},
+    bands: [
+      {word: "COLD", cvar: "--b-cold", rule: "recent_move_score ≤ -4",
+       test: function(t){ return t.recent_move_score <= -4; }},
+      {word: "COOL", cvar: "--b-cool", rule: "recent_move_score -3 to -1",
+       test: function(t){ return t.recent_move_score < 0; }},
+      {word: "FLAT", cvar: "--b-flat", rule: "recent_move_score = 0",
+       test: function(t){ return t.recent_move_score === 0; }},
+      {word: "WARM", cvar: "--b-warm", rule: "recent_move_score +1 to +3",
+       test: function(t){ return t.recent_move_score < 4; }},
+      {word: "HOT",  cvar: "--b-hot",  rule: "recent_move_score ≥ +4",
+       test: function(){ return true; }}
+    ],
+    has: function(t){
+      return t.recent_move_score !== null && t.recent_move_score !== undefined;
+    }
+  },
+  buyers: {
+    key: "buyers", label: "Buyers",
+    plain: "Of the last six hours of trades, the share that were buys. The "
+         + "bar's midline is an even split.",
+    fields: ["buys6", "sells6"],
+    missing: {word: "–", why: "too few trades: buys6 + sells6 under 30"},
+    bands: [
+      {word: "BUYERS LEAD",  cvar: "--b-buy",  short: "BUY LEAD",
+       rule: "buys6 / (buys6 + sells6) > 60%",
+       test: function(t){ return buyShare(t) > 0.60; }},
+      {word: "SELLERS LEAD", cvar: "--b-sell", short: "SELL LEAD",
+       rule: "buys6 / (buys6 + sells6) < 40%",
+       test: function(t){ return buyShare(t) < 0.40; }},
+      {word: "BALANCED",     cvar: "--b-flat", short: "EVEN",
+       rule: "40% to 60%", test: function(){ return true; }}
+    ],
+    has: function(t){
+      var n = sixTotal(t);
+      return n !== null && n >= BUYERS_MIN_TRADES;
+    }
+  }
+};
+var BAND_ORDER = ["age", "depth", "heat", "buyers"];
+var BUYERS_MIN_TRADES = 30;
+
+/* Shortlists are written in band words, not in raw thresholds, so they stay
+   true to whatever the config above says those words mean. */
+var SHORTLISTS = [
+  {id: "established", label: "Established",
+   why: "Been around and holds real depth.",
+   test: function(t){ return bandWord(t,"age") === "VETERAN"
+                          && bandWord(t,"depth") === "DEEP"; }},
+  {id: "fresh", label: "Fresh & real",
+   why: "Young, but with depth and a full run of healthy snapshots.",
+   test: function(t){
+     var a = bandWord(t,"age"), d = bandWord(t,"depth");
+     return (a === "NEW" || a === "YOUNG") && (d === "OK" || d === "DEEP")
+         && persistFull(t); }},
+  {id: "heating", label: "Heating up",
+   why: "Moved up on the recent-move score.",
+   test: function(t){ var h = bandWord(t,"heat");
+                      return h === "HOT" || h === "WARM"; }},
+  {id: "cooling", label: "Cooling",
+   why: "Moved down on the recent-move score.",
+   test: function(t){ var h = bandWord(t,"heat");
+                      return h === "COOL" || h === "COLD"; }}
+];
+
+/* Plain-language glossary, also rendered into the how-to card. */
+var GLOSSARY = [
+  ["liq/FDV",
+   "Pool money as a percent of what the whole supply would be worth at this "
+   + "price. A low number means the price is set by a small pool."],
+  ["trades per trader",
+   "Trades divided by distinct traders over 24h. Near 1 means many separate "
+   + "wallets; a high number means a few wallets trading repeatedly."],
+  ["buyer share",
+   "Buys as a share of all trades in the last six hours. It counts trades, "
+   + "not money, so one big sell and one small buy read as even."],
+  ["move score",
+   "The collector's -10..+10 summary of recent price change and buyer "
+   + "acceleration. recent_move_basis says which parts went into it."]
+];
+var CHIPS_CAVEAT = "These chips describe market shape. None of them has been "
+  + "shown to predict returns; the evidence log is testing that.";
+/* ===================== end ONE CONFIG ===================== */
+
 var TIER_LABEL = {BEST: "PERSISTENT"};
 function tierLabel(t){ return TIER_LABEL[t] || t; }
 function tierColor(t){ return "var(" + (TIER_VAR[t] || "--neutral") + ")"; }
@@ -515,6 +750,9 @@ function copyBtn(text){
   });
   return b;
 }
+function xUrl(ca){
+  return "https://x.com/search?q=" + encodeURIComponent(ca) + "&f=live";
+}
 var GT_BASE = "https://www.geckoterminal.com/" + GT_CHAIN;
 var DEX_BASE = "https://dexscreener.com";
 
@@ -568,6 +806,9 @@ function addrRow(ca, tok){
     d.appendChild(linkBtn("Gecko", geckoUrl(ca, tok),
       pool ? "GeckoTerminal pool " + pool : "GeckoTerminal token " + ca));
   }
+  /* searched by address, not ticker: the address is what is unique */
+  d.appendChild(linkBtn("X search", xUrl(ca),
+    "Search X for posts mentioning " + ca));
   return d;
 }
 function kv(pairs){
@@ -630,48 +871,10 @@ function rect(s, x, y, w, h, fill, rx){
 /* persistence: healthy snapshots against the deepest count in this snapshot.
    The window size is not published in latest.json, so the denominator is the
    observed maximum and the label says so rather than implying a fixed bar. */
-function persistSvg(v, max){
-  var W = 42, H = 9;
-  var s = svg(W, H, v === null || v === undefined
-    ? "persistence unknown"
-    : "healthy in " + v + " of a window whose deepest count here is " + max);
-  rect(s, 0, 2, W, 5, "var(--line)", 2);
-  if (v !== null && v !== undefined && max > 0){
-    var f = Math.max(0, Math.min(1, Number(v) / max));
-    rect(s, 0, 2, W * f, 5, f >= 0.6 ? "var(--ok)" : f >= 0.3 ? "var(--warn)" : "var(--neutral)", 2);
-  }
-  return s;
-}
 /* recent_move_score, which runs -10..+10, as a diverging gauge about a centre
    tick. Direction only: the score is how far it just moved, never a call. */
-function moveSvg(v){
-  var W = 46, H = 9, C = W / 2;
-  var s = svg(W, H, v === null || v === undefined
-    ? "recent move score unknown"
-    : "recent move score " + v + " of -10 to +10");
-  rect(s, 0, 3, W, 3, "var(--line)", 1.5);
-  if (v !== null && v !== undefined && !isNaN(v)){
-    var n = Math.max(-10, Math.min(10, Number(v)));
-    var half = Math.abs(n) / 10 * (C - 1);
-    if (n >= 0) rect(s, C, 2, half, 5, "var(--ok)", 1);
-    else rect(s, C - half, 2, half, 5, "var(--bad)", 1);
-  }
-  rect(s, C - 0.5, 0, 1, H, "var(--faint)");
-  return s;
-}
 /* liquidity against FDV. Capped at 25% of FDV for the full bar: above that the
    ratio stops discriminating and everything would read full. */
-function lfSvg(v){
-  var W = 30, H = 8, CAP = 25;
-  var s = svg(W, H, v === null || v === undefined
-    ? "liquidity against FDV unknown" : "liquidity is " + pct(v, 2) + " of FDV");
-  rect(s, 0, 1, W, 6, "var(--line)", 2);
-  if (v !== null && v !== undefined && !isNaN(v)){
-    var f = Math.max(0, Math.min(1, Number(v) / CAP));
-    rect(s, 0, 1, W * f, 6, Number(v) >= 5 ? "var(--ok)" : "var(--warn)", 2);
-  }
-  return s;
-}
 /* buyer trend: last5_byr24 as a sparkline. Flat when every value is equal, so
    a straight line means "no change", not "no data" -- no data draws nothing. */
 function sparkSvg(arr){
@@ -782,6 +985,7 @@ function markFor(url, key, size){
 var stamps = [];
 var TOKENS = [], PMAX = 1;
 var FILTER = {}, QUERY = "", SORT = {key: "liq_usd", dir: -1};
+var SHORTLIST = null;
 /* Pins are a per-viewer convenience, so localStorage is the right home and
    every access is guarded: it throws in a private window and comes back empty
    with site data cleared. A pin is a contract address, which is the identity
@@ -806,19 +1010,21 @@ function pinToggle(ca){
 }
 pinsLoad();
 
+/* The four chip columns sort by the underlying number, not by the band word,
+   so sorting stays as fine-grained as the data while the chip stays coarse.
+   Their labels come from the config. */
 var COLS = [
   {k:"symbol",      t:"Token",  w:"",   sort:function(a){ return (a.symbol||"").toLowerCase(); }},
   {k:"tier",        t:"Tier",   w:"",   sort:function(a){ return TIERS.indexOf(a.tier); }},
-  {k:"persist_count", t:"Persist", r:1, sort:function(a){ return a.persist_count; }},
-  {k:"recent_move_score", t:"Move", r:1, sort:function(a){ return a.recent_move_score; }},
+  {k:"age_days",    t:BANDS.age.label,    r:0, sort:function(a){ return a.age_days; }},
+  {k:"liq_fdv_pct", t:BANDS.depth.label,  r:0, sort:function(a){ return a.liq_fdv_pct; }},
+  {k:"recent_move_score", t:BANDS.heat.label, r:0,
+     sort:function(a){ return a.recent_move_score; }},
+  {k:"buy_share",   t:BANDS.buyers.label, r:0, sort:function(a){ return buyShare(a); }},
   {k:"chg_h6",      t:"6h",     r:1,    sort:function(a){ return a.chg_h6; }},
   {k:"chg_h24",     t:"24h",    r:1,    sort:function(a){ return a.chg_h24; }},
   {k:"liq_usd",     t:"Liq",    r:1,    sort:function(a){ return a.liq_usd; }},
-  {k:"liq_fdv_pct", t:"Liq/FDV",r:1,    sort:function(a){ return a.liq_fdv_pct; }},
-  {k:"last5_byr24", t:"Buyers", r:0,    sort:function(a){
-     var v = a.last5_byr24; return (v && v.length) ? v[v.length-1] : null; }},
   {k:"txns24",      t:"Txns",   r:1,    sort:function(a){ return a.txns24; }},
-  {k:"age_days",    t:"Age",    r:1,    sort:function(a){ return a.age_days; }},
   {k:"main_dex",    t:"Venue",  r:0,    sort:function(a){ return (a.main_dex||"").toLowerCase(); }}
 ];
 
@@ -928,6 +1134,188 @@ function whyLine(t){
   return box;
 }
 
+/* ---------- bands, chips and the chip popover ---------- */
+/* Nothing when the token was healthy on every snapshot the window holds --
+   that is the normal case and saying so on every row is noise. The badge is
+   the exception: this token was missing from some of them. */
+function gapsBadge(t){
+  var v = t.persist_count;
+  if (v === null || v === undefined || PMAX <= 0 || Number(v) >= PMAX) return null;
+  var b = el("span", "bd warnb", "gaps " + num(v) + "/" + PMAX);
+  b.title = "healthy in " + num(v) + " of the last " + PMAX
+          + " snapshots (persist_count)";
+  return b;
+}
+/* Tickers repeat on this chain -- the contract address is the identity. */
+var DUPS = {};
+function indexDups(){
+  DUPS = {};
+  TOKENS.forEach(function(t){
+    var k = (t.symbol || "").toLowerCase();
+    if (!k) return;
+    DUPS[k] = (DUPS[k] || 0) + 1;
+  });
+}
+function dupCount(t){
+  var k = (t.symbol || "").toLowerCase();
+  if (!k) return 0;
+  return Math.max(0, (DUPS[k] || 1) - 1);
+}
+
+/* one place that decides which layout is live, so the SVG widths and the CSS
+   breakpoint cannot disagree */
+function MOBILE(){ return window.matchMedia("(max-width:999px)").matches; }
+function sixTotal(t){
+  if (t.buys6 === null || t.buys6 === undefined) return null;
+  if (t.sells6 === null || t.sells6 === undefined) return null;
+  return Number(t.buys6) + Number(t.sells6);
+}
+function buyShare(t){
+  var n = sixTotal(t);
+  return (n === null || n === 0) ? null : Number(t.buys6) / n;
+}
+function persistFull(t){
+  return PMAX > 0 && Number(t.persist_count) === PMAX;
+}
+/* The first band whose test passes wins, so the tests are written to be read
+   in order and the last one is always the catch-all. Returns null when the
+   group's fields are missing, which the chip renders as a dash. */
+function bandOf(t, key){
+  var g = BANDS[key];
+  if (!g.has(t)) return null;
+  for (var i = 0; i < g.bands.length; i++){
+    if (g.bands[i].test(t)) return g.bands[i];
+  }
+  return null;
+}
+function bandWord(t, key){
+  var b = bandOf(t, key);
+  return b ? b.word : null;
+}
+
+/* A chip is word + position-on-a-scale, so the colour is never carrying the
+   meaning by itself: the word says which band, and the filled block says
+   where that band sits in the group's order. BUYERS gets the split bar the
+   reader was promised instead of a ladder. */
+function ladderSvg(idx, total, color){
+  var w = 4, gap = 2, h = 8;
+  var s = svg(total * w + (total - 1) * gap, h, "");
+  s.style.verticalAlign = "-1px";
+  for (var i = 0; i < total; i++){
+    var on = i === idx;
+    rect(s, i * (w + gap), on ? 0 : 2, w, on ? h : h - 4,
+         on ? color : "var(--line)", 1);
+  }
+  return s;
+}
+function splitSvg(share){
+  var w = MOBILE() ? 20 : 26, h = 8;
+  var s = svg(w, h, "");
+  s.style.verticalAlign = "-1px";
+  rect(s, 0, 1, w, h - 2, "var(--line)", 1);
+  if (share !== null){
+    rect(s, 0, 1, Math.max(1, Math.round(w * share)), h - 2, "var(--b-buy)", 1);
+  }
+  /* the 50% midline, so "more than half" is readable without reading a number */
+  rect(s, w / 2 - 0.5, 0, 1, h, "var(--text)", 0);
+  return s;
+}
+function chipFor(t, key){
+  var g = BANDS[key], b = bandOf(t, key);
+  var btn = el("button", "chip");
+  btn.type = "button";
+  var word, color, shape;
+  if (!b){
+    word = g.missing.word; color = "var(--faint)";
+    shape = (key === "buyers") ? splitSvg(null)
+                               : ladderSvg(-1, g.bands.length, "var(--faint)");
+  } else {
+    word = b.short || b.word;
+    color = "var(" + b.cvar + ")";
+    if (key === "buyers"){
+      shape = splitSvg(buyShare(t));
+    } else {
+      /* heat and depth read low-to-high left-to-right; depth's bands are
+         declared strongest-first, so its index is flipped for the ladder */
+      var i = g.bands.indexOf(b);
+      shape = ladderSvg(key === "depth" ? g.bands.length - 1 - i : i,
+                        g.bands.length, color);
+    }
+  }
+  btn.appendChild(shape);
+  var w = el("span", "cw", word);
+  w.style.color = color;
+  btn.appendChild(w);
+  btn.setAttribute("aria-label", g.label + ": " + word);
+  btn.addEventListener("click", function(ev){
+    ev.stopPropagation();
+    showChipPop(btn, t, key);
+  });
+  return btn;
+}
+
+/* One popover element, reused. It explains the chip under the finger: what
+   the group means in plain words, which band this token landed in and the
+   exact rule, then the fields it was computed from. */
+var CHIP_POP = null;
+function closeChipPop(){
+  if (CHIP_POP){ CHIP_POP.remove(); CHIP_POP = null; }
+}
+function showChipPop(anchorEl, t, key){
+  var open = CHIP_POP && CHIP_POP.dataset.for === key + "|" + t.ca;
+  closeChipPop();
+  if (open) return;
+  var g = BANDS[key], b = bandOf(t, key);
+  var pop = el("div", "pop");
+  pop.dataset.for = key + "|" + t.ca;
+  var head = el("div", "pop-h");
+  head.appendChild(el("span", null, g.label));
+  var word = el("b", null, b ? b.word : g.missing.word);
+  word.style.color = b ? "var(" + b.cvar + ")" : "var(--faint)";
+  head.appendChild(word);
+  pop.appendChild(head);
+  pop.appendChild(el("p", "pop-p", g.plain));
+  pop.appendChild(el("p", "pop-r",
+    b ? "This one: " + b.rule : "This one: " + g.missing.why));
+  pop.appendChild(el("p", "pop-f", "from " + g.fields.join(", ")));
+  var all = el("div", "pop-all");
+  g.bands.forEach(function(x){
+    var r = el("div");
+    var sw = el("span", "pop-w", x.word);
+    sw.style.color = "var(" + x.cvar + ")";
+    r.appendChild(sw);
+    r.appendChild(el("span", "pop-c", x.rule));
+    all.appendChild(r);
+  });
+  pop.appendChild(all);
+  var close = el("button", "pop-x", "close");
+  close.type = "button";
+  close.addEventListener("click", function(ev){ ev.stopPropagation(); closeChipPop(); });
+  pop.appendChild(close);
+  document.body.appendChild(pop);
+  CHIP_POP = pop;
+
+  /* placed in page coordinates and clamped to the viewport, so it never hangs
+     off the right edge of a 390px screen */
+  var r = anchorEl.getBoundingClientRect();
+  var w = Math.min(260, window.innerWidth - 16);
+  pop.style.width = w + "px";
+  var left = Math.min(Math.max(8, r.left + window.scrollX), window.scrollX + window.innerWidth - w - 8);
+  pop.style.left = left + "px";
+  var below = r.bottom + window.scrollY + 6;
+  var ph = pop.getBoundingClientRect().height;
+  if (r.bottom + ph + 12 > window.innerHeight && r.top - ph - 6 > 0){
+    below = r.top + window.scrollY - ph - 6;
+  }
+  pop.style.top = below + "px";
+}
+document.addEventListener("click", function(ev){
+  if (CHIP_POP && !CHIP_POP.contains(ev.target)) closeChipPop();
+});
+document.addEventListener("keydown", function(ev){
+  if (ev.key === "Escape") closeChipPop();
+});
+
 function starBtn(ca){
   var b = el("button", "star");
   b.type = "button";
@@ -963,7 +1351,9 @@ function renderTokens(){
   mount.textContent = "";
   var q = QUERY.trim().toLowerCase();
   var act = TIERS.filter(function(t){ return FILTER[t]; });
+  var sl = SHORTLIST && SHORTLISTS.filter(function(x){ return x.id === SHORTLIST; })[0];
   var rows = TOKENS.filter(function(t){
+    if (sl && !sl.test(t)) return false;
     if (act.length && act.indexOf(t.tier) < 0) return false;
     if (!q) return true;
     return (t.symbol || "").toLowerCase().indexOf(q) >= 0
@@ -1019,30 +1409,41 @@ function renderTokens(){
     /* one td per column, in COLS order. The desktop-only cells are hidden on
        mobile and their contents reappear in c-ind, which is hidden on desktop,
        so every layout shows each fact exactly once. */
+    tr.id = "row-" + t.ca;
     var idc = el("div", "idc");
     idc.appendChild(starBtn(t.ca));
     idc.appendChild(markFor(t.image_url, t.ca));
     idc.appendChild(el("span", "sym", t.symbol === null ? "(no symbol)" : t.symbol));
+    /* the persistence bar is gone from every row that has a full window: a
+       meter reading "full" on every row taught nothing. What is left is the
+       exception, said in words. */
+    var gaps = gapsBadge(t);
+    if (gaps) idc.appendChild(gaps);
+    var dup = dupCount(t);
+    if (dup){
+      var db = el("span", "bd warnb", "ticker \u00d7" + (dup + 1));
+      db.title = dup + " other token" + (dup === 1 ? "" : "s") + " use this ticker";
+      idc.appendChild(db);
+    }
     cell("c-id", idc);
     cell("c-tier", tierPill(t.tier));
-    cell("c-persist", persistSvg(t.persist_count, PMAX), 1);
-    cell("c-move", moveSvg(t.recent_move_score), 1);
+    cell("c-age", chipFor(t, "age"));
+    cell("c-depth", chipFor(t, "depth"));
+    cell("c-heat", chipFor(t, "heat"));
+    cell("c-buy", chipFor(t, "buyers"));
     cell("c-h6", chgEl(t.chg_h6), 1);
     cell("c-h24", chgEl(t.chg_h24), 1);
     cell("c-liq", el("span", "n", usd(t.liq_usd)), 1);
-    cell("c-lf", lfSvg(t.liq_fdv_pct), 1);
-    cell("c-by", sparkSvg(t.last5_byr24));
     cell("c-txns", el("span", "n", num(t.txns24)), 1);
-    cell("c-age", el("span", "n", t.age_days === null || t.age_days === undefined
-      ? "n/a" : num(t.age_days, 1) + "d"), 1);
     cell("c-venue", badges(t, 0));
 
+    /* two sub-lines, not one wrapping blob: the four chips get a line to
+       themselves so they read as a row of signals, and the badges follow. */
     var ind = cell("c-ind");
-    ind.appendChild(tierPill(t.tier));
-    ind.appendChild(labelled("persist", persistSvg(t.persist_count, PMAX)));
-    ind.appendChild(labelled("move", moveSvg(t.recent_move_score)));
-    ind.appendChild(labelled("liq/fdv", lfSvg(t.liq_fdv_pct)));
-    ind.appendChild(labelled("buyers", sparkSvg(t.last5_byr24)));
+    var line1 = el("div", "ind-chips");
+    line1.appendChild(tierPill(t.tier));
+    BAND_ORDER.forEach(function(k){ line1.appendChild(chipFor(t, k)); });
+    ind.appendChild(line1);
     ind.appendChild(badges(t, 1));
 
     var xr = el("tr", "x");
@@ -1065,8 +1466,24 @@ function renderTokens(){
         ? "n/a" : String(t.recent_move_score)],
       ["venue", (t.main_dex || "n/a") + " \u00b7 " + feeBadge(t)]
     ]));
+    /* distinct from the BUYERS chip: that one is the buy share of the last
+       six hours of trades, this is the 24h buyer count across the last five
+       snapshots. Both are kept because they answer different questions. */
+    if (t.last5_byr24 && t.last5_byr24.length){
+      var bt = el("div", "reason");
+      bt.appendChild(el("span", "mo", "buyers 24h, last 5 snapshots"));
+      bt.appendChild(sparkSvg(t.last5_byr24));
+      bt.appendChild(el("span", null, " " + t.last5_byr24.join(" \u2192 ")));
+      xc.appendChild(bt);
+    }
     if (t.recent_move_basis){
       xc.appendChild(el("div", "reason", "move basis: " + t.recent_move_basis));
+    }
+    var nd = dupCount(t);
+    if (nd){
+      xc.appendChild(el("div", "reason warn-t",
+        nd + " other token" + (nd === 1 ? "" : "s") + " use this ticker \u2014 "
+        + "check the address below, not the name."));
     }
     xc.appendChild(addrRow(t.ca, t));
     xr.appendChild(xc);
@@ -1085,6 +1502,173 @@ function renderTokens(){
   });
   tb.appendChild(body);
   mount.appendChild(tb);
+}
+
+/* Generated from BANDS, SHORTLISTS and GLOSSARY, so the card and the chips
+   cannot say different things about the same threshold. Runs once at load;
+   it reads no token data. */
+function renderChipHelp(){
+  var mount = document.getElementById("chip-help");
+  if (!mount) return;
+  mount.textContent = "";
+  mount.appendChild(el("p", "sub-h", "What these chips mean"));
+  mount.appendChild(el("p", "note",
+    "Four chips on every row. Each is one word, a shape showing where that "
+    + "word sits in its scale, and a colour. Tap a chip on a row for the rule "
+    + "behind it."));
+
+  var wrap = el("div", "scroll");
+  var tb = el("table", "g");
+  var thead = el("thead"), htr = el("tr");
+  ["Chip", "Word", "Rule", "Fields"].forEach(function(h){
+    htr.appendChild(el("th", null, h));
+  });
+  thead.appendChild(htr); tb.appendChild(thead);
+  var body = el("tbody");
+  BAND_ORDER.forEach(function(k){
+    var g = BANDS[k];
+    g.bands.forEach(function(b, i){
+      var tr = el("tr");
+      tr.appendChild(el("td", null, i === 0 ? g.label : ""));
+      var td = el("td");
+      var w = el("b", null, b.word);
+      w.style.color = "var(" + b.cvar + ")";
+      td.appendChild(w);
+      tr.appendChild(td);
+      tr.appendChild(el("td", null, b.rule));
+      tr.appendChild(el("td", null, i === 0 ? g.fields.join(", ") : ""));
+      body.appendChild(tr);
+    });
+    var tr2 = el("tr");
+    tr2.appendChild(el("td", null, ""));
+    var td2 = el("td");
+    td2.appendChild(el("b", null, g.missing.word));
+    tr2.appendChild(td2);
+    tr2.appendChild(el("td", null, g.missing.why));
+    tr2.appendChild(el("td", null, ""));
+    body.appendChild(tr2);
+  });
+  tb.appendChild(body); wrap.appendChild(tb);
+  mount.appendChild(wrap);
+
+  var cav = el("p", "note");
+  cav.style.marginTop = "8px";
+  cav.textContent = CHIPS_CAVEAT;
+  mount.appendChild(cav);
+
+  mount.appendChild(el("p", "sub-h", "Shortlists"));
+  var sl = el("div", "xg");
+  SHORTLISTS.forEach(function(x){
+    var r = el("div");
+    r.appendChild(el("span", null, x.label));
+    r.appendChild(el("b", null, x.why));
+    sl.appendChild(r);
+  });
+  mount.appendChild(sl);
+
+  mount.appendChild(el("p", "sub-h", "Words used above"));
+  var gl = el("div", "gloss");
+  GLOSSARY.forEach(function(g){
+    var r = el("div");
+    r.appendChild(el("b", null, g[0]));
+    r.appendChild(el("span", null, g[1]));
+    gl.appendChild(r);
+  });
+  mount.appendChild(gl);
+}
+
+/* One tap each, and the count is on the button so an empty shortlist is
+   obvious before it is tapped. Tapping the active one clears it. */
+function renderShortlists(){
+  var mount = document.getElementById("shorts");
+  mount.textContent = "";
+  if (!TOKENS.length) return;
+  mount.appendChild(el("span", "lab", "shortlists"));
+  SHORTLISTS.forEach(function(sl){
+    var n = TOKENS.filter(sl.test).length;
+    var b = el("button", "sl" + (SHORTLIST === sl.id ? " on" : ""));
+    b.type = "button";
+    b.title = sl.why;
+    b.setAttribute("aria-pressed", SHORTLIST === sl.id ? "true" : "false");
+    b.appendChild(el("span", null, sl.label));
+    b.appendChild(el("b", null, n));
+    b.addEventListener("click", function(){
+      SHORTLIST = (SHORTLIST === sl.id) ? null : sl.id;
+      renderShortlists();
+      renderTokens();
+    });
+    mount.appendChild(b);
+  });
+}
+
+/* One tile per PERSISTENT token, coloured by chg_h6 on a diverging scale.
+   The tile carries the symbol and the number, so the colour is a third
+   encoding rather than the only one. */
+var HEAT_CAP = 20;
+function divergingColor(v){
+  if (v === null || v === undefined || isNaN(v)) return "var(--surface2)";
+  var x = Math.max(-1, Math.min(1, Number(v) / HEAT_CAP));
+  if (x >= 0) return "color-mix(in srgb, var(--ok) " + Math.round(18 + 62 * x)
+                     + "%, var(--surface2))";
+  return "color-mix(in srgb, var(--bad) " + Math.round(18 + 62 * -x)
+       + "%, var(--surface2))";
+}
+function renderHeatGrid(){
+  var mount = document.getElementById("heat");
+  mount.textContent = "";
+  var best = TOKENS.filter(function(t){ return t.tier === "BEST"; });
+  if (!best.length) return;
+  var head = el("div", "hg-h");
+  head.appendChild(el("span", "lab", tierLabel("BEST") + " · 6h change"));
+  var leg = el("span", "hg-leg");
+  [["-" + HEAT_CAP + "%", -HEAT_CAP], ["0", 0], ["+" + HEAT_CAP + "%", HEAT_CAP]]
+    .forEach(function(p, i){
+      if (i) leg.appendChild(el("i", null));
+      var sw = el("i");
+      sw.style.background = divergingColor(p[1]);
+      leg.appendChild(sw);
+      leg.appendChild(el("span", null, p[0]));
+    });
+  head.appendChild(leg);
+  mount.appendChild(head);
+
+  var grid = el("div", "hg");
+  best.slice().sort(function(a, b){
+    return (b.chg_h6 === null ? -1e9 : b.chg_h6) - (a.chg_h6 === null ? -1e9 : a.chg_h6);
+  }).forEach(function(t){
+    var b = el("button", "hgt");
+    b.type = "button";
+    b.style.background = divergingColor(t.chg_h6);
+    b.appendChild(el("span", "hgs", t.symbol || "?"));
+    b.appendChild(el("span", "hgv", pct(t.chg_h6, 1)));
+    b.title = (t.symbol || "?") + " · 6h " + pct(t.chg_h6, 1)
+            + " · tap to open its row";
+    b.addEventListener("click", function(){ revealRow(t.ca); });
+    grid.appendChild(b);
+  });
+  mount.appendChild(grid);
+}
+
+/* Clears whatever was filtering the list first: a tile must always be able to
+   reach its row, even when the row is hidden by a shortlist or a search. */
+function revealRow(ca){
+  if (SHORTLIST || QUERY || TIERS.some(function(t){ return FILTER[t]; })){
+    SHORTLIST = null; QUERY = "";
+    TIERS.forEach(function(t){ FILTER[t] = false; });
+    var inp = document.querySelector("#ctl input[type=search]");
+    if (inp) inp.value = "";
+    document.querySelectorAll("#ctl .fchip").forEach(function(b){
+      b.setAttribute("aria-pressed", "false");
+    });
+    renderShortlists();
+    renderTokens();
+  }
+  var tr = document.getElementById("row-" + ca);
+  if (!tr) return;
+  var xr = tr.nextElementSibling;
+  if (xr && xr.classList.contains("x") && !xr.classList.contains("on")) tr.click();
+  tr.scrollIntoView({block: "center"});
+  tr.focus();
 }
 
 /* One row, not two. The KPI strip and the filter chips were printing the same
@@ -1227,11 +1811,14 @@ function renderPools(res){
     if (a && a.ca) AVOID_REASON[a.ca] = a.reason || "";
   });
   TOKENS = d.tokens || [];
+  indexDups();
   PMAX = 1;
   TOKENS.forEach(function(t){
     if (typeof t.persist_count === "number" && t.persist_count > PMAX) PMAX = t.persist_count;
   });
   renderControls(d);
+  renderShortlists();
+  renderHeatGrid();
   renderTokens();
 
   /* Same sentence, same WATCH split, moved behind the info icon: on a 390px
@@ -1545,6 +2132,7 @@ Promise.all([
   renderStocks(stocks);
   renderNft(nftT, nftD);
   renderAvoid(avoid);
+  renderChipHelp();
   renderFooter();
   measureHeader();
 });
