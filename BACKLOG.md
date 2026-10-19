@@ -222,3 +222,82 @@ Worth doing at some point: a staleness check that opens an issue when
 notices its own scheduler dying without depending on someone reading email.
 That cannot live in `collect.yml` — the whole point is that it has to run
 when collect does not.
+
+## Nightly health brief (thin version)
+
+Medium priority, not urgent. A free `scripts/brief.py` plus a nightly
+workflow dispatched by cron-job.org, writing `data/brief/YYYY-MM-DD.md`.
+Numbers only, computed from files already in the repo — **no LLM**.
+
+Sections:
+
+- **health** — delivery count for the day, gaps in it, freshness of each feed
+- **what changed** — tier moves and new tokens, from `data/changes.json`
+- **evidence status** — labeled row counts, `eff_n`, and how far each
+  hypothesis in `data/hypotheses.jsonl` still is from its own `min_eff_n`
+  and `min_n_tokens`
+- **odd things** — anomalies worth a look
+- **needs-you** — the cron-job.org token renewal around **2027-01-16** (see
+  the scheduler entry above), hypotheses that have become decidable, stale
+  feeds, and the labeler-version mismatch banner `evaluate.py` already
+  raises when `scripts/label.py` no longer matches what the registry was
+  written against
+
+The rule that makes it safe: **the brief reports only.** It never edits
+code, constants, thresholds or hypotheses. Nothing it writes is read back by
+the collector.
+
+Start it after the first real 6 h and 24 h labels exist — roughly a week of
+collection — so it has something to say on day one. A smaller health-only
+version (delivery gaps, stale feeds, expiring tokens) could ship sooner if
+the wait is annoying.
+
+## Brief proposals file — optional, ships with the brief
+
+The brief may append suggestions to `data/proposals.md`, for example
+"consider registering H-0004: <rule>". **A human approves; Claude Code then
+registers the hypothesis.** Nothing is auto-adopted, and the proposals file
+is never an input to anything that runs.
+
+This exists so that noticing a pattern and acting on one stay separate
+steps, which is the whole point of registering hypotheses before the data
+that tests them.
+
+## AI narrator for the brief — optional, later
+
+Only worth doing if reading the plain brief starts to feel like a chore.
+Needs an Anthropic API key as a repo secret and **separate billing** from
+whatever runs Claude Code; estimated **$2-9/month, unverified** — the figure
+has not been checked against real token counts for this brief's size. A
+console spend limit is a precondition, not a nicety.
+
+Same constraint as the brief itself: it **describes the numbers only, never
+decides**. If it ever reads as advice, it is wrong.
+
+## Paper trading (Layer 5)
+
+**Blocked until H-0001..H-0003 resolve.** Not started, and should not be.
+
+`docs/EVIDENCE_LAYER.md` currently defines Layers 2, 3a, 3b and 3c; there is
+no Layer 4 or 5 written down yet, so the number is a placeholder for "after
+the evidence layer returns verdicts".
+
+When it does start, the rules are fixed **in advance**: entry, exit, size,
+and fees taken from the fee model in `scripts/label.py` rather than assumed.
+**No self-tuning** — constants and thresholds never change automatically.
+
+The reason is not caution for its own sake. Retuning nightly on a small
+sample is multiple testing: with enough passes something always looks
+profitable, and the pre-registered evidence layer exists precisely to stop
+that. A paper trader that adjusts itself defeats the thing it is supposed to
+be tested by.
+
+## Standing note: no self-adapting algo
+
+A "self-adapting algo" is **explicitly rejected** for this project. It is not
+a thing to get to later; it is the thing this design is built against.
+
+Learning happens one way: a hypothesis is written down before the data that
+tests it, Pete approves it, and it is registered in `data/hypotheses.jsonl`
+with its own pass, fail and inconclusive conditions. Anything that changes a
+threshold without passing through that step is a bug, not a feature.
