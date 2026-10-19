@@ -28,6 +28,11 @@
   --b-cold:#5b8fd6; --b-cool:#7ba3c9; --b-flat:#8a95a6;
   --b-warm:#d59a4e; --b-hot:#e2703a;
   --b-buy:#4c9aff; --b-sell:#8a95a6;
+  /* line 3 outlines. Purple and blue read as "unusual", grey as "plain
+     fact", red as "warning". Green appears nowhere: a standout is not good
+     news, and the forward tests say so. */
+  --n-flag:var(--bad); --n-event:#5b9bd5; --n-standout:#a97bea;
+  --n-fact:var(--faint);
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --r:6px;
@@ -45,6 +50,7 @@
     --b-cold:#1f5fab; --b-cool:#3c71a4; --b-flat:#5f6a76;
     --b-warm:#9a6412; --b-hot:#b24a1c;
     --b-buy:#0b62d6; --b-sell:#5f6a76;
+    --n-event:#1f5fab; --n-standout:#6d28d9; --n-fact:#6b7686;
   }
 }
 *{box-sizing:border-box}
@@ -209,7 +215,6 @@ tr.r.op td{background:var(--surface2)}
   white-space:nowrap;text-transform:uppercase}
 .bd.warnb{color:var(--warn);border-color:var(--warn)}
 .bd.badb{color:var(--bad);border-color:var(--bad)}
-.bds{display:flex;gap:3px;flex-wrap:wrap}
 .pos{color:var(--ok)} .neg{color:var(--bad)} .dim{color:var(--faint)}
 .chg{display:inline-flex;align-items:center;gap:2px;font-family:var(--mono);
   font-variant-numeric:tabular-nums}
@@ -248,6 +253,26 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
 .ind-chips{display:flex;align-items:center;gap:3px 5px;flex-wrap:nowrap;
   width:100%;overflow:hidden}
 .ind-chips .pill{padding:3px 4px;font-size:8.5px}
+
+/* ---- line 3: notable chips ----
+   Outline only, so the row stays quiet; the colour of the outline is the
+   kind. 11px is the floor, and the vertical padding carries each chip to a
+   40px tap target without making the row taller than the text needs. */
+.nchip{position:relative;display:inline-flex;align-items:center;cursor:pointer;
+  background:none;border:1px solid var(--line);border-radius:4px;padding:4px 6px;
+  min-height:22px;font:600 11px/1 var(--sans);letter-spacing:.03em;
+  white-space:nowrap;color:var(--muted)}
+/* The chip draws 22px so the row stays short; the finger gets 40px from a
+   transparent pseudo-element that costs no layout. It is centred on the chip
+   and exactly as wide, so it never reaches a neighbour sideways. */
+.nchip::after{content:"";position:absolute;left:0;right:0;top:50%;
+  transform:translateY(-50%);height:40px}
+.nchip:hover{background:var(--surface2)}
+.nchip.nf{border-color:var(--n-flag);color:var(--n-flag)}
+.nchip.ne{border-color:var(--n-event);color:var(--n-event)}
+.nchip.ns{border-color:var(--n-standout);color:var(--n-standout)}
+.nchip.nx{border-color:var(--line);color:var(--n-fact)}
+.bds{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
 
 /* ---- chip popover ---- */
 .pop{position:absolute;z-index:60;background:var(--surface);
@@ -327,7 +352,7 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
     align-items:flex-start;gap:3px}
   table.tk td.c-tier,table.tk td.c-age,table.tk td.c-depth,table.tk td.c-heat,
   table.tk td.c-buy,table.tk td.c-txns,
-  table.tk td.c-venue{display:none}
+  table.tk td.c-notable{display:none}
   table.tk tr.x>td{padding:6px 2px 10px}
 }
 @media (min-width:1000px){
@@ -621,7 +646,78 @@ var BANDS = {
   }
 };
 var BAND_ORDER = ["age", "depth", "heat", "buyers"];
+/* declared here, not below the chip config: the notable metrics build their
+   help text at load time and read this value while doing so */
 var BUYERS_MIN_TRADES = 30;
+
+/* ---- line 3: what's notable ----
+   Four kinds, in priority order, and the kind decides the outline colour.
+   Purple and blue say "unusual", never "good": the backtest on this data has
+   hot moves mean-reverting, so a standout must not read as an endorsement.
+   Red is reserved for flags. Green is used nowhere here.
+
+   The budget is three chips, of which the age fact always takes one. Flags
+   are the exception and are never dropped, so a heavily flagged token can
+   run past three. */
+var NOTE_BUDGET = 3;
+var NOTE_MAX_STANDOUTS = 2;
+var NOTE_MIN_ROWS = 20;        /* a metric with fewer rows than this is skipped */
+var NOTE_TAIL = 0.10;          /* top or bottom tenth counts as a standout */
+var NOTE_KINDS = {
+  flag:     {cls: "nf", what: "A warning the collector raised about this token."},
+  event:    {cls: "ne", what: "Something that changed recently, from the "
+                           + "rolling diff in data/changes.json."},
+  standout: {cls: "ns", what: "This token sits in the top or bottom tenth of "
+                           + "the board on this measure. Unusual, not good "
+                           + "or bad: on the collected history, big recent "
+                           + "moves tended to come before worse 4-8h returns."},
+  fact:     {cls: "nx", what: "A plain fact about the token, always shown."}
+};
+
+/* Percentile metrics for the standout chips. `get` returns null when the
+   token cannot be scored, and those rows are left out of the ranking rather
+   than counted as zero. `fmt` writes the value into the chip label. */
+var NOTE_METRICS = [
+  {id: "lf", label: "LIQ/FDV",
+   get: function(t){ return t.liq_fdv_pct; },
+   fmt: function(v){ return "LIQ/FDV " + num(v, 0) + "%"; },
+   what: "Pool money as a percent of the token's fully diluted value."},
+  {id: "buy", label: "BUY SHARE",
+   get: function(t){ var n = sixTotal(t);
+     return (n !== null && n >= BUYERS_MIN_TRADES) ? buyShare(t) * 100 : null; },
+   fmt: function(v){ return "BUY SHARE " + num(v, 0) + "%"; },
+   what: "Buys as a share of the last six hours of trades. Needs at least "
+       + BUYERS_MIN_TRADES + " trades to be ranked."},
+  {id: "turn", label: "TURN",
+   /* a condition, not a free metric: it ranks by how big the reversal is,
+      but only fires when 6h and 24h actually point opposite ways */
+   get: function(t){
+     if (t.chg_h6 === null || t.chg_h6 === undefined) return null;
+     if (t.chg_h24 === null || t.chg_h24 === undefined) return null;
+     return Math.abs(t.chg_h6) + Math.abs(t.chg_h24);
+   },
+   fires: function(t){
+     var a = t.chg_h6, b = t.chg_h24;
+     if (a === null || a === undefined || b === null || b === undefined) return false;
+     return (a > 0) !== (b > 0) && Math.abs(a) >= 5 && Math.abs(b) >= 5;
+   },
+   fmt: function(v, t){
+     return "TURN " + (t.chg_h6 > 0 ? "6H UP" : "6H DOWN") + " vs 24H";
+   },
+   what: "6h and 24h changes point opposite ways, both by at least 5%."},
+  {id: "persist", label: "PERSIST",
+   /* n out of the window is already the whole story; a percentile on top of
+      it was two numbers saying one thing */
+   noSide: true,
+   get: function(t){
+     var v = t.persist_count;
+     if (v === null || v === undefined || PMAX <= 0) return null;
+     return Number(v) < PMAX ? Number(v) : null;   /* full runs are not notable */
+   },
+   fmt: function(v){ return "PERSIST " + num(v) + "/" + PMAX; },
+   what: "Healthy snapshots out of the window, for tokens short of a full "
+       + "run. Ranked among the tokens that are short."}
+];
 
 /* Shortlists are written in band words, not in raw thresholds, so they stay
    true to whatever the config above says those words mean. */
@@ -988,6 +1084,7 @@ var stamps = [];
 var TOKENS = [], PMAX = 1;
 var FILTER = {}, QUERY = "", SORT = {key: "liq_usd", dir: -1};
 var SHORTLIST = null;
+var CHANGES_RES = null;
 /* Pins are a per-viewer convenience, so localStorage is the right home and
    every access is guarded: it throws in a private window and comes back empty
    with site data cleared. A pin is a contract address, which is the identity
@@ -1027,7 +1124,10 @@ var COLS = [
   {k:"chg_h24",     t:"24h",    r:1,    sort:function(a){ return a.chg_h24; }},
   {k:"liq_usd",     t:"Liq",    r:1,    sort:function(a){ return a.liq_usd; }},
   {k:"txns24",      t:"Txns",   r:1,    sort:function(a){ return a.txns24; }},
-  {k:"main_dex",    t:"Venue",  r:0,    sort:function(a){ return (a.main_dex||"").toLowerCase(); }}
+  /* was Venue. The venue and fee moved into the expanded row -- they are
+     reference, not something to scan a list by -- and this column now shows
+     what is notable about the token. It sorts by how much there is to say. */
+  {k:"notable",     t:"Notable", r:0,  sort:function(a){ return -notableFor(a).length; }}
 ];
 
 function cmp(a, b, col){
@@ -1050,24 +1150,187 @@ function feeBadge(t){
 /* showAge is false where the layout already has an age column, so the same
    number is not printed twice in one row. The watch_reason badge is dropped
    when a flag above it already carries that word -- same reason. */
-function badges(t, showAge){
+/* ---- percentiles over the currently loaded board ----
+   Midranks, so a metric with many tied values (persist_count is mostly 0)
+   cannot put a third of the board in its "bottom tenth". A metric with fewer
+   than NOTE_MIN_ROWS scorable rows is skipped entirely rather than ranked on
+   a handful of points. */
+var NOTE_RANK = {};
+function buildNoteRanks(){
+  NOTE_RANK = {};
+  NOTE_METRICS.forEach(function(m){
+    var vals = [];
+    TOKENS.forEach(function(t){
+      var v = m.get(t);
+      if (v !== null && v !== undefined && !isNaN(v)) vals.push(Number(v));
+    });
+    if (vals.length < NOTE_MIN_ROWS) return;          /* not enough to rank */
+    vals.sort(function(a, b){ return a - b; });
+    NOTE_RANK[m.id] = vals;
+  });
+}
+function pctileOf(id, v){
+  var a = NOTE_RANK[id];
+  if (!a) return null;
+  var lo = 0, hi = a.length;
+  while (lo < hi){ var mid = (lo + hi) >> 1; if (a[mid] < v) lo = mid + 1; else hi = mid; }
+  var below = lo;
+  var eq = 0;
+  while (below + eq < a.length && a[below + eq] === v) eq++;
+  return (below + eq / 2) / a.length;               /* midrank in [0,1] */
+}
+
+/* ---- events from the rolling diff ---- */
+var NOTE_EVENTS = {};
+function buildNoteEvents(res){
+  NOTE_EVENTS = {};
+  if (!res || !res.ok) return;
+  var ev = (res.data && res.data.events) || [];
+  ev.forEach(function(e){
+    if (!e || !e.ca || e.kind === "avoid") return;
+    var prev = NOTE_EVENTS[e.ca];
+    if (!prev || String(e.ts) > String(prev.ts)) NOTE_EVENTS[e.ca] = e;
+  });
+}
+function hoursAgo(ts){
+  var t = Date.parse(ts);
+  if (isNaN(t)) return null;
+  return (Date.now() - t) / 3600000;
+}
+function eventChip(t){
+  var e = NOTE_EVENTS[t.ca];
+  if (!e) return null;
+  var h = hoursAgo(e.ts);
+  if (h === null || h < 0) return null;
+  var when = (h < 1 ? "<1H" : Math.round(h) + "H") + " AGO";
+  if (e.kind === "new"){
+    return {kind: "event", text: "NEW " + when,
+            why: "First seen on the board " + when.toLowerCase()
+               + ", entering as " + tierLabel(e.to) + "."};
+  }
+  var a = TIERS.indexOf(e.from), b = TIERS.indexOf(e.to);
+  if (a < 0 || b < 0 || a === b) return null;
+  var up = b < a;                      /* TIERS runs best to worst */
+  return {kind: "event",
+          text: (up ? "UPGRADED " : "DOWNGRADED ") + when,
+          why: "Moved from " + tierLabel(e.from) + " to " + tierLabel(e.to)
+             + " " + when.toLowerCase() + "."};
+}
+
+/* ---- the notable line ----
+   Flags first and never dropped, then one event, then up to two standouts,
+   then the age fact. Everything after the flags competes for what is left of
+   NOTE_BUDGET once the age chip has taken its slot. */
+function flagChips(t){
+  var out = [], seen = {};
+  if (t.flag_liq_anomaly){
+    seen.liq_anomaly = 1;
+    out.push({kind: "flag", text: "LIQ ANOMALY",
+      why: "Reported liquidity does not line up with the rest of this "
+         + "token's numbers (flag_liq_anomaly)."});
+  }
+  if (t.flag_contradiction){
+    seen.contradiction = 1;
+    out.push({kind: "flag", text: "CONTRADICTION",
+      why: "Two of the collector's own readings disagree for this token "
+         + "(flag_contradiction)."});
+  }
+  var wr = t.watch_reason;
+  if (wr && !seen[wr]){
+    var why = {
+      unproven:   "Not enough history yet to judge: it has not been on the "
+                + "board long enough (watch_reason).",
+      thin_depth: "Cleared the trade count but not the depth bar "
+                + "(watch_reason).",
+      tpt_high:   "Trades per trader is high -- few wallets trading "
+                + "repeatedly rather than many separate ones (watch_reason)."
+    }[wr] || "Collector warning: " + wr + " (watch_reason).";
+    out.push({kind: "flag", text: wr.replace(/_/g, " ").toUpperCase(), why: why});
+  }
+  var nd = dupCount(t);
+  if (nd){
+    out.push({kind: "flag", text: "TICKER ×" + (nd + 1),
+      why: nd + " other token" + (nd === 1 ? "" : "s") + " on this board use "
+         + "the ticker " + (t.symbol || "?") + ". The contract address is the "
+         + "identity, not the name."});
+  }
+  return out;
+}
+function standoutChips(t){
+  var out = [];
+  NOTE_METRICS.forEach(function(m){
+    if (!NOTE_RANK[m.id]) return;
+    var v = m.get(t);
+    if (v === null || v === undefined || isNaN(v)) return;
+    if (m.fires && !m.fires(t)) return;
+    var p = pctileOf(m.id, Number(v));
+    if (p === null) return;
+    var top = p >= 1 - NOTE_TAIL, bot = p <= NOTE_TAIL;
+    if (!top && !bot) return;
+    var side = top ? "TOP " + Math.max(1, Math.round((1 - p) * 100)) + "%"
+                   : "BOTTOM " + Math.max(1, Math.round(p * 100)) + "%";
+    out.push({kind: "standout", extreme: Math.max(p, 1 - p),
+      text: m.fmt(Number(v), t) + (m.noSide ? "" : " · " + side),
+      why: m.what + " On this board that puts it in the "
+         + side.toLowerCase() + " of " + NOTE_RANK[m.id].length + " ranked "
+         + "tokens. Unusual, not a recommendation."});
+  });
+  out.sort(function(a, b){ return b.extreme - a.extreme; });
+  return out.slice(0, NOTE_MAX_STANDOUTS);
+}
+function ageChip(t){
+  var a = t.age_days;
+  return {kind: "fact",
+    text: (a === null || a === undefined) ? "AGE N/A" : num(a, 1) + "D",
+    why: (a === null || a === undefined)
+       ? "No pool creation time was reported for this token (age_days)."
+       : "The oldest pool seen for this token is " + num(a, 1)
+       + " days old (age_days)."};
+}
+function notableFor(t){
+  var flags = flagChips(t);
+  var age = ageChip(t);
+  var left = Math.max(0, NOTE_BUDGET - 1 - flags.length);   /* 1 for the age */
+  var rest = [];
+  var ev = left > 0 ? eventChip(t) : null;
+  if (ev){ rest.push(ev); left--; }
+  if (left > 0) rest = rest.concat(standoutChips(t).slice(0, left));
+  return flags.concat(rest, [age]);
+}
+function notableEl(t){
   var b = el("div", "bds");
-  var flagged = {};
-  if (t.flag_contradiction){ flagged.contradiction = 1;
-    b.appendChild(el("span", "bd badb", "contradiction")); }
-  if (t.flag_liq_anomaly){ flagged.liq_anomaly = 1;
-    b.appendChild(el("span", "bd badb", "liq anomaly")); }
-  if (t.watch_reason && !flagged[t.watch_reason]){
-    b.appendChild(el("span", "bd", t.watch_reason));
-  }
-  if (showAge){
-    b.appendChild(el("span", "bd", t.age_days === null || t.age_days === undefined
-      ? "age n/a" : num(t.age_days, 1) + "d"));
-  }
-  if (t.main_dex) b.appendChild(el("span", "bd", t.main_dex));
-  b.appendChild(el("span", "bd" + (t.main_fee === null || t.main_fee === undefined
-    ? " warnb" : ""), feeBadge(t)));
+  notableFor(t).forEach(function(c){
+    var x = el("button", "nchip " + NOTE_KINDS[c.kind].cls, c.text);
+    x.type = "button";
+    x.setAttribute("aria-label", c.kind + ": " + c.text);
+    x.addEventListener("click", function(ev){
+      ev.stopPropagation();
+      showNotePop(x, c);
+    });
+    b.appendChild(x);
+  });
   return b;
+}
+/* same popover element and lifecycle as the band chips */
+function showNotePop(anchorEl, c){
+  var open = CHIP_POP && CHIP_POP.dataset.for === "note|" + c.kind + "|" + c.text;
+  closeChipPop();
+  if (open) return;
+  var pop = el("div", "pop");
+  pop.dataset.for = "note|" + c.kind + "|" + c.text;
+  var head = el("div", "pop-h");
+  head.appendChild(el("span", null, c.kind));
+  head.appendChild(el("b", null, c.text));
+  pop.appendChild(head);
+  pop.appendChild(el("p", "pop-p", c.why));
+  pop.appendChild(el("p", "pop-f", NOTE_KINDS[c.kind].what));
+  var close = el("button", "pop-x", "close");
+  close.type = "button";
+  close.addEventListener("click", function(ev){ ev.stopPropagation(); closeChipPop(); });
+  pop.appendChild(close);
+  document.body.appendChild(pop);
+  CHIP_POP = pop;
+  placePop(pop, anchorEl);
 }
 /* Two sentences built from fields already on the record -- nothing is
    inferred and nothing is predicted. Field by field:
@@ -1137,21 +1400,6 @@ function whyLine(t){
 }
 
 /* ---------- bands, chips and the chip popover ---------- */
-/* Nothing when the token was healthy on every snapshot the window holds --
-   that is the normal case and saying so on every row is noise. The badge is
-   the exception: this token was missing from some of them. */
-function gapsBadge(t){
-  var v = t.persist_count;
-  if (v === null || v === undefined || PMAX <= 0 || Number(v) >= PMAX) return null;
-  /* 0 is not a gap, it is a token with no history at all -- almost always a
-     brand-new pool, which the AGE chip already says. Badging those put the
-     warning on 92 of 135 rows and buried the 9 that have real gaps. */
-  if (Number(v) === 0) return null;
-  var b = el("span", "bd warnb", "gaps " + num(v) + "/" + PMAX);
-  b.title = "healthy in " + num(v) + " of the last " + PMAX
-          + " snapshots (persist_count)";
-  return b;
-}
 /* Tickers repeat on this chain -- the contract address is the identity. */
 var DUPS = {};
 function indexDups(){
@@ -1301,12 +1549,16 @@ function showChipPop(anchorEl, t, key){
   document.body.appendChild(pop);
   CHIP_POP = pop;
 
-  /* placed in page coordinates and clamped to the viewport, so it never hangs
-     off the right edge of a 390px screen */
+  placePop(pop, anchorEl);
+}
+/* placed in page coordinates and clamped to the viewport, so it never hangs
+   off the right edge of a 390px screen */
+function placePop(pop, anchorEl){
   var r = anchorEl.getBoundingClientRect();
   var w = Math.min(260, window.innerWidth - 16);
   pop.style.width = w + "px";
-  var left = Math.min(Math.max(8, r.left + window.scrollX), window.scrollX + window.innerWidth - w - 8);
+  var left = Math.min(Math.max(8, r.left + window.scrollX),
+                      window.scrollX + window.innerWidth - w - 8);
   pop.style.left = left + "px";
   var below = r.bottom + window.scrollY + 6;
   var ph = pop.getBoundingClientRect().height;
@@ -1420,17 +1672,9 @@ function renderTokens(){
     idc.appendChild(starBtn(t.ca));
     idc.appendChild(markFor(t.image_url, t.ca));
     idc.appendChild(el("span", "sym", t.symbol === null ? "(no symbol)" : t.symbol));
-    /* the persistence bar is gone from every row that has a full window: a
-       meter reading "full" on every row taught nothing. What is left is the
-       exception, said in words. */
-    var gaps = gapsBadge(t);
-    if (gaps) idc.appendChild(gaps);
-    var dup = dupCount(t);
-    if (dup){
-      var db = el("span", "bd warnb", "ticker \u00d7" + (dup + 1));
-      db.title = dup + " other token" + (dup === 1 ? "" : "s") + " use this ticker";
-      idc.appendChild(db);
-    }
+    /* No badges here any more. The shared ticker is a line-3 flag and the
+       persistence run is a line-3 chip, each with a popover that explains
+       itself -- printing either twice in one row taught nothing. */
     cell("c-id", idc);
     cell("c-tier", tierPill(t.tier));
     cell("c-age", chipFor(t, "age"));
@@ -1441,7 +1685,7 @@ function renderTokens(){
     cell("c-h24", chgEl(t.chg_h24), 1);
     cell("c-liq", el("span", "n", usd(t.liq_usd)), 1);
     cell("c-txns", el("span", "n", num(t.txns24)), 1);
-    cell("c-venue", badges(t, 0));
+    cell("c-notable", notableEl(t));
 
     /* two sub-lines, not one wrapping blob: the four chips get a line to
        themselves so they read as a row of signals, and the badges follow. */
@@ -1450,7 +1694,7 @@ function renderTokens(){
     line1.appendChild(tierPill(t.tier));
     BAND_ORDER.forEach(function(k){ line1.appendChild(chipFor(t, k)); });
     ind.appendChild(line1);
-    ind.appendChild(badges(t, 1));
+    ind.appendChild(notableEl(t));
 
     var xr = el("tr", "x");
     var xc = el("td");
@@ -1561,6 +1805,41 @@ function renderChipHelp(){
   cav.style.marginTop = "8px";
   cav.textContent = CHIPS_CAVEAT;
   mount.appendChild(cav);
+
+  mount.appendChild(el("p", "sub-h", "Line 3 = what's notable"));
+  mount.appendChild(el("p", "note",
+    "Under the chips, each row shows at most three chips saying what stands "
+    + "out about that token, in this order. Tap any of them for the reason."));
+  var nl = el("div", "gloss");
+  [["Flags",
+    "Red outline. Warnings the collector raised: liquidity anomaly, "
+    + "contradiction, the WATCH reason, or a ticker shared with other tokens "
+    + "on the board. Flags are never dropped, so a badly flagged token can "
+    + "show more than three chips."],
+   ["Event",
+    "Blue outline. A recent change from data/changes.json, such as "
+    + "UPGRADED 2H AGO or NEW 3H AGO. Only events still inside that file's "
+    + "window appear."],
+   ["Standout",
+    "Purple outline. This token is in the top or bottom tenth of the board "
+    + "on " + NOTE_METRICS.map(function(m){ return m.label; }).join(", ")
+    + ". Ranked by how extreme it is, at most two per row, and skipped for "
+    + "any measure with fewer than " + NOTE_MIN_ROWS + " ranked tokens. "
+    + "Purple means unusual, not good: on the collected history big recent "
+    + "moves tended to come before worse 4-8 h returns."],
+   ["Age",
+    "Grey outline. The age of the oldest pool, always shown, always last. A "
+    + "token with nothing else notable shows only this."]
+  ].forEach(function(r){
+    var d = el("div");
+    d.appendChild(el("b", null, r[0]));
+    d.appendChild(el("span", null, r[1]));
+    nl.appendChild(d);
+  });
+  mount.appendChild(nl);
+  mount.appendChild(el("p", "note",
+    "The venue and the fee moved into the expanded row, where they are still "
+    + "shown for every token."));
 
   mount.appendChild(el("p", "sub-h", "Shortlists"));
   var sl = el("div", "xg");
@@ -1812,6 +2091,7 @@ function renderPools(res){
   stamps.push(["pools", d.generated_at]);
   renderHeader(d, true, ageMin(d.generated_at));
 
+  buildNoteEvents(CHANGES_RES);
   AVOID_REASON = {};
   (d.avoided || []).forEach(function(a){
     if (a && a.ca) AVOID_REASON[a.ca] = a.reason || "";
@@ -1822,6 +2102,7 @@ function renderPools(res){
   TOKENS.forEach(function(t){
     if (typeof t.persist_count === "number" && t.persist_count > PMAX) PMAX = t.persist_count;
   });
+  buildNoteRanks();          /* after PMAX, which the persist metric reads */
   renderControls(d);
   renderShortlists();
   renderHeatGrid();
@@ -2133,6 +2414,7 @@ Promise.all([
      meta: nftD.ok ? ((nftD.data.collections || []).length + " surfaced") : null}
   ]);
 
+  CHANGES_RES = changes;
   renderChanges(changes);
   renderPools(pools);
   renderStocks(stocks);
