@@ -367,3 +367,60 @@ Everything is hard-coded to Robinhood Chain: `NETWORK = "robinhood"` in
 chain config object and a per-chain data directory, and it buys nothing until
 there is a second chain worth watching. Recorded so that the next person
 adding a constant knows there are already four places to change.
+
+## Evaluator join for H-0005 — supersedes the H-0004 join entry above
+
+The H-0004 join entry above is obsolete: H-0004 was superseded by H-0005 on
+the day it was registered, before any outcome data was joined to it. The work
+is the same shape with three changes, all of which came from the first
+holders run rather than from taste:
+
+- the denominator is `total_supply` from `data/holders/token_meta.json`, not
+  the stored top 20. 63% of tokens had 10 or fewer surviving holders, which
+  pins their top-20 concentration at exactly 1.0 and puts the quartile cutoff
+  inside a tie block of 63 out of 100
+- the join window is **3.5 hours**, as-of and never forward in time. At a
+  3-hour cadence a 90-minute window can serve at best half the label rows
+- the quartile split needs the **deterministic tie-break** H-0005 registers —
+  conc10 desc, then `total_supply` desc, then `ca` asc — and the report has to
+  state how many of the top arm were decided by the second or third key
+
+Still true from before: an as-of join must never look forward, `label.py`
+needs no change, and this gets built when there are snapshots to join
+against.
+
+## Candidate: creator-wallet concentration — NOT registered
+
+The first holders run turned up something sharper than the hypothesis it was
+collected for. 119 tokens, **44 distinct `creator_address_hash` values, one
+of them responsible for 43 of them**. That address is a factory, which is why
+the collector now resolves the creation transaction's sender into
+`creator_eoa`.
+
+The obvious question is whether tokens from a wallet that has launched many
+tokens behave differently from one-offs. It is **deliberately not registered
+yet**, for two reasons. There is no `creator_eoa` data at all until the
+backfill lands, so a population cannot be defined. And the shape of the
+distribution is the thing that would suggest the cut, which is precisely the
+circumstance where writing the hypothesis first matters most.
+
+When it is registered it needs: a launch-count-per-wallet feature computed
+as-of the snapshot (never counting launches that had not happened yet, which
+is the easy way to leak the future into it), a relative split as in H-0005,
+and the same bar and gates. One hypothesis, written before the first look at
+returns by launch count.
+
+## Measure data/holders growth after 7 days, then choose
+
+The first snapshot is 236 KB. At 8 runs a day that projects to ~1.9 MB/day,
+~58 MB/month, ~0.7 GB/year, in a public repo that already has a
+`history.jsonl` size entry above. **Do not act on the projection.** It
+assumes a steady 119 tokens at 20 holders each, and the board turns over.
+
+Measure the real thing after 7 days — `git count-objects -vH` before and
+after, plus `du -sh data/holders` — and only then pick from: per-day
+compaction into one file, dropping holders past the top 10, or a rolling
+window that keeps recent snapshots whole and older ones summarised. Each
+trades something different away, and the measurement decides which trade is
+worth making. Note that compaction interacts with the as-of join: anything
+that rewrites older snapshots changes what a past evaluation would have seen.

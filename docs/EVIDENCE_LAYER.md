@@ -227,7 +227,9 @@ was collected before the question was asked.
 | `holders[].balance` | Blockscout `value`, verbatim | the raw integer in base units. Not divided by `decimals`: we do not always have them, and a number that is sometimes scaled and sometimes not is two fields wearing one name |
 | `holders[].is_contract` | Blockscout address object | the single most useful exclusion signal, and `null` when the API did not say |
 | `holders[].label` | `name`, `ens_domain_name` or the first public tag | what makes a PoolManager recognisable as one |
-| `total_supply` | `stocks_latest.json` where the RPC already read it | `null` for everything but the five stock tokens. Asking Blockscout per token per run would double the credit spend to learn a number the registered metric does not use |
+| `total_supply` | `/tokens/{ca}`, cached forever in `data/holders/token_meta.json` | every token, not the five the RPC happened to have. Asked once and never again: the registered metric reads supply and balances from the same snapshot, and re-reading a number that barely moves would cost 960 calls a day |
+| `decimals` | the same cache | stored for display only. The metric divides a raw balance by a raw supply, so the scale cancels and decimals never enters the arithmetic |
+| `creator_eoa` | the creation transaction's sender, cached forever | the wallet behind the factory. `creator_address_hash` is usually a factory contract — 119 tokens, 44 distinct creators, one of them 43 of them — so the deployer alone does not identify anyone |
 | `deployer` | `/addresses/{ca}` `creator_address_hash` | looked up once per contract and cached in `data/holders/deployers.json` forever; a `null` is retried weekly, because the API not knowing today is not proof it never will |
 
 ### Cadence and budget
@@ -236,12 +238,24 @@ Every 3 hours, by `workflow_dispatch` from cron-job.org — the same arrangement
 as `collect.yml`, and for the same reason. 120 tokens per run, ordered by
 liquidity, DEAD and AVOID dropped.
 
-At Blockscout's documented default of **20 credits per call**, steady state is
-960 calls and **19,200 credits a day** against a free tier of 100,000, well
-inside the 3,000-call ceiling. The first run also pays for 120 deployer
-lookups; after that only new tokens cost anything. The client throttles to 4
-requests a second under a 5/s limit, caps itself at 300 calls per run, honours
-`Retry-After`, and abandons the run after three consecutive 429s.
+At **20 credits per call** — confirmed against the first run's own credit
+header, not just the docs — steady state is 960 calls and **19,200 credits a
+day** against a free tier of 100,000, and a worst case of 2,400 calls a day if
+every run hits its cap, inside the 3,000 ceiling.
+
+Three lookups are one-time and cached forever: the deployer, the token's
+supply and decimals, and the creator wallet behind the creation transaction.
+A cold cache wants roughly 240 of them, which is more than one run's headroom,
+so the backfill is sized from what the holders calls leave rather than from a
+fixed number: it spreads over two or three runs and never competes with the
+cross-section. The client throttles to 4 requests a second under a 5/s limit,
+caps itself at 300 calls per run, honours `Retry-After`, and abandons the run
+after three consecutive 429s.
+
+**Hitting the call cap abandons the run too**, rather than returning empty
+responses and letting the loop write whatever it had. That distinction was a
+real bug for the length of one edit: a cap that quietly truncates produces
+exactly the half-filled cross-section the next paragraph forbids.
 
 **An abandoned run writes nothing.** A half-filled snapshot is worse than no
 snapshot here: the metric ranks tokens against each other *within* a snapshot,
@@ -260,6 +274,32 @@ re-collecting history that no longer exists. The collector's only contribution
 is `data/holders/exclusions_hint.json`: contracts appearing in the top 3 of at
 least 5 different tokens, which is what shared infrastructure looks like. It
 carries `"applied": false` and nothing reads it automatically.
+
+### What the first run settled
+
+The run of 2026-10-19T15:34Z, 119 tokens, 239 calls, resolved the open
+questions and found two design faults in the hypothesis that was registered
+against it.
+
+Settled: the holders item nests its address under `address_hash` with `hash`
+inside — 1,589 holder records parsed with zero nulls in `is_contract` and
+zero missing balances. `creator_address_hash` is populated for 119 of 119.
+**20 credits per successful call, confirmed exactly**: 100,000 − 95,240 =
+4,760 = 238 × 20, and the single 404 cost nothing.
+
+Found, and the reason H-0005 exists:
+
+- **`is_contract` does not catch burn addresses.** `0x…dead` reports
+  `is_contract: false` and holds balances in the 10²⁷ range. It is in the top
+  10 of 26 of the 119 tokens. An `is_contract`-only exclusion would have
+  counted it as a real holder on a fifth of the board.
+- **The top-20 denominator was degenerate.** 63% of tokens have 10 or fewer
+  surviving holders, which makes their concentration exactly 1.0 by
+  construction, and the top-quartile cutoff landed inside a tie block of 63.
+  The split would have measured how many holders Blockscout returns.
+- **119 tokens, 44 distinct deployers**, one of them responsible for 43. The
+  `creator_address_hash` is usually a factory, which is why the collector now
+  resolves the creation transaction's sender as `creator_eoa`.
 
 ### Verified and unverified
 
@@ -520,6 +560,16 @@ The rules that make it worth anything:
    | `inconclusive` | gates met, threshold cleared, sign unstable across subperiods | a person, naming the report |
    | `passed` / `failed` | the registered clause fired | a person, naming the report |
    | `expired` | `stop_by` reached with gates still unmet | a person, naming the report |
+   | `superseded` | the question survives, the way it was operationalised does not | recorded by the successor, not by editing the original |
+
+   **`superseded` is recorded by appending, never by editing.** The file is
+   append-only, so an obsolete hypothesis cannot be marked in place. Its
+   successor carries `"supersedes": "<id>"`, and that field is the whole
+   mechanism: the original line stays exactly as it was written, and anything
+   reading the registry treats an id named in some later record's
+   `supersedes` as retired. The evaluator does not implement that yet — it
+   will report the superseded hypothesis as `no rule implemented`, which is
+   harmless and noisy, and is in the backlog.
 
    `waiting` is what the evaluator prints on every run until there is enough
    data; it is a state of the evidence, not of the hypothesis, and a
@@ -535,6 +585,24 @@ The rules that make it worth anything:
    times at nothing. A deleted or unregistered hypothesis shrinks the
    denominator without shrinking the search, which is the one edit that turns
    this file from evidence into advertising.
+
+   **Superseding does not shrink the denominator either — but a hypothesis
+   that never ran never consumed a test.** These are two different things and
+   conflating them would be the same error in a nicer coat. H-0004 is the
+   worked example: registered 2026-10-19 with `log_watermark: null`, it was
+   superseded by H-0005 the same day, before the first holders snapshot had
+   any outcome data joined to it. Zero rows were ever evaluated against it,
+   no threshold was ever compared, no report ever named it. The family-wise
+   arithmetic is therefore unchanged by its existence: the count of *tests
+   performed* is what 1 − 0.95ⁿ is computed over, and H-0004 contributed
+   none. It stays in the file, with its line untouched, because the record of
+   what was asked is the thing the file is for — but a reader counting tests
+   should count four, not five.
+
+   The rule that follows, and it is not a loophole: a hypothesis may be
+   superseded without cost **only** while nothing has been evaluated against
+   it. Once a report has named it, changing the operationalisation is a new
+   test and counts as one, however it is labelled.
 
    So: every report states how many hypotheses were open over the period, not
    just how many passed. Three registered and one passed is a claim worth

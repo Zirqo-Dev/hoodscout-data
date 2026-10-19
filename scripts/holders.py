@@ -23,13 +23,22 @@ API. What was confirmed from Blockscout's published API reference:
   * the holders response is {"items": [...], "next_page_params": {...}} and an
     item carries a nested address object plus a raw `value` string
   * an address response carries creator_address_hash and a creation tx hash
+  * /tokens/{hash} carries decimals, symbol and total_supply
+  * /transactions/{hash} exists and its counterparty objects are
+    {hash, is_contract, ens_domain_name, tags}
 
-What was NOT confirmed, and is therefore parsed defensively below: whether the
-holders item's address key is `address_hash` or `address`, whether the nested
-object uses `hash`, and the exact spelling of the creation-transaction field.
-The parser accepts every spelling seen in the docs and examples and falls back
-to None rather than raising. `--probe` prints the real keys from two or three
-tokens so the first Actions run settles it.
+The 2026-10-19 run settled two of the open questions against live data: the
+holders item nests its address under `address_hash` with `hash` inside, and
+`creator_address_hash` is populated (119 of 119 tokens). What is still
+UNVERIFIED is the transaction object's `from` key -- the published example is
+truncated before it, so symmetry with `to` is an inference -- and the exact
+spelling of total_supply on the token endpoint. Both are parsed defensively.
+
+The defensive parsing below stays even where the run settled the question:
+these are the PRO API's endpoints, the per-instance ones they replace are
+marked for deprecation, and a response shape that has already moved once can
+move again. Every parser falls back to None rather than raising, and `--probe`
+prints the real keys from two or three tokens.
 
 The key is sent as a header, never in the URL, so it cannot reach a log line
 through an exception's URL or through a printed path.
@@ -43,11 +52,18 @@ UA = "hoodscout-data/0.1 (+https://github.com/Zirqo-Dev/hoodscout-data)"
 
 OUT_DIR = "data/holders"
 DEPLOYER_CACHE = OUT_DIR + "/deployers.json"
+TOKEN_META_CACHE = OUT_DIR + "/token_meta.json"
 HINT_PATH = OUT_DIR + "/exclusions_hint.json"
 
 MAX_TOKENS = 120            # ordered by liquidity, DEAD and AVOID dropped
 TOP_HOLDERS = 20            # stored per token, raw
 MAX_CALLS_PER_RUN = 300     # hard stop, whatever the token count says
+# Ceiling on the one-time lookups -- token supply and the creator's wallet --
+# per run. The actual allowance is the smaller of this and whatever headroom
+# the holders and deployer calls leave under MAX_CALLS_PER_RUN, computed at
+# run start, so a cold cache spreads over two or three runs and can never be
+# the reason a cross-section is abandoned.
+BACKFILL_PER_RUN = 150
 MIN_INTERVAL = 0.25         # 4 req/s, under the free tier's 5
 MAX_429_IN_A_ROW = 3        # then the run gives up and writes nothing
 TIMEOUT = 25
@@ -87,7 +103,14 @@ class Api:
     def get(self, path, params=None, probe=False):
         """Returns (payload, headers) or (None, None). Never raises for an API
         problem: the caller counts it and carries on."""
-        if self.gave_up or self.calls >= self.cap:
+        if self.gave_up:
+            return None, None
+        if self.calls >= self.cap:
+            # A hard stop, not a quiet one. Returning empties here would let
+            # the loop carry on and write a half-filled cross-section, which
+            # is the one output this collector must never produce.
+            self.gave_up = True
+            print("WARN call cap %d reached, giving up for this run" % self.cap)
             return None, None
         url = BASE + path
         if params:
@@ -217,6 +240,42 @@ def parse_holders(payload, limit=TOP_HOLDERS):
     return out
 
 
+def parse_token_meta(payload):
+    """-> {'total_supply': str|None, 'decimals': int|None, 'symbol': str|None}.
+
+    total_supply stays a string for the same reason a balance does: it is an
+    integer in base units, often past 2**53, and float is not a container for
+    it. decimals is stored for display only -- the registered metric divides a
+    raw balance by a raw supply, so the scale cancels and decimals never
+    enters the arithmetic."""
+    if not isinstance(payload, dict):
+        return {"total_supply": None, "decimals": None, "symbol": None}
+    sup = _first(payload, "total_supply", "totalSupply", "supply")
+    dec = _first(payload, "decimals", "decimal")
+    try:
+        dec = int(dec) if dec is not None else None
+    except (TypeError, ValueError):
+        dec = None
+    return {"total_supply": str(sup) if sup is not None else None,
+            "decimals": dec,
+            "symbol": _first(payload, "symbol", "name")}
+
+
+def parse_tx_sender(payload):
+    """-> the wallet that sent the creation transaction, or None.
+
+    UNVERIFIED: the published example of a transaction object is truncated
+    before `from`, so the key name is an inference from the `to` object beside
+    it. Every spelling seen in Blockscout responses is accepted, and a bare
+    string is accepted as well as the nested object."""
+    if not isinstance(payload, dict):
+        return None
+    f = _first(payload, "from", "from_address_hash", "from_address", "sender")
+    if isinstance(f, dict):
+        f = _first(f, "hash", "address_hash", "address")
+    return f.lower() if isinstance(f, str) and f else None
+
+
 def parse_deployer(payload):
     """-> {'deployer': str|None, 'creation_tx': str|None}."""
     if not isinstance(payload, dict):
@@ -263,6 +322,40 @@ def load_supplies(path="data/stocks_latest.json"):
         if ca and sup is not None:
             out[ca] = sup
     return out
+
+
+def load_meta(path=TOKEN_META_CACHE):
+    try:
+        d = json.load(open(path))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def needs_meta(ca, meta):
+    """Asked once, ever. A token's supply does move -- mints and burns happen
+    -- but the registered metric is a ratio of raw balances to raw supply read
+    at the same snapshot, and re-reading supply every three hours would cost
+    960 extra calls a day to track a number that barely moves for most of
+    these. A null is retried, a value never is."""
+    e = meta.get(ca)
+    return not (isinstance(e, dict) and e.get("total_supply") is not None)
+
+
+def needs_creator_eoa(ca, cache):
+    """The creator wallet behind a creation transaction, resolved once.
+
+    creator_address_hash is whatever sent the deploy, which on this chain is
+    usually a factory contract: 119 tokens came back with 44 distinct
+    creators, one of them deploying 43. The wallet that called the factory is
+    the thing a person would actually recognise, and it is one hop away via
+    the creation transaction's sender."""
+    e = cache.get(ca)
+    if not isinstance(e, dict):
+        return False                      # no creation_tx known yet
+    if e.get("creator_eoa"):
+        return False
+    return bool(e.get("creation_tx")) and not e.get("creator_eoa_asked")
 
 
 def load_cache(path=DEPLOYER_CACHE):
@@ -321,26 +414,41 @@ def build_hint(rows):
 def do_dry_run():
     toks = load_tokens()
     cache = load_cache()
+    meta = load_meta()
     now = datetime.now(timezone.utc)
     new = [t for t in toks if needs_deployer(t["ca"], cache, now)]
+    want_meta = [t for t in toks if needs_meta(t["ca"], meta)]
+    want_eoa = [t for t in toks if needs_creator_eoa(t["ca"], cache)]
     holder_calls = len(toks)
+    allow = max(0, min(BACKFILL_PER_RUN,
+                       MAX_CALLS_PER_RUN - holder_calls - len(new) - 10))
+    backfill = min(allow, len(want_meta) + len(want_eoa))
+    total = holder_calls + len(new) + backfill
     print("tokens on the board, excluding %s: %d (cap %d)"
           % ("/".join(sorted(SKIP_TIERS)), len(toks), MAX_TOKENS))
     print("deployers already cached: %d" % len(cache))
+    print("token meta already cached: %d" % len(meta))
+    print("creator wallets resolved: %d"
+          % sum(1 for e in cache.values()
+                if isinstance(e, dict) and e.get("creator_eoa")))
     print()
     print("planned calls this run")
-    print("  holders   %4d  (1 per token, top %d)" % (holder_calls, TOP_HOLDERS))
-    print("  deployers %4d  (uncached or a null older than %d days)"
+    print("  holders    %4d  (1 per token, top %d)" % (holder_calls, TOP_HOLDERS))
+    print("  deployers  %4d  (uncached or a null older than %d days)"
           % (len(new), DEPLOYER_RETRY_DAYS))
-    print("  total     %4d   (hard cap %d)" % (holder_calls + len(new),
-                                               MAX_CALLS_PER_RUN))
+    print("  token meta %4d  one-time, wanted" % len(want_meta))
+    print("  creator eoa%4d  one-time, wanted" % len(want_eoa))
+    print("  backfill   %4d  this run (allowance %d of a %d cap; the rest "
+          "waits for the next run)" % (backfill, allow, BACKFILL_PER_RUN))
+    print("  total      %4d   (hard cap %d)" % (total, MAX_CALLS_PER_RUN))
     print()
     steady = holder_calls * 8
     print("at every 3 hours, 8 runs a day")
     print("  steady state %5d calls/day = %6d credits/day at 20 each"
           % (steady, steady * 20))
-    print("  this run     %5d calls     = %6d credits"
-          % (holder_calls + len(new), (holder_calls + len(new)) * 20))
+    print("  worst case   %5d calls/day = %6d credits/day (every run at the cap)"
+          % (MAX_CALLS_PER_RUN * 8, MAX_CALLS_PER_RUN * 8 * 20))
+    print("  this run     %5d calls     = %6d credits" % (total, total * 20))
     print("  free tier is 100,000 credits/day and 5 req/s; this throttles to "
           "%.0f req/s" % (1.0 / MIN_INTERVAL))
     print()
@@ -389,7 +497,19 @@ def do_collect(api):
         return 0
     supplies = load_supplies()
     cache = load_cache()
-    cache_before = len(cache)
+    meta = load_meta()
+    cache_before, meta_before = len(cache), len(meta)
+    eoa_before = sum(1 for e in cache.values()
+                     if isinstance(e, dict) and e.get("creator_eoa"))
+    # Backfill only in the headroom the holders and deployer calls leave, so a
+    # cold cache slows the catch-up instead of aborting the run. 10 calls of
+    # margin for retries.
+    want_dep = sum(1 for t in toks if needs_deployer(t["ca"], cache, now))
+    allow = max(0, min(BACKFILL_PER_RUN,
+                       api.cap - len(toks) - want_dep - 10))
+    backfill = 0            # one-time lookups spent this run
+    print("backfill allowance this run: %d (cap %d, headroom %d)"
+          % (allow, BACKFILL_PER_RUN, api.cap - len(toks) - want_dep))
 
     rows, ok = [], 0
     for t in toks:
@@ -406,7 +526,24 @@ def do_collect(api):
             cache[ca] = {"deployer": info["deployer"],
                          "creation_tx": info["creation_tx"],
                          "asked_at": iso(now)}
-        dep = (cache.get(ca) or {}).get("deployer")
+        # One-time backfills, capped per run so a cold cache cannot eat the
+        # call budget in a single pass. Both are cached forever on success.
+        if (backfill < allow and needs_meta(ca, meta)
+                and not api.gave_up):
+            m, _ = api.get("/tokens/%s" % ca)
+            backfill += 1
+            info = parse_token_meta(m)
+            info["asked_at"] = iso(now)
+            meta[ca] = info
+        if (backfill < allow and needs_creator_eoa(ca, cache)
+                and not api.gave_up):
+            tx = cache[ca]["creation_tx"]
+            txb, _ = api.get("/transactions/%s" % tx)
+            backfill += 1
+            cache[ca]["creator_eoa"] = parse_tx_sender(txb)
+            cache[ca]["creator_eoa_asked"] = iso(now)
+        ent = cache.get(ca) or {}
+        mt = meta.get(ca) or {}
         rows.append({
             "ts": iso(now),
             "ca": ca,
@@ -414,9 +551,14 @@ def do_collect(api):
             "pool": t.get("main_pool"),
             "tier": t.get("tier"),
             "n_holders_returned": len(holders),
-            "total_supply": supplies.get(ca),
+            # from the token endpoint for every token now, not just the five
+            # the RPC already had. supplies is kept as a fallback for a token
+            # whose /tokens lookup has not landed yet.
+            "total_supply": mt.get("total_supply") or supplies.get(ca),
+            "decimals": mt.get("decimals"),
             "holders": holders,
-            "deployer": dep,
+            "deployer": ent.get("deployer"),
+            "creator_eoa": ent.get("creator_eoa"),
         })
         ok += 1
 
@@ -438,6 +580,7 @@ def do_collect(api):
             f.write(json.dumps(r, separators=(",", ":")) + "\n")
 
     json.dump(cache, open(DEPLOYER_CACHE, "w"), indent=1, sort_keys=True)
+    json.dump(meta, open(TOKEN_META_CACHE, "w"), indent=1, sort_keys=True)
 
     hint = build_hint(rows)
     json.dump({"generated_at": iso(now),
@@ -447,9 +590,17 @@ def do_collect(api):
                "addresses": hint},
               open(HINT_PATH, "w"), indent=1)
 
+    sup = sum(1 for r in rows if r["total_supply"] is not None)
+    eoa_now = sum(1 for e in cache.values()
+                  if isinstance(e, dict) and e.get("creator_eoa"))
     print("holders: %d/%d tokens -> %s" % (ok, len(toks), path))
     print("deployers: %d cached (+%d this run)" % (len(cache),
                                                    len(cache) - cache_before))
+    print("creator wallets: %d resolved (+%d this run)"
+          % (eoa_now, eoa_now - eoa_before))
+    print("token meta: %d cached (+%d this run); %d/%d rows carry a supply"
+          % (len(meta), len(meta) - meta_before, sup, len(rows)))
+    print("backfill calls this run: %d/%d allowed" % (backfill, allow))
     print("exclusion hints: %d address(es)" % len(hint))
     for h in hint[:8]:
         print("  %s  in %d tokens  %s" % (h["address"], h["tokens"],
