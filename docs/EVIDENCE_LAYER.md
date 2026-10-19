@@ -12,7 +12,7 @@ that too.
 
 ## Why this order
 
-The forward-return baseline in `BACKLOG.md` is the whole argument. Over 43,365
+The forward-return baseline in `docs/TECH_NOTES.md` is the whole argument. Over 43,365
 rows, tier did not separate forward returns: BEST beat WATCH on the pooled
 median by 0.19pp and lost to it on the token-clustered median by 1.30pp, with
 the sign flipping across three consecutive weeks. `screen_score` had already
@@ -77,7 +77,7 @@ packing behaviour rather than on arithmetic. One file per run is optimal by
 construction and needs no assumptions.
 
 It also buys something worth more than the bytes: **a per-run filename cannot
-conflict.** The `Commit` step's open failure (`BACKLOG.md`, run #1360) is an
+conflict.** The `Commit` step's open failure (`docs/TECH_NOTES.md`, run #1360) is an
 add/add and content conflict on files two runs both rewrote. Two runs writing
 `0900.jsonl` and `0915.jsonl` have nothing to collide over. The log is immune
 to the bug that still takes `history.jsonl` down.
@@ -842,13 +842,13 @@ console's own billing page before assuming either way.
 | labeler runs inside collect | the thing scored scores itself | separate workflow, separate schedule |
 | labeler backfills on every run | O(n²) as the log grows | watermark file; only label rows newer than it |
 | `data/log/` files conflict | — | cannot: unique path per run |
-| `history.jsonl` conflicts | run #1360, still open | unchanged by this; see `BACKLOG.md` |
+| `history.jsonl` conflicts | run #1360, still open | unchanged by this; see `docs/TECH_NOTES.md` |
 | xAI SDK changes shape | the pilot breaks | pin the SDK version; the cookbook is a moving target |
 | Snowflake epoch constant wrong | every `first_mention_ts` silently off | cross-check against the model's `created_at` on run one; stop if they disagree |
 | model invents a post | a citation-less URL in the data | keep only cited posts, as all three cookbook examples do |
 | 10-post ceiling read as a count | popular tokens look identical | `saturated` flag; treat 10 as censored-above |
 | cost ledger lost or corrupted | uncapped spend | treat missing as at-cap |
-| cron-job.org dies | log stops, silently | existing single point of failure, `BACKLOG.md` |
+| cron-job.org dies | log stops, silently | existing single point of failure, `docs/TECH_NOTES.md` |
 
 ### Things that mislead, which is worse
 
