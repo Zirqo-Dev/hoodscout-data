@@ -199,6 +199,86 @@ assume.
 
 ---
 
+## Layer 3a-h — the holders log
+
+A second write-only log, on its own cadence and its own workflow. One row per
+token per holders run, under `data/holders/YYYY-MM-DD/HHMMSS.jsonl`. Nothing
+reads it yet.
+
+**What it is not.** Not a tier input, not a score input, not shown on the
+dashboard, and not joined to labels. `scripts/collect.py` does not import it
+and `index.html` does not fetch it. It exists so that H-0004 — concentrated
+holdings preceding worse 6h returns — can be tested later against data that
+was collected before the question was asked.
+
+### Fields
+
+```json
+{"ts":"2026-10-19T15:30:00+00:00","ca":"0x39db…","symbol":"PONS",
+ "pool":"0x7504…","tier":"WATCH","n_holders_returned":20,
+ "total_supply":null,
+ "holders":[{"address":"0xeb53…","balance":"10000","is_contract":true,
+             "label":"Uniswap V4 PoolManager"}],
+ "deployer":"0xdead…"}
+```
+
+| field | source | why |
+|---|---|---|
+| `holders[].balance` | Blockscout `value`, verbatim | the raw integer in base units. Not divided by `decimals`: we do not always have them, and a number that is sometimes scaled and sometimes not is two fields wearing one name |
+| `holders[].is_contract` | Blockscout address object | the single most useful exclusion signal, and `null` when the API did not say |
+| `holders[].label` | `name`, `ens_domain_name` or the first public tag | what makes a PoolManager recognisable as one |
+| `total_supply` | `stocks_latest.json` where the RPC already read it | `null` for everything but the five stock tokens. Asking Blockscout per token per run would double the credit spend to learn a number the registered metric does not use |
+| `deployer` | `/addresses/{ca}` `creator_address_hash` | looked up once per contract and cached in `data/holders/deployers.json` forever; a `null` is retried weekly, because the API not knowing today is not proof it never will |
+
+### Cadence and budget
+
+Every 3 hours, by `workflow_dispatch` from cron-job.org — the same arrangement
+as `collect.yml`, and for the same reason. 120 tokens per run, ordered by
+liquidity, DEAD and AVOID dropped.
+
+At Blockscout's documented default of **20 credits per call**, steady state is
+960 calls and **19,200 credits a day** against a free tier of 100,000, well
+inside the 3,000-call ceiling. The first run also pays for 120 deployer
+lookups; after that only new tokens cost anything. The client throttles to 4
+requests a second under a 5/s limit, caps itself at 300 calls per run, honours
+`Retry-After`, and abandons the run after three consecutive 429s.
+
+**An abandoned run writes nothing.** A half-filled snapshot is worse than no
+snapshot here: the metric ranks tokens against each other *within* a snapshot,
+so a partial cross-section would quietly change what "top quartile" means.
+
+### Exclusions are not applied at collection
+
+The stored rows are raw. The pool, the router, the PoolManager, burn addresses
+and the token contract are all still in them, and the analysis removes them at
+evaluation time.
+
+That is deliberate optionality. Which addresses count as infrastructure is a
+judgement that will change — a new router appears, a label turns out to be
+wrong — and a judgement baked into stored data cannot be revised without
+re-collecting history that no longer exists. The collector's only contribution
+is `data/holders/exclusions_hint.json`: contracts appearing in the top 3 of at
+least 5 different tokens, which is what shared infrastructure looks like. It
+carries `"applied": false` and nothing reads it automatically.
+
+### Verified and unverified
+
+`api.blockscout.com` is unreachable from the authoring environment, so none of
+this was exercised against the live API before the first run. Confirmed from
+Blockscout's published reference: the `api.blockscout.com/{chain_id}/api/v2`
+host, the `apikey` parameter or `authorization` header, the 20-credit default,
+the 100,000/day and 5/s free tier, the `x-credits-remaining` family of
+response headers, and the `{"items": [...], "next_page_params": {...}}` shape
+with a nested address object and a raw `value` string. **Not** confirmed:
+whether the holders item's address key is `address_hash` or `address`, and the
+exact spelling of the creation-transaction field. The parser accepts every
+documented spelling and returns `None` rather than raising, and
+`scripts/holders.py --probe` prints the real keys from two or three tokens so
+the first Actions run settles it.
+
+The API key is sent as a header, never as a query parameter, so a failing
+request's URL cannot carry it into a log line.
+
 ## Layer 3b — the outcome labeler
 
 A separate script, `scripts/label.py`, on a separate schedule. It must not run

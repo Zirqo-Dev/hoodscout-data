@@ -1,0 +1,56 @@
+name: holders
+# No `schedule:` here on purpose. GitHub's scheduler is why collect.yml lost
+# its own (see the comment at the top of that file); the cadence for this one
+# lives in cron-job.org, calling workflow_dispatch every 3 hours. There is
+# nothing to restore if that changes -- add a `schedule:` block and turn the
+# external job off first, never both.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Serialised against itself only. This workflow shares no file with collect
+# or nft: it writes under data/holders and nothing else, so two different
+# workflows committing in the same minute touch disjoint paths and the
+# Commit step's rebase can actually resolve it.
+concurrency:
+  group: holders
+  cancel-in-progress: false
+
+jobs:
+  holders:
+    # Pinned for the same reason as collect.yml: an unattended pipeline should
+    # not change base image on GitHub's schedule.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # main's tip at job start, not the SHA the run was created on --
+          # same reasoning as collect.yml, and the same reason: a run that
+          # queues behind another would otherwise push from a stale tree.
+          ref: main
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Collect holders
+        env:
+          # Read by the script from the environment and sent as an
+          # authorization header, never as a query parameter, so it cannot
+          # reach a log line through a failing request's URL.
+          BLOCKSCOUT_API_KEY: ${{ secrets.BLOCKSCOUT_API_KEY }}
+        run: python scripts/holders.py
+      - name: Commit
+        run: |
+          git config user.name "hoodscout-bot"
+          git config user.email "actions@github.com"
+          git add data/holders
+          git diff --staged --quiet && exit 0
+          git commit -m "holders: $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3 4 5; do
+            git push && exit 0
+            echo "push rejected, rebasing (attempt $i)"
+            git pull --rebase --autostash
+            sleep 5
+          done
+          echo "push failed after 5 attempts"; exit 1

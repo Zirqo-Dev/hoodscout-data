@@ -301,3 +301,69 @@ Learning happens one way: a hypothesis is written down before the data that
 tests it, Pete approves it, and it is registered in `data/hypotheses.jsonl`
 with its own pass, fail and inconclusive conditions. Anything that changes a
 threshold without passing through that step is a bug, not a feature.
+
+## Evaluator join for H-0004 — not built, on purpose
+
+`data/holders/` collects from 2026-10-19; nothing reads it. H-0004 is
+registered with `log_watermark: null` and `status: waiting`, and it stays
+inert until the first holders row exists, at which point the watermark gets
+that row's `ts`.
+
+What `scripts/evaluate.py` would need, none of which exists:
+
+- a loader for `data/holders/YYYY-MM-DD/*.jsonl`, keyed by `(ca, ts)`
+- an **as-of** join: the nearest holders snapshot at or before a label row's
+  entry time, within 90 minutes, **never forward in time**. Joining forward
+  would leak the future into the feature, which is the one mistake that makes
+  a backtest look good for free
+- the exclusion filter applied at evaluation: `is_contract`, the token
+  contract, the token's `main_pool`, burn addresses, and whatever is in
+  `exclusions_hint.json` at that moment
+- the per-snapshot quartile split, so the cutoff stays relative
+
+`scripts/label.py` needs no change: `ret_net_500` is already what it emits,
+and the holders side is a grouping, not a return model. Build this when there
+are enough snapshots to join against, not before — writing it now would mean
+tuning a join against zero rows.
+
+## cron-job.org job for holders.yml, every 3 hours
+
+`holders.yml` is `workflow_dispatch` only and **nothing currently calls it**.
+Until a cron-job.org job exists it runs when someone presses the button, which
+means the holders log has gaps and H-0004's eventual population is whatever
+happened to be collected.
+
+Same account and same failure mode as the collect job: email-only
+notification, and the token expiring around **2027-01-16** takes this down
+with it. Unlike collect, nothing visible breaks when it stops — no dashboard
+chip goes amber, because the dashboard does not read this data. The only
+symptom is a directory that stops growing.
+
+## Deferred and rejected: DexScreener cross-check, boosts, DexPaprika
+
+Three adjacent data sources, all turned down for the same reason.
+
+- **DexScreener as a price/liquidity cross-check** — deferred. It would be a
+  second opinion on numbers GeckoTerminal already gives us, and the evidence
+  layer's hypotheses are registered against the GeckoTerminal series. Swapping
+  or blending sources mid-stream changes what the registered numbers mean.
+  Worth doing as a *separate* logged series if ever, never as a replacement.
+- **DexScreener boosts as a "promoted" flag** — **rejected**, and this is the
+  important one. Boosts are paid placement. A flag derived from them is a flag
+  for "someone spent money on visibility", which is exactly the kind of signal
+  that contaminates a forward-return test: it correlates with promotion
+  campaigns, and a promotion campaign is a cause of the price move being
+  measured, not an independent observation of it. Adding it would make any
+  hypothesis using it untestable rather than merely weak.
+- **DexPaprika as a backup source** — deferred for the same reason as the
+  cross-check, plus an unverified cost and coverage story for Robinhood Chain.
+  A backup that returns slightly different numbers is not a backup.
+
+## Multi-chain config — deferred
+
+Everything is hard-coded to Robinhood Chain: `NETWORK = "robinhood"` in
+`collect.py`, `CHAIN = "robinhood"` in `nft.py`, `CHAIN_ID = "4663"` in
+`holders.py`, and the chain's own RPC in `stocks.py`. Generalising means a
+chain config object and a per-chain data directory, and it buys nothing until
+there is a second chain worth watching. Recorded so that the next person
+adding a constant knows there are already four places to change.
