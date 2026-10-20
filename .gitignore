@@ -4,6 +4,9 @@ __pycache__/
 # written by scripts/stocks.py, consumed by the workflow's Alert step
 ALERT.txt
 
+# written by scripts/watchdog.py, consumed by watchdog.yml's alert step
+STALE.txt
+
 # derived, rebuilt from the tracked JSON/JSONL by scripts/build_db.py
 hoodscout.db
 *.db

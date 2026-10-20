@@ -1,0 +1,117 @@
+name: watchdog
+# Why this one uses GitHub's own `schedule:`, when collect.yml had its
+# removed for being unreliable.
+#
+# GitHub drops scheduled runs heavily on this repo: at */30 it delivered 22.9
+# runs a day against a nominal 48, and on 2026-10-17 one fire in eight landed
+# (docs/TECH_NOTES.md). So this is a SLOW BACKSTOP, not a precise alarm. A
+# missed hour costs nothing: a stall lasts until someone fixes it, so the
+# alert still fires on whichever hour GitHub does deliver.
+#
+# The unreliability is the price of the property that matters. Every
+# collector in this repo is started by cron-job.org calling
+# workflow_dispatch, which makes that account a single point of failure with
+# no alarm on it -- and a watchdog triggered the same way would die with the
+# thing it watches. This one shares nothing with it: no external scheduler,
+# no secrets, no token that expires around 2027-01-16.
+on:
+  schedule:
+    # :41, off the hour, for the same reason the collectors moved off peak
+    # minutes -- though that did not help them much.
+    - cron: "41 * * * *"
+  workflow_dispatch:
+    inputs:
+      max_age_minutes:
+        description: >-
+          Override latest.json's staleness threshold, in minutes, to prove
+          the alert path end to end. Leave empty for the real threshold. 0
+          forces the alert whatever the data's real age. Ignored on
+          scheduled runs, which pass nothing.
+        required: false
+        default: ""
+
+# Read the data, write one issue. No secrets, and this workflow never
+# commits: it reads timestamps off disk and reports.
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # main's tip at job start. A watchdog reading a stale checkout
+          # would report a stall that was fixed an hour ago.
+          ref: main
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Check freshness
+        # Writes STALE.txt only when something is wrong, and removes it when
+        # nothing is. Exits 0 either way: a non-zero exit would turn a real
+        # alert into a red run nobody can tell apart from a broken script.
+        # The one exception is a malformed max_age_minutes, which exits 2 on
+        # purpose so an operator who mistyped the input is told rather than
+        # handed a run that looks like an ordinary clean check.
+        #
+        # The input goes through the environment, never interpolated into the
+        # script: ${{ }} inside a run block substitutes before bash sees it,
+        # so a crafted value would execute. On a scheduled run MAX_AGE is the
+        # empty string, which the script reads as no override.
+        env:
+          MAX_AGE: ${{ inputs.max_age_minutes }}
+        run: python scripts/watchdog.py --out STALE.txt --max-age-minutes "$MAX_AGE"
+
+      - name: Open or update the alert
+        if: hashFiles('STALE.txt') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="HoodScout alert: collection stale"
+          body=$(cat STALE.txt)
+
+          mapfile -t issues < <(gh issue list --state open --search "\"$title\" in:title" \
+            --json number,title --jq "[.[] | select(.title == \"$title\") | .number] | sort | .[]")
+
+          if [ -n "${issues[0]:-}" ]; then
+            keep="${issues[0]}"
+            # Only write when the text actually differs. A stall that lasts a
+            # day would otherwise rewrite an identical body every hour, and
+            # the timestamp line alone is enough to make it differ -- so the
+            # comparison is on the problem lines, not the whole body.
+            current=$(gh issue view "$keep" --json body --jq .body | grep '^- ' || true)
+            incoming=$(grep '^- ' STALE.txt || true)
+            if [ "$current" = "$incoming" ]; then
+              echo "#$keep already reports the same problems, skipping edit"
+            else
+              gh issue edit "$keep" --body "$body"
+            fi
+            for extra in "${issues[@]:1}"; do
+              gh issue close "$extra" --comment "Duplicate of #$keep, closing."
+            done
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+
+      - name: Close the alert if the data is fresh again
+        if: hashFiles('STALE.txt') == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="HoodScout alert: collection stale"
+          mapfile -t issues < <(gh issue list --state open --search "\"$title\" in:title" \
+            --json number,title --jq "[.[] | select(.title == \"$title\") | .number] | sort | .[]")
+          if [ -z "${issues[0]:-}" ]; then
+            echo "no open alert, nothing to close"
+            exit 0
+          fi
+          for n in "${issues[@]}"; do
+            gh issue close "$n" --comment \
+              "Collection is fresh again: both feeds are inside their thresholds as of $(date -u +%Y-%m-%dT%H:%MZ). Closed by the watchdog."
+          done
