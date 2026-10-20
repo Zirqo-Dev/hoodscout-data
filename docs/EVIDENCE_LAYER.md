@@ -1,7 +1,8 @@
 # Evidence layer
 
-Design only. Nothing here is built. The order is deliberate: **Layer 3 first**,
-because without an outcome log there is no way to tell whether Layer 2 helped,
+Layer 3 (outcome log, labeler, evaluator) is built and running; Layers 2, 4
+and 5 are design only. The order is deliberate: **Layer 3 first**, because
+without an outcome log there is no way to tell whether Layer 2 helped,
 and a signal you cannot score is a signal you will end up trusting on vibes.
 
 Everything in this document is a proposal to be argued with. Where a number is
@@ -518,7 +519,7 @@ week when the random pick returned −6% is working.
 
 ## Layer 3c — hypotheses, written first
 
-One file, `docs/hypotheses.jsonl`, append-only, one object per line.
+One file, `data/hypotheses.jsonl`, append-only, one object per line.
 
 ```json
 {"id":"H-0001",
@@ -567,9 +568,11 @@ The rules that make it worth anything:
    successor carries `"supersedes": "<id>"`, and that field is the whole
    mechanism: the original line stays exactly as it was written, and anything
    reading the registry treats an id named in some later record's
-   `supersedes` as retired. The evaluator does not implement that yet — it
-   will report the superseded hypothesis as `no rule implemented`, which is
-   harmless and noisy, and is in the backlog.
+   `supersedes` as retired. The evaluator derives this from the registry: a
+   superseded id with no evaluator rule is reported as `superseded` (by its
+   successor, before any evaluation); one that has a rule is still evaluated,
+   with the supersede shown as a note, because after outcomes have been seen
+   superseding is a new test and the old result must stay visible.
 
    `waiting` is what the evaluator prints on every run until there is enough
    data; it is a state of the evidence, not of the hypothesis, and a
@@ -807,7 +810,7 @@ Conditions 1–4 are about whether the data means anything. 5–6 are about mone
 7–8 are about whether the question is answerable at all. 9–10 are about
 discipline, and 9 is the one most likely to be violated quietly.
 
-A kill is recorded in `docs/hypotheses.jsonl` as an `expired` entry with the
+A kill is recorded in `data/hypotheses.jsonl` as an `expired` entry with the
 condition that fired, the same as any other result. "We stopped because it was
 not working" is a finding and belongs in the record.
 

@@ -9,7 +9,7 @@ This repo is PUBLIC. Everything in it, including data/, is world-readable.
 ## Git rules
 - HOLD BEFORE COMMIT: show diff stat and test results, then wait for Pete's explicit "commit".
 - Commit to main only. Never push other branches or tags: pushes to anything but refs/heads/main have been refused with HTTP 403 (branch delete and tag create, 2026-10-20), while pushes to main succeed. On a 403, report the exact error and stop. Do not look for a workaround.
-- The collector pushes to main about every 15 minutes. Pull with rebase before working. Never commit files under data/ by hand.
+- The collector pushes to main about every 15 minutes. Pull with rebase before working. Never commit files under data/ by hand, except Pete-approved appends to data/hypotheses.jsonl.
 - A pull with --autostash unstages staged work. Re-stage and re-verify the content before committing.
 - Never force-push or rewrite history. Do not touch the "Protect main" ruleset.
 - Before ANY claim about history, branches or ancestry, run `git rev-parse --is-shallow-repository`. If true, run `git fetch --unshallow` first.
@@ -22,7 +22,7 @@ This repo is PUBLIC. Everything in it, including data/, is world-readable.
 
 ## Evidence layer
 - data/hypotheses.jsonl is append-only. Never edit or delete an existing line. A change is a new line that supersedes the old one, and only before anything has been evaluated against it.
-- Never register or change a hypothesis without Pete's explicit approval. After any registration, run scripts/evaluate.py and confirm it does not crash.
+- Never register or change a hypothesis without Pete's explicit approval. After any registration, run scripts/evaluate.py --blind and confirm it does not crash. Never run --unblind or --report before the 2026-11-09 read.
 - No self-adapting logic. Thresholds change only through a new pre-registered hypothesis that Pete approves.
 
 ## Workflows
