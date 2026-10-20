@@ -1,0 +1,19 @@
+{
+  "comment": "Log rows shaped like data/log/<date>/<time>.jsonl, enough to exercise every exit status in label.outcome(). t0 is the entry snapshot; offsets are hours from it.",
+  "t0": "2026-10-01T00:00:00+00:00",
+  "rows": [
+    {"offset_h": 0.0, "ca": "0x0a", "tier": "BEST", "price": 1.0, "liq": 100000.0, "txns": 500, "fee": 0.003, "rms": 0},
+    {"offset_h": 6.0, "ca": "0x0a", "tier": "BEST", "price": 1.1, "liq": 100000.0, "txns": 500, "fee": 0.003, "rms": 0},
+
+    {"offset_h": 0.0, "ca": "0x0b", "tier": "WATCH", "price": 2.0, "liq": 100000.0, "txns": 500, "fee": null, "rms": 0},
+    {"offset_h": 6.2, "ca": "0x0b", "tier": "WATCH", "price": 2.2, "liq": 1000.0, "txns": 500, "fee": null, "rms": 0},
+
+    {"offset_h": 0.0, "ca": "0x0c", "tier": "WATCH", "price": 3.0, "liq": 100000.0, "txns": 500, "fee": null, "rms": 0},
+    {"offset_h": 2.0, "ca": "0x0c", "tier": "WATCH", "price": 2.5, "liq": 0.0, "txns": 500, "fee": null, "rms": 0},
+
+    {"offset_h": 0.0, "ca": "0x0d", "tier": "SPECULATIVE", "price": 4.0, "liq": 100000.0, "txns": 500, "fee": null, "rms": 0},
+
+    {"offset_h": 0.0, "ca": "0x0e", "tier": "DEAD", "price": 5.0, "liq": 0.0, "txns": 500, "fee": null, "rms": 0},
+    {"offset_h": 6.0, "ca": "0x0e", "tier": "DEAD", "price": 6.0, "liq": 100000.0, "txns": 500, "fee": null, "rms": 0}
+  ]
+}

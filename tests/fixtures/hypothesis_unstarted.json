@@ -1,0 +1,17 @@
+{
+  "id": "H-0004",
+  "registered": "2026-10-19T15:00:00+00:00",
+  "log_watermark": null,
+  "labeler_version": "0000000000000000000000000000000000000000",
+  "status": "waiting",
+  "stop_by": "2027-02-15",
+  "statement": "SYNTHETIC FIXTURE. Stands in for a hypothesis registered before its data exists, which is what a null log_watermark means.",
+  "uses": "holder concentration",
+  "horizon": "6h",
+  "pass_if": "fixture",
+  "fail_if": "fixture",
+  "inconclusive_if": "fixture",
+  "min_eff_n": 300,
+  "min_n_tokens": 25,
+  "max_censored_pct": 20
+}

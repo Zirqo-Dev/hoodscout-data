@@ -1,0 +1,48 @@
+name: test
+# Code only. The paths filter is the point of this workflow as much as the
+# tests are: the collectors push a data commit every fifteen minutes, and a
+# suite that ran on each of them would be ~96 runs a day testing nothing
+# that changed. Keep data/ out of this list.
+on:
+  push:
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - "requirements-test.txt"
+      - ".github/workflows/test.yml"
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - "requirements-test.txt"
+      - ".github/workflows/test.yml"
+
+# Read-only, and no secrets anywhere in this file. The suite makes no network
+# call and reads nothing but tests/fixtures/, so it has nothing to write and
+# nothing to authenticate against.
+permissions:
+  contents: read
+
+# Not a required status check, by choice. It can tell you a push broke the
+# labeler; it cannot be allowed to block a collector's data commit, which is
+# what making it required would eventually do.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    # Pinned for the same reason as the collectors: an unattended pipeline
+    # should not change base image on GitHub's schedule.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install test dependencies
+        # Test-only. The pipeline itself runs on the standard library, and no
+        # collector workflow installs anything.
+        run: python -m pip install -r requirements-test.txt
+      - name: Run tests
+        run: python -m pytest tests/ -q

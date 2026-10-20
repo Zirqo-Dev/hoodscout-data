@@ -1,0 +1,4 @@
+# Test-only dependencies. Not installed by any collector workflow: the
+# pipeline itself runs on the standard library alone, and that is worth
+# keeping true.
+pytest==8.3.4

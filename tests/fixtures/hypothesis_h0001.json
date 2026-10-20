@@ -1,0 +1,17 @@
+{
+  "id": "H-0001",
+  "registered": "2026-10-18T13:30:25.020204+00:00",
+  "log_watermark": "2026-01-01T00:00:00+00:00",
+  "labeler_version": "0000000000000000000000000000000000000000",
+  "status": "registered",
+  "stop_by": "2027-02-15",
+  "statement": "SYNTHETIC FIXTURE, not a registered hypothesis. Carries H-0001's id only so evaluate.RULES resolves a rule for it.",
+  "uses": "tier == 'BEST'",
+  "horizon": "6h",
+  "pass_if": "fixture",
+  "fail_if": "fixture",
+  "inconclusive_if": "fixture",
+  "min_eff_n": 300,
+  "min_n_tokens": 25,
+  "max_censored_pct": 20
+}
