@@ -15,9 +15,13 @@ computed number so the two can be checked against each other by eye. Future
 hypotheses should carry a structured rule from the start; this per-id table is
 a consequence of the first three not having one, not a design to copy.
 
+Blind by default: stdout carries rows, gates and week counts, never a metric
+or a status, so a run cannot be peeked at by accident. --unblind prints them,
+and --report (which writes everything) requires --unblind.
+
 NOTHING HERE HAS BEEN TRADED. Every return is modelled -- see label.py.
 """
-import argparse, hashlib, json, os, statistics, sys
+import argparse, hashlib, json, os, random, statistics, sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
@@ -28,6 +32,13 @@ REGISTRY = "data/hypotheses.jsonl"
 DEFAULT_REPORT_DIR = "reports"
 SUBPERIODS = 4          # the clauses say "3 of 4 weekly subperiods"
 MIN_SUBPERIOD_ROWS = 30  # below this a week says nothing and is not counted
+
+# Reporting only. None of these feeds a status: they size the report's
+# "does not affect the status above" section and nothing else.
+BOOT_B = 2000            # token-cluster bootstrap resamples
+BOOT_SEED = 20261109     # fixed, so the interval is identical on every run
+CENSOR_FLAG_PP = 5.0     # a display threshold for censoring gaps, not a rule
+CENSOR_CAPS = (25, 20)   # the caps H-0002 and H-0001 registered, for H-0003
 
 
 def version(path):
@@ -330,7 +341,416 @@ def evaluate(h, labels, since):
     return res
 
 
+# ------------------------------------------------------------- the registry
+
+def superseded_map(hyps):
+    """{superseded id: the id of the later line that names it in "supersedes"}.
+
+    Derived from the registry alone. Only a LATER line can supersede: the file
+    is append-only, so a successor is always written after what it replaces.
+    """
+    seen, out = set(), {}
+    for h in hyps:
+        old = h.get("supersedes")
+        if old and old in seen and old not in out:
+            out[old] = h["id"]
+        seen.add(h["id"])
+    return out
+
+
+def registry_counts(hyps):
+    """The denominator, with ids: what is registered, what was retired before
+    anything was evaluated against it, what is evaluated, what has no rule."""
+    sup = superseded_map(hyps)
+    ids = [h["id"] for h in hyps]
+    gone = [i for i in ids if i in sup and i not in RULES]
+    evald = [h["id"] for h in hyps
+             if h.get("log_watermark") is not None and h["id"] in RULES]
+    norule = [i for i in ids if i not in RULES and i not in sup]
+    # a rule but no watermark: not evaluated, not ruleless, not retired
+    waiting = [h["id"] for h in hyps
+               if h.get("log_watermark") is None and h["id"] in RULES]
+    return {"registered": ids, "superseded": gone, "evaluated": evald,
+            "no_rule": norule, "rule_not_started": waiting}
+
+
+def count_line(c):
+    def ids(v):
+        return f" ({', '.join(v)})" if v else ""
+    s = (f"**{len(c['registered'])} registered; "
+         f"{len(c['superseded'])} superseded before evaluation"
+         f"{ids(c['superseded'])}; "
+         f"{len(c['evaluated'])} evaluated{ids(c['evaluated'])}; "
+         f"{len(c['no_rule'])} without a rule yet{ids(c['no_rule'])}")
+    if c["rule_not_started"]:
+        s += (f"; {len(c['rule_not_started'])} with a rule but not started"
+              f"{ids(c['rule_not_started'])}")
+    return (s + ".** None of these rules is a significance test at a fixed "
+            "false-positive rate, so no family-wise percentage is printed: "
+            "read any pass against how many were evaluated.")
+
+
+def evaluate_full(h, labels, since, sup=None):
+    """evaluate(), plus the registry's supersede links and the reporting-only
+    section. Every key evaluate() returns comes back unchanged; this only adds
+    keys, and never touches "status" for a hypothesis that has a rule.
+
+    A superseded id without a rule was retired before anything was evaluated
+    against it. One WITH a rule is evaluated as usual: once outcomes have been
+    seen, superseding is a new test, not a replacement, so the old result has
+    to stay visible.
+    """
+    by = (sup or {}).get(h["id"])
+    if by and h["id"] not in RULES:
+        return {"id": h["id"], "status": "superseded", "rows": 0,
+                "superseded_by": by,
+                "note": f"superseded by {by} before any evaluation"}
+    r = evaluate(h, labels, since)
+    if by:
+        r["superseded_by"] = by
+        r["note"] = f"superseded by {by}"
+    if "gates" in r:
+        r["reporting"] = reporting(h, labels, since)
+    return r
+
+
+# ------------------------------------------------- reporting only, no status
+#
+# Everything below recomputes the registered population's numbers another way
+# -- gross, per token, with censored rows imputed -- so a reader can see what
+# the registered number rests on. None of it is read by evaluate(), and none
+# of it may ever be: a threshold moves only through a new registered
+# hypothesis.
+
+def v_net(o):
+    return o.get("ret_net_500")
+
+
+def v_gross(o):
+    return o.get("ret_gross")
+
+
+def v_fee(fee):
+    return lambda o: label.net_at(o, fee)
+
+
+def impact500(o):
+    """The modelled $500 round-trip impact, the same legs nets() charges."""
+    return sum(2.0 * 500 / l for l in (o.get("liq_in"), o.get("liq_out"))
+               if l and l > 0)
+
+
+def v_imputed(kind):
+    """net500, with enterable gone_unseen rows given a number instead of none.
+
+    "worst": -100%. "flat": no price move, so gross 0 less both fees and the
+    impact of a round trip against the entry liquidity on both legs.
+    """
+    def val(o):
+        v = o.get("ret_net_500")
+        if v is not None or o.get("status") != "gone_unseen" \
+                or not o.get("enterable"):
+            return v
+        if kind == "worst":
+            return -1.0
+        liq = o.get("liq_in") or 0
+        imp = 2 * (2.0 * 500 / liq) if liq > 0 else 0.0
+        return max(-1.0, 0.0 - 2 * o["fee_used"] - imp)
+    return val
+
+
+def _med(vals):
+    vals = [v for v in vals if v is not None]
+    return statistics.median(vals) if vals else None
+
+
+def med_v(rows, val):
+    return _med(val(o) for o in rows)
+
+
+def mean_v(rows, val):
+    vals = [v for v in (val(o) for o in rows) if v is not None]
+    return statistics.mean(vals) if vals else None
+
+
+def row_base_v(o, val):
+    """One row's baseline: the median of its peers' values, as `_base` is."""
+    return med_v(o.get("_peers") or [], val)
+
+
+def base_v(rows, val):
+    """Median of the per-row baseline medians -- med_base() for any value."""
+    return _med(row_base_v(o, val) for o in rows)
+
+
+def uses_baseline(hid):
+    return RULES[hid]["metric"] is gap_vs_baseline
+
+
+def _diff(a, b):
+    return None if a is None or b is None else a - b
+
+
+def metric_v(hid, arms, val):
+    """The registered metric with net500 swapped for `val`, peers alike."""
+    if uses_baseline(hid):
+        return _diff(med_v(arms["all"], val), base_v(arms["all"], val))
+    return _diff(med_v(arms["rms>=+4"], val), med_v(arms["rms<=-4"], val))
+
+
+def h0003_values(arms, val):
+    """H-0003's three clause values for `val`. Values only, never a verdict."""
+    rows = arms["all"]
+    a = med_v(rows, val)
+    return {"a": a, "b": _diff(a, base_v(rows, val)),
+            "c": _diff(mean_v(rows, val), a)}
+
+
+def _by_token(rows):
+    out = defaultdict(list)
+    for o in rows:
+        out[o["ca"]].append(o)
+    return out
+
+
+def token_weighted(hid, arms):
+    """The registered metric with every token weighted once: the median over
+    tokens of each token's own median, for the arm and the baseline alike."""
+    def tw(rows, f):
+        return _med(f(rs) for rs in _by_token(rows).values())
+    arm = lambda rs: med_v(rs, v_net)
+    base = lambda rs: _med(o.get("_base") for o in rs)
+    if uses_baseline(hid):
+        return _diff(tw(arms["all"], arm), tw(arms["all"], base))
+    return _diff(tw(arms["rms>=+4"], arm), tw(arms["rms<=-4"], arm))
+
+
+def token_bootstrap(hid, arms, b=BOOT_B, seed=BOOT_SEED):
+    """A 95% interval for the pooled registered metric, resampling tokens.
+
+    Tokens are drawn with replacement, each bringing all of its rows, so one
+    token with many prints cannot pass for many independent observations. For
+    a two-arm rule the draw is from the union of both arms' tokens. Seeded:
+    the same rows give the same interval on every run.
+    """
+    metric = RULES[hid]["metric"]
+    by = {k: _by_token(rows) for k, rows in arms.items()}
+    tokens = sorted({c for d in by.values() for c in d})
+    if not tokens:
+        return {"lo": None, "hi": None, "b": b, "seed": seed, "tokens": 0,
+                "valid": 0}
+    rng = random.Random(seed)
+    vals = []
+    for _ in range(b):
+        pick = rng.choices(tokens, k=len(tokens))
+        res = {k: [o for c in pick for o in d.get(c, ())] for k, d in by.items()}
+        v = metric(res)
+        if v is not None:
+            vals.append(v)
+    lo = hi = None
+    if len(vals) >= 2:
+        q = statistics.quantiles(vals, n=40, method="inclusive")
+        lo, hi = q[0], q[-1]
+    return {"lo": lo, "hi": hi, "b": b, "seed": seed, "tokens": len(tokens),
+            "valid": len(vals)}
+
+
+def tokens_above_zero(rows):
+    """Tokens whose median(row net500 - row baseline) is above zero, of N."""
+    up = n = 0
+    for rs in _by_token(rows).values():
+        m = _med(_diff(v_net(o), o.get("_base")) for o in rs)
+        if m is not None:
+            n += 1
+            up += m > 0
+    return {"above": up, "tokens": n}
+
+
+def liquidity(rows):
+    """Median entry liquidity and modelled $500 impact over scored rows, and
+    the same for the baseline peers: median per row, then across rows."""
+    scored = [o for o in rows if o.get("ret_net_500") is not None]
+
+    def peer(o, f):
+        return _med(f(q) for q in (o.get("_peers") or [])
+                    if q.get("ret_net_500") is not None)
+    return {"scored": len(scored),
+            "liq_in": _med(o.get("liq_in") for o in scored),
+            "impact": _med(impact500(o) for o in scored),
+            "base_liq_in": _med(peer(o, lambda q: q.get("liq_in"))
+                                for o in rows),
+            "base_impact": _med(peer(o, impact500) for o in rows)}
+
+
+def _unseen_pct(outs):
+    outs = list(outs)
+    if not outs:
+        return None
+    return round(100 * sum(1 for o in outs if o.get("status") == "gone_unseen")
+                 / len(outs), 1)
+
+
+def censoring(hid, arms):
+    """gone_unseen share per arm and across the arm rows' baseline peers.
+
+    The flag is a display threshold, CENSOR_FLAG_PP, not a rule: it says the
+    two sides of a comparison lose rows at different rates, which a median
+    over the survivors does not see.
+    """
+    rule = RULES[hid]
+    shares = {}
+    for k in rule["gate_on"]:
+        shares[k] = _unseen_pct(arms[k])
+        shares[f"{k} peers"] = _unseen_pct(
+            q for o in arms[k] for q in (o.get("_peers") or []))
+    if uses_baseline(hid):
+        pairs = [(k, f"{k} peers") for k in rule["gate_on"]]
+    else:
+        pairs = [tuple(rule["gate_on"])]
+    cmp_ = []
+    for a, b in pairs:
+        d = _diff(shares[a], shares[b])
+        cmp_.append({"a": a, "b": b, "diff_pp": None if d is None else round(d, 1),
+                     "flag": d is not None and abs(d) > CENSOR_FLAG_PP})
+    return {"shares": shares, "compare": cmp_}
+
+
+def weeks_by_arm(hid, rows):
+    """Per ISO week: all-tier rows (what the decision counts), rows in each
+    gated arm, and whether each arm alone reaches MIN_SUBPERIOD_ROWS."""
+    rule = RULES[hid]
+    by_week = defaultdict(list)
+    for o in rows:
+        y, w, _ = datetime.fromisoformat(o["ts"]).isocalendar()
+        by_week[f"{y}-W{w:02d}"].append(o)
+    out = {}
+    for wk, rs in sorted(by_week.items()):
+        arms = rule["arms"](rs)
+        n = {k: len(arms[k]) for k in rule["gate_on"]}
+        out[wk] = {"rows": len(rs), "arms": n,
+                   "arm_ok": {k: v >= MIN_SUBPERIOD_ROWS for k, v in n.items()}}
+    usable = sum(1 for v in out.values() if all(v["arm_ok"].values()))
+    return out, usable
+
+
+def h0003_sensitivity(arms, h):
+    """H-0003's clause values under other assumptions. No verdict is formed:
+    these are what the registered numbers would be, not what they are."""
+    cens = gates_for(arms["all"], h)["censored_pct"]
+    return {"gross": h0003_values(arms, v_gross),
+            "fees": {f: h0003_values(arms, v_fee(f)) for f in label.FEE_SWEEP},
+            "imputed_worst": h0003_values(arms, v_imputed("worst")),
+            "imputed_flat": h0003_values(arms, v_imputed("flat")),
+            "censored_pct": cens,
+            "above_caps": {c: cens > c for c in CENSOR_CAPS}}
+
+
+def reporting(h, labels, since):
+    """The reporting-only section for one hypothesis, over the same rows the
+    registered metric uses. Read by render(), never by evaluate()."""
+    hid = h["id"]
+    rule = RULES[hid]
+    rows = [o for o in labels if o["h"] == h["horizon"] and o["ts"] > since]
+    arms = rule["arms"](rows)
+    wk, usable_arm = weeks_by_arm(hid, rows)
+    out = {"gross": metric_v(hid, arms, v_gross),
+           "liquidity": {k: liquidity(arms[k]) for k in rule["gate_on"]},
+           "token_weighted": token_weighted(hid, arms),
+           "bootstrap": token_bootstrap(hid, arms),
+           "tokens_above_zero": (tokens_above_zero(arms["all"])
+                                 if uses_baseline(hid) else None),
+           "censoring": censoring(hid, arms),
+           "weeks": wk, "usable_arm_weeks": usable_arm}
+    if hid == "H-0003":
+        out["gross_clauses"] = h0003_values(arms, v_gross)
+        out["sensitivity"] = h0003_sensitivity(arms, h)
+    return out
+
+
 # -------------------------------------------------------------------- report
+
+def _usd(v):
+    return "-" if v is None else f"${v:,.0f}"
+
+
+def _clause_rows(name, c):
+    return f"| {name} | {pp(c['a'])}pp | {pp(c['b'])}pp | {pp(c['c'])}pp |"
+
+
+def render_reporting(r):
+    """The reporting-only section. Its title says what it is, and every line
+    in it is a number beside the decision, never an input to it."""
+    x, hid = r["reporting"], r["id"]
+    L = ["### Reporting only: does not affect the status above", ""]
+    L += [f"**Gross beside net** — {r['metric_label']} on `ret_gross`, arm and "
+          f"baseline peers alike: **{pp(x['gross'])}pp** (net "
+          f"{pp(r['metric'])}pp).", ""]
+    if x.get("gross_clauses"):
+        L += ["| at | (a) median | (b) vs baseline | (c) mean - median |",
+              "|---|---|---|---|",
+              _clause_rows("gross", x["gross_clauses"]), ""]
+    L += ["**Liquidity and cost** — scored rows; baseline is the median per "
+          "row of its scored peers, then the median across rows.", "",
+          "| group | median liq_in | median $500 impact | peers' liq_in | "
+          "peers' $500 impact |", "|---|---|---|---|---|"]
+    for arm, q in x["liquidity"].items():
+        L += [f"| {arm} | {_usd(q['liq_in'])} | {pp(q['impact'])}pp | "
+              f"{_usd(q['base_liq_in'])} | {pp(q['base_impact'])}pp |"]
+    L += [""]
+    b = x["bootstrap"]
+    L += ["**Token clustering** — both statistics, always "
+          "(docs/EVIDENCE_LAYER.md).", "",
+          f"- token-weighted (median over tokens of each token's median): "
+          f"**{pp(x['token_weighted'])}pp** against pooled {pp(r['metric'])}pp",
+          f"- token-cluster bootstrap 95% interval for the pooled metric: "
+          f"[{pp(b['lo'])}, {pp(b['hi'])}]pp, {b['tokens']} tokens resampled "
+          f"with all their rows, B={b['b']}, seed {b['seed']}, "
+          f"{b['valid']} resamples computable"]
+    if x.get("tokens_above_zero"):
+        t = x["tokens_above_zero"]
+        L += [f"- tokens whose median(row net500 - row baseline) is above zero: "
+              f"{t['above']} of {t['tokens']}"]
+    L += [""]
+    c = x["censoring"]
+    L += [f"**Censoring** — `gone_unseen` share; a gap over {CENSOR_FLAG_PP:g}pp "
+          "is flagged for display, which is not a rule.", "",
+          "| group | gone_unseen |", "|---|---|"]
+    for k, v in c["shares"].items():
+        L += [f"| {k} | {'-' if v is None else f'{v}%'} |"]
+    L += [""]
+    for d in c["compare"]:
+        if d["flag"]:
+            L += [f"> **{d['a']} and {d['b']} differ by {d['diff_pp']:+.1f}pp "
+                  "in censoring.** A median over the survivors does not see "
+                  "rows that stopped appearing.", ""]
+    arms = list(next(iter(x["weeks"].values()))["arms"]) if x["weeks"] else []
+    L += [f"**Weeks** — usable on all-tier rows {r['usable_weeks']} (the count "
+          f"the decision uses); usable on arm rows {x['usable_arm_weeks']} "
+          f"(every gated arm alone at {MIN_SUBPERIOD_ROWS}+ rows).", ""]
+    if x["weeks"]:
+        L += ["| week | all-tier rows | " + " | ".join(arms) + " |",
+              "|---|---|" + "---|" * len(arms)]
+        for wk, v in x["weeks"].items():
+            L += [f"| {wk} | {v['rows']} | " + " | ".join(
+                f"{v['arms'][k]} {'✓' if v['arm_ok'][k] else '✗'}"
+                for k in arms) + " |"]
+        L += [""]
+    s = x.get("sensitivity")
+    if s:
+        L += ["**H-0003 sensitivity** — clause values only; no verdict is "
+              "formed from them.", "",
+              "| at | (a) median | (b) vs baseline | (c) mean - median |",
+              "|---|---|---|---|", _clause_rows("gross", s["gross"])]
+        for f, v in sorted(s["fees"].items()):
+            L += [_clause_rows(f"unknown fee {100*f:g}%", v)]
+        L += [_clause_rows("gone_unseen imputed -100%", s["imputed_worst"]),
+              _clause_rows("gone_unseen imputed flat exit", s["imputed_flat"]),
+              "", f"Censoring {s['censored_pct']}%: " + "; ".join(
+                  f"{'above' if v else 'not above'} a {k}% cap"
+                  for k, v in s["above_caps"].items())
+              + " (the caps H-0002 and H-0001 registered).", ""]
+    return L
+
 
 def render(results, meta):
     L = [f"# Hypothesis evaluation — {meta['run_at'][:19]}Z", ""]
@@ -360,14 +780,23 @@ def render(results, meta):
           "of the 97 fee-less rows in the 2026-10-18T14:00 snapshot store a",
           "32-byte pool id rather than an address, and a v4 pool id is",
           "keccak256 of the PoolKey, so the fee cannot be recovered from it.", ""]
-    L += [f"**{meta['n_hyp']} hypotheses are registered.** At a 5% threshold, "
-          f"the chance at least one of {meta['n_hyp']} passes on noise alone is "
-          f"{100*(1-0.95**meta['n_hyp']):.0f}%. Read any pass against that.", ""]
+    if meta.get("counts"):
+        L += [count_line(meta["counts"]), ""]
 
     for r in results:
         h = meta["by_id"][r["id"]]
         L += [f"## {r['id']} — `{r['status']}`", "",
               f"> {h['statement']}", ""]
+        if r["status"] == "superseded":
+            L += [f"**Superseded.** {r['note'][0].upper()}{r['note'][1:]}: "
+                  "a later line in `data/hypotheses.jsonl` names this id in its "
+                  "`supersedes` field, and no evaluator rule exists for it, so "
+                  "nothing was evaluated against it.", ""]
+            continue
+        if r.get("superseded_by"):
+            L += [f"> **Note:** {r['note']}. It is still evaluated: once "
+                  "outcomes have been seen, superseding is a new test rather "
+                  "than a replacement, so this result stays visible.", ""]
         if r.get("no_watermark"):
             L += ["**Not started.** `log_watermark` is null in "
                   "`data/hypotheses.jsonl`, so this hypothesis has no "
@@ -393,6 +822,10 @@ def render(results, meta):
                   f"{g['min_eff_n']} | {g['tokens']} {okt} | {g['min_n_tokens']} | "
                   f"{g['censored_pct']} {okc} | {g['max_censored_pct']} |"]
         L += [""]
+        if r["id"] in ("H-0001", "H-0002"):
+            L += ["evaluate.py does not gate H-0001/H-0002 on max_censored_pct; "
+                  "their registered pass/fail/inconclusive text does not "
+                  "mention censoring.", ""]
         if r.get("clauses"):
             L += ["| clause | value | holds |", "|---|---|---|"]
             for name, ok, val in r["clauses"]:
@@ -456,6 +889,8 @@ def render(results, meta):
                 L += [f"| {wk} | {pp(v)}pp |" if v is not None
                       else f"| {wk} | too few rows |"]
             L += [""]
+        if r.get("reporting"):
+            L += render_reporting(r)
         L += ["<details><summary>registered clauses</summary>", "",
               f"- **pass_if** {h['pass_if']}",
               f"- **fail_if** {h['fail_if']}",
@@ -469,12 +904,8 @@ def render(results, meta):
     return "\n".join(L) + "\n"
 
 
-def main(a):
-    hyps = [json.loads(l) for l in open(REGISTRY) if l.strip()]
-    rows, by_ca, times, pile_idx, nfiles = label.load_log()
-    if not rows:
-        print(f"no log rows under {label.LOG_DIR}/ -- nothing to evaluate")
-        return 1
+def prepare_labels(rows, by_ca, times, pile_idx, pile):
+    """Thinned labels with their baseline peers and `_base`, from a loaded log."""
     latest = max(r["dt"] for r in rows)
     all_ts = {r["ts"] for r in rows}
     keep = {h: label.thin_snapshots(all_ts, label.HORIZONS[h][2])
@@ -485,10 +916,42 @@ def main(a):
     import statistics as _st
     for o in labels:
         o["_peers"] = label.baseline_rows(entry_of[(o["ts"], o["ca"])], o["h"],
-                                          a.pile, pile_idx, by_ca, times,
+                                          pile, pile_idx, by_ca, times,
                                           latest, cache)
         v = [q["ret_net_500"] for q in o["_peers"] if q["ret_net_500"] is not None]
         o["_base"] = _st.median(v) if v else None
+    return labels, all_ts
+
+
+REPORT_NEEDS_UNBLIND = ("--report writes every metric and status to a file; "
+                        "it needs --unblind as well. Nothing was run.")
+
+
+def print_blind(results):
+    """Per hypothesis: rows, the binding gate's eff_n and tokens, and the
+    usable-week counts. No metric, status, clause, sweep or flag."""
+    for r in results:
+        g, x = r.get("worst") or {}, r.get("reporting") or {}
+        if "gates" not in r:
+            print(f"  {r['id']}  rows {r.get('rows', 0)}")
+            continue
+        print(f"  {r['id']}  rows {r['rows']}  "
+              f"eff_n {g.get('eff_n', 0)}/{g.get('min_eff_n', '?')}  "
+              f"tokens {g.get('tokens', 0)}/{g.get('min_n_tokens', '?')}  "
+              f"weeks {r.get('usable_weeks', 0)}/{SUBPERIODS} all-tier, "
+              f"{x.get('usable_arm_weeks', 0)}/{SUBPERIODS} on arm rows")
+
+
+def main(a):
+    if a.report is not None and not getattr(a, "unblind", False):
+        print(REPORT_NEEDS_UNBLIND, file=sys.stderr)
+        return 2
+    hyps = [json.loads(l) for l in open(REGISTRY) if l.strip()]
+    rows, by_ca, times, pile_idx, nfiles = label.load_log()
+    if not rows:
+        print(f"no log rows under {label.LOG_DIR}/ -- nothing to evaluate")
+        return 1
+    labels, all_ts = prepare_labels(rows, by_ca, times, pile_idx, a.pile)
 
     lv = label.labeler_version()
     registered = {h["labeler_version"] for h in hyps}
@@ -499,7 +962,9 @@ def main(a):
                     "The arithmetic has changed since registration, so these "
                     "numbers are not what the hypotheses were written about.")
 
-    results = [evaluate(h, labels, a.since or h["log_watermark"]) for h in hyps]
+    sup = superseded_map(hyps)
+    results = [evaluate_full(h, labels, a.since or h["log_watermark"], sup)
+               for h in hyps]
     meta = {"run_at": datetime.now(timezone.utc).isoformat(),
             "evaluator": version(os.path.abspath(__file__)), "labeler": lv,
             "rows": len(rows), "snaps": len(all_ts),
@@ -509,12 +974,18 @@ def main(a):
             "n_unstarted": sum(1 for h in hyps
                                if h.get("log_watermark") is None),
             "mismatch": mismatch, "since_override": a.since,
+            "counts": registry_counts(hyps),
             "by_id": {h["id"]: h for h in hyps}}
 
     if mismatch:
         print(f"WARNING: {mismatch}\n")
     print(f"evaluator {meta['evaluator'][:12]}  labeler {lv[:12]}  "
           f"log {len(rows)} rows  pile {a.pile}")
+    if not getattr(a, "unblind", False):
+        print("blind: no metric, status, clause, sweep or flag is printed; "
+              "--unblind shows them")
+        print_blind(results)
+        return 0
     for r in results:
         g = r.get("worst", {})
         c = next(iter((r.get("composition") or {}).values()), {})
@@ -541,7 +1012,12 @@ if __name__ == "__main__":
     ap.add_argument("--pile", choices=label.PILES, default="scored")
     ap.add_argument("--report", nargs="?", const="", default=None, metavar="PATH",
                     help=f"write a markdown report (default {DEFAULT_REPORT_DIR}/"
-                         "eval-<date>-<evaluator>.md)")
+                         "eval-<date>-<evaluator>.md). Requires --unblind.")
+    blind = ap.add_mutually_exclusive_group()
+    blind.add_argument("--blind", action="store_true",
+                       help="the default: rows, gates and week counts only")
+    blind.add_argument("--unblind", action="store_true",
+                       help="print metrics, statuses and flags")
     ap.add_argument("--since", metavar="TS", default=None,
                     help="override every watermark. For exercising the "
                          "arithmetic only; the report is marked invalid.")
