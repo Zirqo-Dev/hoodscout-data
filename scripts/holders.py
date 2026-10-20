@@ -27,12 +27,14 @@ API. What was confirmed from Blockscout's published API reference:
   * /transactions/{hash} exists and its counterparty objects are
     {hash, is_contract, ens_domain_name, tags}
 
-The 2026-10-19 run settled two of the open questions against live data: the
-holders item nests its address under `address_hash` with `hash` inside, and
-`creator_address_hash` is populated (119 of 119 tokens). What is still
-UNVERIFIED is the transaction object's `from` key -- the published example is
-truncated before it, so symmetry with `to` is an inference -- and the exact
-spelling of total_supply on the token endpoint. Both are parsed defensively.
+The live runs have now settled every field this collector reads. The
+2026-10-19 15:34 run confirmed that the holders item nests its address under
+`address_hash` with `hash` inside and that `creator_address_hash` is
+populated (119 of 119 tokens); the 18:10 and 21:10 runs confirmed the
+transaction object's `from` key, which had been an inference from the `to`
+object, by resolving 70 and then 82 creator wallets through it; and
+`total_supply` on the token endpoint is populated for 217 of 223 cached
+tokens. Nothing here is unverified any more.
 
 The defensive parsing below stays even where the run settled the question:
 these are the PRO API's endpoints, the per-instance ones they replace are
@@ -65,8 +67,17 @@ MAX_CALLS_PER_RUN = 300     # hard stop, whatever the token count says
 # the reason a cross-section is abandoned.
 BACKFILL_PER_RUN = 150
 MIN_INTERVAL = 0.25         # 4 req/s, under the free tier's 5
-MAX_429_IN_A_ROW = 3        # then the run gives up and writes nothing
+MAX_429_IN_A_ROW = 3        # then the run gives up early
 TIMEOUT = 25
+# A 5xx from this API is transient and not about the request: the 2026-10-20
+# 01:10, 04:10 and 07:10 runs took 32, 39 and 58 of them and the 10:10 run
+# took none, with the same code against the same token set. They also skew
+# toward the deepest, best-held tokens -- a holders page that must return 20
+# rows is a heavier query than one returning 3 -- so dropping them silently
+# cost the cross-section exactly the rows it needs most. Retried.
+RETRY_STATUS = (500, 502, 503, 504)
+RETRY_WAITS = (2.0, 5.0)    # one attempt, then these; so 3 attempts total
+MAX_ATTEMPTS = len(RETRY_WAITS) + 1
 SKIP_TIERS = {"DEAD", "AVOID"}
 
 # A null deployer is cached too, so a token whose creator the API does not know
@@ -115,7 +126,14 @@ class Api:
         url = BASE + path
         if params:
             url += "?" + urllib.parse.urlencode(params)
-        for attempt in range(3):
+        for attempt in range(MAX_ATTEMPTS):
+            if self.calls >= self.cap:
+                # Checked per attempt, not just per call: a retry spends the
+                # budget like any other request, so the cap has to bind here
+                # too or three attempts on the last token could overrun it.
+                self.gave_up = True
+                print("WARN call cap %d reached mid-retry, giving up" % self.cap)
+                return None, None
             gap = MIN_INTERVAL - (time.time() - self.last)
             if gap > 0:
                 time.sleep(gap)
@@ -146,6 +164,12 @@ class Api:
                               % (sorted(body) if isinstance(body, dict) else type(body).__name__))
                     return body, hdrs
             except urllib.error.HTTPError as e:
+                if e.code != 429:
+                    # Any status that is not a 429 says the limiter is not the
+                    # thing refusing us, so the streak is broken. Without this,
+                    # alternating 429/500 reaches MAX_429_IN_A_ROW and aborts a
+                    # run over three 429s that were never consecutive.
+                    self.streak_429 = 0
                 if e.code == 429:
                     self.streak_429 += 1
                     self._note("429")
@@ -172,17 +196,27 @@ class Api:
                 if e.code == 404:
                     self._note("404")
                     return None, None
+                # Counted per attempt, not per call: three 500s on one token
+                # are three failed requests and three slots of budget, and a
+                # meta file that said "1" would understate what the run cost.
                 self._note("http_%d" % e.code)
                 if probe:
                     print("  %s -> HTTP %d" % (path, e.code))
+                if e.code in RETRY_STATUS and attempt < MAX_ATTEMPTS - 1:
+                    time.sleep(RETRY_WAITS[attempt])
+                    continue
                 return None, None
             except Exception as e:                      # noqa: BLE001
+                # A timeout leaves the streak alone rather than resetting it:
+                # it is not a response and says nothing about the limiter, so
+                # it neither confirms rate limiting nor rules it out.
                 self._note(type(e).__name__)
                 if probe:
                     print("  %s -> %s" % (path, type(e).__name__))
-                if attempt == 2:
-                    return None, None
-                time.sleep(2.0 * (attempt + 1))
+                if attempt < MAX_ATTEMPTS - 1:
+                    time.sleep(RETRY_WAITS[attempt])
+                    continue
+                return None, None
         return None, None
 
 
@@ -264,10 +298,13 @@ def parse_token_meta(payload):
 def parse_tx_sender(payload):
     """-> the wallet that sent the creation transaction, or None.
 
-    UNVERIFIED: the published example of a transaction object is truncated
-    before `from`, so the key name is an inference from the `to` object beside
-    it. Every spelling seen in Blockscout responses is accepted, and a bare
-    string is accepted as well as the nested object."""
+    `from` was an inference from the `to` object beside it -- the published
+    example is truncated before it -- until the 2026-10-19 18:10 and 21:10
+    runs resolved 70 and then 82 creator wallets through it. Confirmed.
+
+    The other spellings and the bare-string form are still accepted: these
+    are the PRO API's endpoints, the per-instance ones they replace are
+    marked for deprecation, and a shape that has moved once can move again."""
     if not isinstance(payload, dict):
         return None
     f = _first(payload, "from", "from_address_hash", "from_address", "sender")
@@ -411,6 +448,88 @@ def build_hint(rows):
 
 # ---------------------------------------------------------------- modes
 
+def build_meta(ts, snapshot, planned, attempted, written, failed, empty,
+               skipped, errors, calls, cap, duration_s, gave_up,
+               credits=None, retroactive=False):
+    """The sidecar that says how complete a snapshot is.
+
+    H-0005 ranks tokens into quartiles WITHIN a snapshot, so a cross-section
+    missing a quarter of the board does not mean what a full one means -- and
+    the gaps are not random: they skew toward the deepest, best-held tokens.
+    A snapshot is written whatever its coverage, and this file is what lets a
+    later evaluation drop a thin one instead of ranking inside it.
+
+    Coverage is measured against the PLANNED board, never against the tokens
+    the loop happened to reach:
+
+        planned   = written + failed + empty + skipped
+        coverage  = written / (written + failed + skipped)
+
+    `skipped` is the tail the loop never reached because the run bailed, and
+    counting it is the whole point: measured against `attempted`, a run that
+    gave up after four tokens and wrote all four would report 100% coverage.
+
+    `empty` is out of the denominator deliberately. The four lists are
+    disjoint and each means something different: `failed` is "the request did
+    not come back", `empty` is "it came back with no holders", which is a
+    fact about the token rather than about the collection. A board carrying
+    dead tokens should not read as a degraded run.
+
+    Where `failed` or `empty` is None -- a sidecar reconstructed after the
+    fact, from a run that did not record them per token -- the split between
+    them is unknown, so coverage is reported as the LOWER bound
+    written / planned (the case where none of the missing were merely empty)
+    and `coverage_bound` says "lower". A consumer applying a coverage floor
+    is then conservative in the safe direction: it may discard a snapshot
+    that was in fact complete, never keep one that was thin.
+
+    Error counts are per ATTEMPT, so one token retried twice and still failing
+    contributes 3 to http_500, not 1.
+    """
+    exact = failed is not None and empty is not None and skipped is not None
+    if exact:
+        denom = written + len(failed) + len(skipped)
+        cov = round(written / denom, 4) if denom else None
+        bound = "exact"
+    else:
+        cov = round(written / planned, 4) if planned else None
+        bound = "lower"
+    out = {
+        "ts": ts,
+        "snapshot": snapshot,
+        "tokens_planned": planned,
+        "tokens_attempted": attempted,
+        "tokens_written": written,
+        "tokens_failed": sorted(failed) if failed is not None else None,
+        "tokens_empty": sorted(empty) if empty is not None else None,
+        "tokens_skipped": sorted(skipped) if skipped is not None else None,
+        "n_failed": len(failed) if failed is not None else None,
+        "n_empty": len(empty) if empty is not None else None,
+        "n_skipped": len(skipped) if skipped is not None else None,
+        "coverage": cov,
+        "coverage_bound": bound,
+        "errors": dict(errors) if errors is not None else None,
+        "calls": calls,
+        "call_cap": cap,
+        "duration_s": duration_s,
+        "gave_up": gave_up,
+        "credits_remaining": credits,
+    }
+    if retroactive:
+        out["retroactive"] = True
+    return out
+
+
+def meta_path_for(snapshot_path):
+    """`.../HHMMSS.jsonl` -> `.../HHMMSS.meta.json`.
+
+    Deliberately not `.jsonl`: every reader of this directory globs
+    `*/*.jsonl`, and a sidecar that matched would be parsed as a snapshot.
+    """
+    assert snapshot_path.endswith(".jsonl"), snapshot_path
+    return snapshot_path[:-len(".jsonl")] + ".meta.json"
+
+
 def do_dry_run():
     toks = load_tokens()
     cache = load_cache()
@@ -441,6 +560,11 @@ def do_dry_run():
     print("  backfill   %4d  this run (allowance %d of a %d cap; the rest "
           "waits for the next run)" % (backfill, allow, BACKFILL_PER_RUN))
     print("  total      %4d   (hard cap %d)" % (total, MAX_CALLS_PER_RUN))
+    print("  with retries %3d  if every request needs all %d attempts%s"
+          % (total * MAX_ATTEMPTS, MAX_ATTEMPTS,
+             " -- over the cap, so a 5xx storm bails early and the sidecar"
+             " records the short coverage"
+             if total * MAX_ATTEMPTS > MAX_CALLS_PER_RUN else ""))
     print()
     steady = holder_calls * 8
     print("at every 3 hours, 8 runs a day")
@@ -511,14 +635,27 @@ def do_collect(api):
     print("backfill allowance this run: %d (cap %d, headroom %d)"
           % (allow, BACKFILL_PER_RUN, api.cap - len(toks) - want_dep))
 
+    started = time.monotonic()
     rows, ok = [], 0
-    for t in toks:
+    attempted, failed, empty, skipped = 0, [], [], []
+    for idx, t in enumerate(toks):
         if api.gave_up:
+            # The tail the run never reached. Counted against coverage, so a
+            # bail cannot look like a complete cross-section.
+            skipped = [x["ca"] for x in toks[idx:]]
             break
         ca = t["ca"]
+        attempted += 1
         body, _ = api.get("/tokens/%s/holders" % ca, {"limit": TOP_HOLDERS})
+        if body is None:
+            # The request did not come back. Kept apart from a token that
+            # genuinely has no holders: one is an API problem and the other
+            # is a fact about the token.
+            failed.append(ca)
+            continue
         holders = parse_holders(body)
         if not holders:
+            empty.append(ca)
             continue
         if needs_deployer(ca, cache, now) and not api.gave_up:
             d, _ = api.get("/addresses/%s" % ca)
@@ -562,13 +699,15 @@ def do_collect(api):
         })
         ok += 1
 
-    # A run that bailed is a partial cross-section, and a partial
-    # cross-section is worse than none: the hypothesis ranks tokens against
-    # each other within a snapshot, so a half-filled snapshot would quietly
-    # change what "top quartile" means.
-    if api.gave_up or not rows:
-        print("run incomplete (gave_up=%s, rows=%d); writing nothing"
-              % (api.gave_up, len(rows)))
+    # A partial cross-section still changes what "top quartile" means, which
+    # is why this used to write nothing. It now writes the rows and the
+    # coverage beside them instead: discarding the run threw away good rows
+    # to avoid a problem that a number in a sidecar solves, and a cap bail
+    # under the new retry policy would have thrown away whole runs. Nothing
+    # reads this log yet, so the evaluator join can require a coverage floor
+    # from the start -- see build_meta.
+    if not rows:
+        print("no rows collected (gave_up=%s); writing nothing" % api.gave_up)
         print("calls %d, errors %s" % (api.calls, api.errors or "none"))
         return 0
 
@@ -582,6 +721,16 @@ def do_collect(api):
     json.dump(cache, open(DEPLOYER_CACHE, "w"), indent=1, sort_keys=True)
     json.dump(meta, open(TOKEN_META_CACHE, "w"), indent=1, sort_keys=True)
 
+    # `cover`, not `meta`: `meta` is the token_supply cache above and the
+    # print block below still reports its size.
+    cover = build_meta(
+        ts=iso(now), snapshot=os.path.basename(path), planned=len(toks),
+        attempted=attempted, written=len(rows), failed=failed, empty=empty,
+        skipped=skipped, errors=api.errors, calls=api.calls, cap=api.cap,
+        duration_s=round(time.monotonic() - started, 1),
+        gave_up=api.gave_up, credits=api.credits)
+    json.dump(cover, open(meta_path_for(path), "w"), indent=1)
+
     hint = build_hint(rows)
     json.dump({"generated_at": iso(now),
                "rule": "contract, and a top-%d holder in >= %d tokens"
@@ -594,6 +743,9 @@ def do_collect(api):
     eoa_now = sum(1 for e in cache.values()
                   if isinstance(e, dict) and e.get("creator_eoa"))
     print("holders: %d/%d tokens -> %s" % (ok, len(toks), path))
+    print("coverage: %s of %d planned (%d failed, %d empty, %d skipped) -> %s"
+          % (cover["coverage"], len(toks), len(failed), len(empty),
+             len(skipped), os.path.basename(meta_path_for(path))))
     print("deployers: %d cached (+%d this run)" % (len(cache),
                                                    len(cache) - cache_before))
     print("creator wallets: %d resolved (+%d this run)"

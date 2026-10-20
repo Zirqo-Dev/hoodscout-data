@@ -1,0 +1,27 @@
+{
+ "ts": "2026-10-20T01:10:21.142216+00:00",
+ "snapshot": "011021.jsonl",
+ "tokens_planned": 102,
+ "tokens_attempted": 102,
+ "tokens_written": 91,
+ "tokens_failed": null,
+ "tokens_empty": null,
+ "tokens_skipped": [],
+ "n_failed": null,
+ "n_empty": null,
+ "n_skipped": 0,
+ "coverage": 0.8922,
+ "coverage_bound": "lower",
+ "errors": {
+  "http_500": 32,
+  "404": 1
+ },
+ "calls": 186,
+ "call_cap": 300,
+ "duration_s": 872.0,
+ "gave_up": false,
+ "credits_remaining": "96920",
+ "retroactive": true,
+ "source": "https://github.com/Zirqo-Dev/hoodscout-data/actions/runs/39351915353",
+ "note": "Reconstructed from the run's Actions log: the 'holders: N/M tokens' line, the 'calls/errors' line, and the Collect step's own timing. No run here bailed, so tokens_attempted equals tokens_planned and nothing was skipped. 11 of the 102 planned tokens produced no row. Which ones, and how many were a failed request rather than a token with no holders, is not in the record, so coverage is the lower bound written/planned. Error counts are per call, not per attempt: the retry policy landed after these runs, so each error here is one dropped call."
+}
