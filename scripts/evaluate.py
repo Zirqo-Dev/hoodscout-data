@@ -411,6 +411,7 @@ def evaluate_full(h, labels, since, sup=None):
         r["note"] = f"superseded by {by}"
     if "gates" in r:
         r["reporting"] = reporting(h, labels, since)
+        r["process"] = process_metrics(h, labels, since)
     return r
 
 
@@ -923,6 +924,51 @@ def prepare_labels(rows, by_ca, times, pile_idx, pile):
     return labels, all_ts
 
 
+def is_scored(o):
+    """Whether a row carries a return, decided without reading one: label.py
+    gives every enterable row a number unless it is gone_unseen."""
+    return bool(o.get("enterable")) and o.get("status") != "gone_unseen"
+
+
+def process_metrics(h, labels, since):
+    """Blind process numbers for the WHOLE population, never per arm.
+
+    The population is every row the rule reads -- the union of its gated
+    arms, so H-0002's two arms are counted together and never side by side.
+    Reads status, enterable, fee_source, ca and ts only: no ret_* field is
+    touched, so nothing here can carry an outcome.
+    """
+    rule = RULES[h["id"]]
+    rows = [o for o in labels if o["h"] == h["horizon"] and o["ts"] > since]
+    arms = rule["arms"](rows)
+    seen, pop = set(), []
+    for k in rule["gate_on"]:
+        for o in arms[k]:
+            if id(o) not in seen:
+                seen.add(id(o))
+                pop.append(o)
+    n = len(pop)
+    share = (lambda c: round(c / n, 3) if n else 0.0)
+    hours = label.HORIZONS[h["horizon"]][0]
+    by_day = defaultdict(list)
+    for o in pop:
+        if is_scored(o):
+            by_day[o["ts"][:10]].append(o)
+    cum, acc = {}, []
+    for day in sorted(by_day):
+        acc += by_day[day]
+        cum[day] = label.eff_n(acc, hours)
+    return {"rows": n,
+            "gone_unseen_share": share(sum(1 for o in pop
+                                           if o.get("status") == "gone_unseen")),
+            "fee_name_share": share(sum(1 for o in pop
+                                        if o.get("fee_source") == "name")),
+            "eff_n_by_day": cum}
+
+
+BLIND_DAYS = 7      # the cumulative eff_n line shows this many UTC days
+
+
 REPORT_NEEDS_UNBLIND = ("--report writes every metric and status to a file; "
                         "it needs --unblind as well. Nothing was run.")
 
@@ -940,6 +986,17 @@ def print_blind(results):
               f"tokens {g.get('tokens', 0)}/{g.get('min_n_tokens', '?')}  "
               f"weeks {r.get('usable_weeks', 0)}/{SUBPERIODS} all-tier, "
               f"{x.get('usable_arm_weeks', 0)}/{SUBPERIODS} on arm rows")
+        p = r.get("process")
+        if p:
+            # shares as fractions: a percent sign on these lines is the
+            # peeking tripwire in test_evaluate_reporting
+            print(f"          population rows {p['rows']}  "
+                  f"gone_unseen share {p['gone_unseen_share']:.3f}  "
+                  f"fee_source=name share {p['fee_name_share']:.3f}")
+            days = list(p["eff_n_by_day"].items())[-BLIND_DAYS:]
+            print(f"          cumulative eff_n by day, last {BLIND_DAYS} UTC "
+                  f"days: " + (", ".join(f"{d} {v}" for d, v in days)
+                               or "none"))
 
 
 def main(a):
@@ -982,8 +1039,9 @@ def main(a):
     print(f"evaluator {meta['evaluator'][:12]}  labeler {lv[:12]}  "
           f"log {len(rows)} rows  pile {a.pile}")
     if not getattr(a, "unblind", False):
-        print("blind: no metric, status, clause, sweep or flag is printed; "
-              "--unblind shows them")
+        # worded without the words it withholds, so a test can grep for them
+        print("blind run: counts and coverage only; --unblind prints the "
+              "decision outputs")
         print_blind(results)
         return 0
     for r in results:
