@@ -33,6 +33,9 @@
      news, and the forward tests say so. */
   --n-flag:var(--bad); --n-event:#5b9bd5; --n-standout:#a97bea;
   --n-fact:var(--faint);
+  /* text and badges drawn on a solid band or event fill: dark on the mid-tone
+     dark-theme fills, white on the deeper light-theme ones */
+  --on-band:#0a0d12;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --r:6px;
@@ -51,6 +54,7 @@
     --b-warm:#9a6412; --b-hot:#b24a1c;
     --b-buy:#0b62d6; --b-sell:#5f6a76;
     --n-event:#1f5fab; --n-standout:#6d28d9; --n-fact:#6b7686;
+    --on-band:#ffffff;
   }
 }
 *{box-sizing:border-box}
@@ -120,19 +124,33 @@ button.sd[aria-expanded="true"]{background:var(--surface)}
 .intro .sub{margin:0}
 .intro .sub + .sub{margin-top:6px}
 
-/* ---- what changed ---- */
+/* ---- board summary: tier bar, persistent map, last 2h ---- */
+.blab{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 4px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+#board{margin:0 0 9px}
+#board:empty{display:none}
+.bbar{display:flex;gap:1px;height:7px;border-radius:2px;overflow:hidden}
+.bbar i{flex:1 1 0;min-width:2px;display:block}
 /* One line that scrolls sideways, not a wrapping block. Wrapping, 14 events
-   stood 212px tall on a 390px screen and pushed the first token row off it. */
-.chg-strip{display:flex;flex-wrap:nowrap;align-items:center;gap:4px;margin:0 0 8px;
-  overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+   stood 212px tall on a 390px screen and pushed the first token row off it.
+   The vertical padding is the chips' 40px finger target: a sideways scroller
+   clips anything that hangs outside it, so the target has to live inside. */
+.chg-strip{display:flex;flex-wrap:nowrap;align-items:center;gap:4px;margin:-6px 0 2px;
+  padding:8px 0;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .chg-strip > *{flex:0 0 auto}
 .chg-strip .lab{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
   color:var(--faint);margin-right:2px}
-.ev{display:inline-flex;align-items:center;gap:4px;background:var(--surface2);
-  border:1px solid var(--line);border-radius:var(--r);padding:2px 6px;
-  font-size:10px;white-space:nowrap}
-.ev b{font:600 10.5px var(--mono)}
-.ev .arr{color:var(--faint)}
+.chg-strip .none{font-size:10.5px;color:var(--faint)}
+.mv{position:relative;display:inline-flex;align-items:center;gap:4px;cursor:pointer;
+  height:24px;padding:0 7px;border-radius:var(--r);white-space:nowrap;
+  border:1px solid color-mix(in srgb,var(--n-event) 60%,transparent);
+  background:color-mix(in srgb,var(--n-event) 13%,var(--bg));color:var(--n-event);
+  font:10.5px/1 var(--mono)}
+.mv b{font-weight:700}
+.mv::after{content:"";position:absolute;left:0;right:0;top:50%;
+  transform:translateY(-50%);height:40px}
+.mv:hover{background:color-mix(in srgb,var(--n-event) 22%,var(--bg))}
 
 /* ---- sections ---- */
 /* clip, not hidden: overflow:hidden makes this a scroll container, and a
@@ -165,7 +183,7 @@ details[open]>summary::after{content:"\2212"}
   color:var(--muted);font:11px var(--sans);padding:0 9px}
 .fchip[aria-pressed="true"]{border-color:var(--accent);color:var(--text);
   background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
-.fchip i{width:7px;height:7px;border-radius:2px;display:inline-block}
+.fchip i{width:7px;height:7px;border-radius:50%;display:inline-block}
 .fchip b{font:600 11px var(--mono);font-variant-numeric:tabular-nums}
 
 /* ---- token table ---- */
@@ -198,6 +216,15 @@ tr.r.op td{background:var(--surface2)}
 .idc .sym{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:13ch}
 .av{flex:0 0 auto;display:inline-block;line-height:0}
 .av img{background:var(--surface2)}
+/* the tier, as a ring round the mark; a 1px gap keeps a logo's own edge from
+   merging into it */
+.ring{position:relative;flex:0 0 auto;display:inline-block;line-height:0;
+  border:3px solid var(--neutral);border-radius:50%;padding:1px}
+/* a tier move from data/changes.json: the arrow says which way */
+.mvb{position:absolute;right:-5px;bottom:-5px;width:12px;height:12px;
+  border-radius:50%;background:var(--n-event);color:var(--on-band);
+  box-shadow:0 0 0 1.5px var(--surface);font:700 9px/12px var(--sans);
+  text-align:center}
 /* The star is a 40px tap target that does not push the row taller: the
    padding provides the area, the negative margin gives the space back. */
 .star{flex:0 0 auto;cursor:pointer;background:none;border:0;padding:12px 4px;
@@ -242,28 +269,31 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
 .copy:hover,.lnk:hover{border-color:var(--accent);color:var(--text)}
 .copy.done{color:var(--ok);border-color:var(--ok)}
 
-/* ---- band chips ----
-   A chip is a shape, then a word, then colour -- in that order of
-   importance. Dropping the colour leaves the chip readable, which is the
-   test that matters. */
-/* z-index, because the row is tight: the notable chips below draw at pill
-   size but keep a 40px finger target, which overhangs upward into this line.
-   Without this the overlap went to whichever painted last -- line 3 -- and a
-   tap on VETERAN opened the age chip's popover instead. Line 2 wins the
-   contested band; both lines' own centres stay reachable, which the
-   elementFromPoint check asserts. */
-.chip{position:relative;z-index:1;display:inline-flex;align-items:center;gap:4px;
-  cursor:pointer;background:none;border:0;border-radius:4px;padding:11px 3px;
-  margin:-11px 0;min-height:40px;font:inherit;line-height:1;white-space:nowrap}
-.chip:hover{background:var(--surface2)}
-.chip .cw{font:600 9.5px var(--sans);letter-spacing:.05em;text-transform:uppercase}
-@media (max-width:999px){
-  .chip{padding:11px 1px;gap:3px}
-  .chip .cw{font-size:8.5px;letter-spacing:.03em}
-}
-/* the chips own one line; the badges take the next */
-.ind-chips{display:flex;align-items:center;gap:3px 5px;flex-wrap:nowrap;
-  width:100%;overflow:hidden}
+/* ---- band signals ----
+   Each one is a word, plus a shape or a tint, plus colour -- dropping the
+   colour leaves it readable, which is the test that matters. DEPTH lights
+   signal bars up to its band, HEAT and AGE are tinted words, BUYERS is a bar
+   filled to the buy share with the share printed beside it. */
+/* Each draws at its own size and takes a 40px finger target from a
+   transparent ::after that costs no layout. z-index, because the row is
+   tight: these targets overhang the lines above and below, and the
+   contested band goes to these rather than to the line-3 chips; every
+   signal's and chip's own centre stays reachable, which the elementFromPoint
+   check asserts. */
+.sig,.tint{position:relative;z-index:1;display:inline-flex;align-items:center;gap:3px;
+  cursor:pointer;background:none;border:0;padding:0;color:inherit;
+  font:600 9px/1 var(--mono);letter-spacing:.03em;text-transform:uppercase;
+  white-space:nowrap}
+.sig::after,.tint::after{content:"";position:absolute;left:-2px;right:-2px;top:50%;
+  transform:translateY(-50%);height:40px}
+.tint{color:var(--c);background:color-mix(in srgb,var(--c) 17%,transparent);
+  border-radius:3px;padding:3px 4px}
+.tint:hover{background:color-mix(in srgb,var(--c) 28%,transparent)}
+.sig svg{flex:0 0 auto}
+.tword{font:600 9px/1 var(--mono);letter-spacing:.04em;white-space:nowrap}
+.spk{flex:0 0 auto;display:block}
+.bc{display:flex;align-items:center;gap:6px}
+.sca{font:9.5px/1 var(--mono);color:var(--faint);white-space:nowrap}
 
 /* ---- line 3: notable chips ----
    Outline only, so the row stays quiet, and the same geometry as .pill down
@@ -284,19 +314,15 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
 .nchip.ne{color:var(--n-event)}
 .nchip.ns{color:var(--n-standout)}
 .nchip.nx{color:var(--n-fact)}
+.nchip.lc{text-transform:none;letter-spacing:.02em}
 /* 8px between wrapped lines, not 4. A chip's 40px hit area reaches 11.75px
    past its own 16.5px box, so two wrapped lines need more than 3.5px between
    them or the lower chip's target swallows the centre of the one above it --
    measured at 360px, where one row wraps and two chips became unreachable. */
 .bds{display:flex;gap:8px 4px;flex-wrap:wrap;align-items:center}
-/* The liquidity cell stacks its two figures, and both line-heights are
-   pinned to 1 with no gap: the default 16.7px leading on the liquidity
-   number alone made the row's first line 28.7px where it had been 18. The
-   FDV line is deliberately quieter than the number above it, and takes its
-   40px finger target from the same transparent ::after the notable chips
-   use, so it costs no height. */
-.liqc{display:flex;flex-direction:column;align-items:flex-end;gap:0}
-.liqc .n{line-height:1}
+/* The FDV line under the strip's liquidity figure is deliberately quieter
+   than the number above it, and takes its 40px finger target from the same
+   transparent ::after the notable chips use, so it costs no height. */
 .fdvb{position:relative;cursor:pointer;background:none;border:0;padding:0;
   color:var(--faint);font:9.5px/1 var(--mono);font-variant-numeric:tabular-nums;
   white-space:nowrap}
@@ -335,25 +361,30 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
 .sl.on{border-color:var(--accent);color:var(--text);
   background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
 
-/* ---- heat grid ---- */
+/* ---- persistent map ----
+   A treemap in fixed-height rows: each row is a flex line whose tiles grow
+   by liq_usd, so within a row width is proportional to liquidity, and the
+   rows are cut where the running total crosses an equal share, so across
+   rows area is too. The floor is the tile's symbol and its money: a tile
+   too small to be drawn to scale is drawn just wide enough to say both. */
+#heat{margin:0 0 8px}
 #heat:empty{display:none}
-.hg-h{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:0 0 5px}
-.hg-h .lab{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
-  color:var(--faint)}
-.hg-leg{display:inline-flex;align-items:center;gap:3px;font-size:9.5px;
-  color:var(--faint)}
-.hg-leg i{width:12px;height:8px;border-radius:2px;border:1px solid var(--line);
-  display:inline-block}
-.hg{display:grid;gap:3px;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));
-  margin:0 0 10px}
-.hgt{cursor:pointer;border:1px solid var(--line);border-radius:4px;
-  padding:4px 3px;min-height:40px;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:1px;overflow:hidden}
-.hgs{font:600 10px var(--mono);color:var(--text);max-width:100%;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hgv{font:10px var(--mono);font-variant-numeric:tabular-nums;color:var(--text);
-  opacity:.8}
-.hgt:hover{border-color:var(--accent)}
+.tm{display:flex;flex-direction:column;gap:2px}
+.tmr{display:flex;flex-wrap:wrap;gap:2px}
+.hgt{position:relative;flex:1 1 0;height:36px;cursor:pointer;border:0;
+  border-radius:3px;padding:0 5px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:3px;overflow:hidden;
+  color:var(--on-band);font:600 10.5px/1 var(--mono)}
+.hgt.nob{background:var(--surface2);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
+/* a shared ticker: red outside, a hairline of page colour inside so it
+   separates from the hot end of the fill */
+.hgt.dup{box-shadow:inset 0 0 0 2px var(--bad),inset 0 0 0 3px var(--bg)}
+.hgs,.hgv{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hgv{font:500 9px/1 var(--mono);font-variant-numeric:tabular-nums;opacity:.85}
+.hgt:hover{filter:brightness(1.12)}
+.hgt.hasmv{padding-right:17px}
+.hgt .mvb{right:2px;top:2px;bottom:auto;width:11px;height:11px;
+  font-size:8.5px;line-height:11px;box-shadow:0 0 0 1px var(--bg)}
 
 /* ---- glossary ---- */
 .gloss > div{display:flex;gap:8px;align-items:baseline;padding:4px 0;
@@ -362,9 +393,10 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
 .gloss b{font:600 11px var(--mono);color:var(--text);flex:0 0 108px}
 .warn-t{color:var(--warn)}
 
-/* ---- mobile: two-line rows ---- */
-/* Mobile keeps every fact the desktop table shows, moved onto a second line
-   inside one cell, so nothing is hidden on the phone -- only rearranged. */
+/* ---- mobile: terminal strip rows ---- */
+/* Mobile keeps every fact the desktop table shows, rearranged into one cell
+   as a strip: the tier ring on the left, three lines in the middle, the
+   money on the right. Nothing is hidden on the phone -- only rearranged. */
 /* Every selector below carries the table.tk prefix on purpose: the
    display:block reset is written as "table.tk tr" / "table.tk td", which
    outweighs a bare "tr.r" or "td.c-tier". Without the prefix the rows stay
@@ -374,22 +406,35 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
   table.tk,table.tk tbody,table.tk tr,table.tk td{display:block}
   table.tk tr.x{display:none}
   table.tk tr.x.on{display:block}
-  table.tk tr.r{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;
+  table.tk tr.r{display:flex;align-items:flex-start;
     padding:7px 2px;border-bottom:1px solid var(--line);min-height:52px;
-    /* scoped to the row, not :root, so the how-to card and the what-changed
-       strip keep their full-size pills */
+    /* scoped to the row, not :root, so the how-to card keeps its full-size
+       pills */
     --pill-f:8.5px; --pill-pad:3px 4px}
   table.tk td{border:0;padding:0}
-  table.tk td.c-id{flex:1 1 40%;min-width:0;order:1}
-  table.tk td.c-h6{order:2} table.tk td.c-h24{order:3}
-  table.tk td.c-liq{order:4}
-  table.tk td.c-ind{flex:1 1 100%;order:5;display:flex;flex-direction:column;
-    align-items:flex-start;gap:3px}
-  table.tk td.c-tier,table.tk td.c-age,table.tk td.c-depth,table.tk td.c-heat,
-  table.tk td.c-buy,table.tk td.c-txns,table.tk td.c-fdv,
+  table.tk td.c-ind{flex:1 1 100%;min-width:0}
+  table.tk td.c-id,table.tk td.c-tier,table.tk td.c-age,table.tk td.c-depth,
+  table.tk td.c-heat,table.tk td.c-buy,table.tk td.c-h6,table.tk td.c-h24,
+  table.tk td.c-liq,table.tk td.c-txns,table.tk td.c-fdv,
   table.tk td.c-notable{display:none}
   table.tk tr.x>td{padding:6px 2px 10px}
 }
+.ts{display:flex;align-items:flex-start;gap:8px}
+.ts-l{flex:0 0 auto;display:flex;align-items:center;gap:2px}
+/* Line pitch is held at 22px or more on purpose: the 40px targets above
+   reach 20px from a line's centre, so anything tighter lets one line's
+   target swallow the centre of the next. */
+.ts-m{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:5px}
+.ts-1,.ts-2{display:flex;align-items:center;min-width:0;height:17px}
+.ts-1{gap:6px}
+.ts-1 .sym{font:700 13px/1 var(--mono);flex:0 1 auto;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ts-2{gap:9px}
+.ts-r{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.ts-r .liqv{font:600 14px/1 var(--mono);font-variant-numeric:tabular-nums}
+.ts-r .chg{font-size:9.5px;line-height:1}
+.ts-r .cl{display:flex;align-items:center;gap:4px}
+.ts-r .cl > span:first-child{font:9px/1 var(--mono);color:var(--faint)}
 @media (min-width:1000px){
   table.tk td.c-ind{display:none}
   .mo{display:none}
@@ -460,9 +505,9 @@ footer{color:var(--faint);font-size:10.5px;border-top:1px solid var(--line);
     advice, and no flag is a verdict.</p>
   <p class="sub" id="intro-note"></p>
 </div>
+<div id="board"></div>
+<div id="heat"></div>
 <div id="changed"></div>
-
-  <div id="heat"></div>
 
   <details class="sec" open><summary>Tokens <span class="cnt" id="tok-count"></span></summary>
     <div class="body">
@@ -670,13 +715,13 @@ var BANDS = {
     fields: ["buys6", "sells6"],
     missing: {word: "–", why: "too few trades: buys6 + sells6 under 30"},
     bands: [
-      {word: "BUYERS LEAD",  cvar: "--b-buy",  short: "BUY LEAD",
+      {word: "BUYERS LEAD",  cvar: "--b-buy",
        rule: "buys6 / (buys6 + sells6) > 60%",
        test: function(t){ return buyShare(t) > 0.60; }},
-      {word: "SELLERS LEAD", cvar: "--b-sell", short: "SELL LEAD",
+      {word: "SELLERS LEAD", cvar: "--b-sell",
        rule: "buys6 / (buys6 + sells6) < 40%",
        test: function(t){ return buyShare(t) < 0.40; }},
-      {word: "BALANCED",     cvar: "--b-flat", short: "EVEN",
+      {word: "BALANCED",     cvar: "--b-flat",
        rule: "40% to 60%", test: function(){ return true; }}
     ],
     has: function(t){
@@ -1026,9 +1071,11 @@ function rect(s, x, y, w, h, fill, rx){
 /* liquidity against FDV. Capped at 25% of FDV for the full bar: above that the
    ratio stops discriminating and everything would read full. */
 /* buyer trend: last5_byr24 as a sparkline. Flat when every value is equal, so
-   a straight line means "no change", not "no data" -- no data draws nothing. */
-function sparkSvg(arr){
-  var W = 44, H = 12;
+   a straight line means "no change", not "no data" -- no data draws nothing.
+   Green or red by trend unless a stroke is given; the row's small copy is
+   coloured by the BUYERS band instead, since green and red mean price here. */
+function sparkSvg(arr, W, H, stroke){
+  W = W || 44; H = H || 12;
   var ok = arr && arr.length >= 2;
   var s = svg(W, H, ok ? "24h buyer count over the last " + arr.length
     + " snapshots: " + arr.join(", ") : "no buyer history yet");
@@ -1046,14 +1093,15 @@ function sparkSvg(arr){
   p.setAttribute("stroke-width", "1.3");
   p.setAttribute("stroke-linecap", "round");
   p.setAttribute("stroke-linejoin", "round");
-  p.setAttribute("stroke", arr[arr.length-1] > arr[0] ? "var(--ok)"
-    : arr[arr.length-1] < arr[0] ? "var(--bad)" : "var(--neutral)");
+  p.setAttribute("stroke", stroke || (arr[arr.length-1] > arr[0] ? "var(--ok)"
+    : arr[arr.length-1] < arr[0] ? "var(--bad)" : "var(--neutral)"));
   s.appendChild(p);
   return s;
 }
 /* a percentage change with a direction arrow, so colour is never the only
-   signal for up or down */
-function chgEl(v, dp){
+   signal for up or down. `grey` keeps the arrow and drops the colour: a DEAD
+   row's move is still shown, but not dressed as a market. */
+function chgEl(v, dp, grey){
   var d = el("span", "chg");
   if (v === null || v === undefined || isNaN(v)){
     d.appendChild(el("span", "dim", "n/a"));
@@ -1064,10 +1112,11 @@ function chgEl(v, dp){
   var tri = document.createElementNS(SVGNS, "polygon");
   tri.setAttribute("points", flat ? "0,3 7,3 7,4 0,4"
     : up ? "3.5,0 7,6 0,6" : "0,1 7,1 3.5,7");
-  tri.setAttribute("fill", flat ? "var(--faint)" : up ? "var(--ok)" : "var(--bad)");
+  tri.setAttribute("fill", flat || grey ? "var(--faint)" : up ? "var(--ok)" : "var(--bad)");
   a.appendChild(tri);
   d.appendChild(a);
-  d.appendChild(el("span", flat ? "dim" : up ? "pos" : "neg", pct(n, dp === undefined ? 1 : dp)));
+  d.appendChild(el("span", flat || grey ? "dim" : up ? "pos" : "neg",
+    pct(n, dp === undefined ? 1 : dp)));
   return d;
 }
 /* Deterministic avatar from the contract address, never the ticker: tickers
@@ -1136,7 +1185,6 @@ var stamps = [];
 var TOKENS = [], PMAX = 1;
 var FILTER = {}, QUERY = "", SORT = {key: "liq_usd", dir: -1};
 var SHORTLIST = null;
-var CHANGES_RES = null;
 /* Pins are a per-viewer convenience, so localStorage is the right home and
    every access is guarded: it throws in a private window and comes back empty
    with site data cleared. A pin is a contract address, which is the identity
@@ -1250,6 +1298,25 @@ function hoursAgo(ts){
   if (isNaN(t)) return null;
   return (Date.now() - t) / 3600000;
 }
+/* The token's latest event, when it is a move between two known tiers. One
+   reading for every place that shows a move -- the line-3 chip, the ring
+   badge, the map badge and the last-2h strip -- so they cannot disagree. */
+var MOVE_WINDOW_H = 2;
+function moveOf(ca){
+  var e = NOTE_EVENTS[ca];
+  if (!e || e.kind !== "tier") return null;
+  var a = TIERS.indexOf(e.from), b = TIERS.indexOf(e.to);
+  if (a < 0 || b < 0 || a === b) return null;
+  var h = hoursAgo(e.ts);
+  if (h === null || h < 0) return null;
+  return {up: b < a, h: h, e: e};      /* TIERS runs best to worst */
+}
+function moveBadge(mv){
+  var b = el("span", "mvb", mv.up ? "↑" : "↓");
+  b.title = (mv.up ? "upgraded " : "downgraded ")
+          + (mv.h < 1 ? "<1h" : Math.round(mv.h) + "h") + " ago";
+  return b;
+}
 function eventChip(t){
   var e = NOTE_EVENTS[t.ca];
   if (!e) return null;
@@ -1261,11 +1328,10 @@ function eventChip(t){
             why: "First seen on the board " + when.toLowerCase()
                + ", entering as " + tierLabel(e.to) + "."};
   }
-  var a = TIERS.indexOf(e.from), b = TIERS.indexOf(e.to);
-  if (a < 0 || b < 0 || a === b) return null;
-  var up = b < a;                      /* TIERS runs best to worst */
+  var mv = moveOf(t.ca);
+  if (!mv) return null;
   return {kind: "event",
-          text: (up ? "UPGRADED " : "DOWNGRADED ") + when,
+          text: (mv.up ? "↑ UPGRADED " : "↓ DOWNGRADED ") + when,
           why: "Moved from " + tierLabel(e.from) + " to " + tierLabel(e.to)
              + " " + when.toLowerCase() + "."};
 }
@@ -1302,7 +1368,7 @@ function flagChips(t){
   }
   var nd = dupCount(t);
   if (nd){
-    out.push({kind: "flag", text: "TICKER ×" + (nd + 1),
+    out.push({kind: "flag", ticker: true, text: "TICKER ×" + (nd + 1),
       why: nd + " other token" + (nd === 1 ? "" : "s") + " on this board use "
          + "the ticker " + (t.symbol || "?") + ". The contract address is the "
          + "identity, not the name."});
@@ -1363,12 +1429,29 @@ function fdvEl(t, cls){
   return b;
 }
 
+/* "0x1b0e…153e": enough of the address to tell two same-ticker rows apart
+   at a glance. The full one is in the expanded row. */
+function shortCa(ca){
+  var s = String(ca || "");
+  return s.length > 12 ? s.slice(0, 6) + "…" + s.slice(-4) : s;
+}
+/* A DEAD token with no pool money at all still carries 6h and 24h figures
+   from its last trades. Said once, plainly, on the row itself. Outside
+   notableFor on purpose: it is a fact about the row, not a notable chip, so
+   it neither spends the budget nor moves the Notable sort. */
+var NO_LIQ = {kind: "info", text: "no liquidity · moves not tradable",
+  why: "liq_usd is 0: no pool money stands behind this token, so its 6h and "
+     + "24h figures are not prices anyone could trade at."};
+function noLiq(t){ return t.tier === "DEAD" && t.liq_usd === 0; }
+
 function notableEl(t){
   var list = notableFor(t);
+  if (noLiq(t)) list = list.concat([NO_LIQ]);
   if (!list.length) return null;
   var b = el("div", "bds");
   list.forEach(function(c){
-    var x = el("button", "nchip " + NOTE_KINDS[c.kind].cls, c.text);
+    var x = el("button", "nchip " + NOTE_KINDS[c.kind].cls
+                         + (c === NO_LIQ ? " lc" : ""), c.text);
     x.type = "button";
     x.setAttribute("aria-label", c.kind + ": " + c.text);
     x.addEventListener("click", function(ev){
@@ -1376,6 +1459,11 @@ function notableEl(t){
       showNotePop(x, c);
     });
     b.appendChild(x);
+    if (c.ticker){
+      var a = el("span", "sca", shortCa(t.ca));
+      a.title = t.ca;
+      b.appendChild(a);
+    }
   });
   return b;
 }
@@ -1524,20 +1612,52 @@ function bandWord(t, key){
   return b ? b.word : null;
 }
 
-/* A chip is word + position-on-a-scale, so the colour is never carrying the
-   meaning by itself: the word says which band, and the filled block says
-   where that band sits in the group's order. BUYERS gets the split bar the
-   reader was promised instead of a ladder. */
-function ladderSvg(idx, total, color){
-  var w = 4, gap = 2, h = 8;
+/* The band signals. Every one is a button that opens the same popover with
+   the rule behind it; what differs is how the band is drawn. A missing
+   field draws the group's dash in faint grey rather than guessing a band. */
+function sigBtn(t, key, cls, word){
+  var g = BANDS[key], b = bandOf(t, key);
+  var btn = el("button", cls);
+  btn.type = "button";
+  btn.setAttribute("aria-label",
+    g.label + ": " + word + (b && b.word !== word ? " (" + b.word + ")" : ""));
+  btn.addEventListener("click", function(ev){
+    ev.stopPropagation();
+    showChipPop(btn, t, key);
+  });
+  return btn;
+}
+function bandColor(b){ return b ? "var(" + b.cvar + ")" : "var(--faint)"; }
+/* AGE and HEAT: the word on a tint of its band colour */
+function tintChip(t, key){
+  var g = BANDS[key], b = bandOf(t, key);
+  var word = !b ? g.missing.word : g.display ? g.display(t) : b.word;
+  var btn = sigBtn(t, key, "tint", word);
+  btn.style.setProperty("--c", bandColor(b));
+  btn.textContent = word;
+  return btn;
+}
+/* DEPTH: three ascending bars, lit up to the band -- THIN one, OK two, DEEP
+   all three. The bands are declared strongest-first, so the count is flipped. */
+function barsSvg(lit, total, color){
+  var w = 3, gap = 1.5, h = 10;
   var s = svg(total * w + (total - 1) * gap, h, "");
-  s.style.verticalAlign = "-1px";
   for (var i = 0; i < total; i++){
-    var on = i === idx;
-    rect(s, i * (w + gap), on ? 0 : 2, w, on ? h : h - 4,
-         on ? color : "var(--line)", 1);
+    var bh = Math.round(h * (i + 1) / total);
+    rect(s, i * (w + gap), h - bh, w, bh, i < lit ? color : "var(--line)", 0.5);
   }
   return s;
+}
+function depthChip(t){
+  var g = BANDS.depth, b = bandOf(t, "depth");
+  var word = b ? b.word : g.missing.word;
+  var btn = sigBtn(t, "depth", "sig", word);
+  btn.appendChild(barsSvg(b ? g.bands.length - g.bands.indexOf(b) : 0,
+                          g.bands.length, bandColor(b)));
+  var w = el("span", "sw", word);
+  w.style.color = bandColor(b);
+  btn.appendChild(w);
+  return btn;
 }
 function splitSvg(share){
   var w = MOBILE() ? 20 : 26, h = 8;
@@ -1551,39 +1671,29 @@ function splitSvg(share){
   rect(s, w / 2 - 0.5, 0, 1, h, "var(--text)", 0);
   return s;
 }
-function chipFor(t, key){
-  var g = BANDS[key], b = bandOf(t, key);
-  var btn = el("button", "chip");
-  btn.type = "button";
-  var word, color, shape;
-  if (!b){
-    word = g.missing.word; color = "var(--faint)";
-    shape = (key === "buyers") ? splitSvg(null)
-                               : ladderSvg(-1, g.bands.length, "var(--faint)");
-  } else {
-    word = g.display ? g.display(t) : (b.short || b.word);
-    color = "var(" + b.cvar + ")";
-    if (key === "buyers"){
-      shape = splitSvg(buyShare(t));
-    } else {
-      /* heat and depth read low-to-high left-to-right; depth's bands are
-         declared strongest-first, so its index is flipped for the ladder */
-      var i = g.bands.indexOf(b);
-      shape = ladderSvg(key === "depth" ? g.bands.length - 1 - i : i,
-                        g.bands.length, color);
-    }
-  }
-  btn.appendChild(shape);
-  var w = el("span", "cw", word);
-  w.style.color = color;
+/* BUYERS: the bar filled to buys6 / (buys6 + sells6) and the share as a
+   number, in the band's colour. Under BUYERS_MIN_TRADES the band is missing,
+   so the bar stays empty and the number is a dash. */
+function buyChip(t){
+  var b = bandOf(t, "buyers");
+  var share = b ? buyShare(t) : null;
+  var word = share === null ? BANDS.buyers.missing.word : Math.round(share * 100) + "%";
+  var btn = sigBtn(t, "buyers", "sig", word);
+  btn.appendChild(splitSvg(share));
+  var w = el("span", "sw", word);
+  w.style.color = bandColor(b);
   btn.appendChild(w);
-  btn.setAttribute("aria-label",
-    g.label + ": " + word + (g.display && b ? " (" + b.word + ")" : ""));
-  btn.addEventListener("click", function(ev){
-    ev.stopPropagation();
-    showChipPop(btn, t, key);
-  });
   return btn;
+}
+/* last5_byr24 at row size: blue when buyers lead on the BUYERS band, grey
+   otherwise. Fewer than two points draws nothing at all. */
+function sparkEl(t){
+  var a = t.last5_byr24;
+  if (!a || a.length < 2) return null;
+  var s = sparkSvg(a, 24, 11,
+    bandWord(t, "buyers") === "BUYERS LEAD" ? "var(--b-buy)" : "var(--b-sell)");
+  s.classList.add("spk");
+  return s;
 }
 
 /* One popover element, reused. It explains the chip under the finger: what
@@ -1675,6 +1785,22 @@ function tierPill(tier){
   p.style.color = tierColor(tier);
   return p;
 }
+/* the token rows' form of the tier: the word alone, no box */
+function tierWord(tier){
+  var p = el("span", "tword", tierLabel(tier));
+  p.style.color = tierColor(tier);
+  return p;
+}
+/* the mark inside a ring in its tier's colour, with the move badge when its
+   latest event is a tier move */
+function ringMark(t, px){
+  var r = el("span", "ring");
+  r.style.borderColor = tierColor(t.tier);
+  r.appendChild(markFor(t.image_url, t.ca, px));
+  var mv = moveOf(t.ca);
+  if (mv) r.appendChild(moveBadge(mv));
+  return r;
+}
 function labelled(txt, node){
   var w = el("span");
   w.appendChild(el("span", "mo", txt));
@@ -1746,40 +1872,66 @@ function renderTokens(){
        mobile and their contents reappear in c-ind, which is hidden on desktop,
        so every layout shows each fact exactly once. */
     tr.id = "row-" + t.ca;
+    var dead = t.tier === "DEAD";
     var idc = el("div", "idc");
     idc.appendChild(starBtn(t.ca));
-    idc.appendChild(markFor(t.image_url, t.ca));
+    idc.appendChild(ringMark(t, 18));
     idc.appendChild(el("span", "sym", t.symbol === null ? "(no symbol)" : t.symbol));
     /* No badges here any more. The shared ticker is a line-3 flag and the
        persistence run is a line-3 chip, each with a popover that explains
        itself -- printing either twice in one row taught nothing. */
     cell("c-id", idc);
-    cell("c-tier", tierPill(t.tier));
-    cell("c-age", chipFor(t, "age"));
-    cell("c-depth", chipFor(t, "depth"));
-    cell("c-heat", chipFor(t, "heat"));
-    cell("c-buy", chipFor(t, "buyers"));
-    cell("c-h6", chgEl(t.chg_h6), 1);
-    cell("c-h24", chgEl(t.chg_h24), 1);
-    /* the phone gets FDV as a second line inside this cell; the desktop gets
-       the column below, and each hides the other's copy */
-    var liq = el("div", "liqc");
-    liq.appendChild(el("span", "n", usd(t.liq_usd)));
-    liq.appendChild(fdvEl(t, "fdv-m"));
-    cell("c-liq", liq, 1);
+    cell("c-tier", tierWord(t.tier));
+    cell("c-age", tintChip(t, "age"));
+    cell("c-depth", depthChip(t));
+    cell("c-heat", tintChip(t, "heat"));
+    var bc = el("div", "bc");
+    bc.appendChild(buyChip(t));
+    var sp = sparkEl(t);
+    if (sp) bc.appendChild(sp);
+    cell("c-buy", bc);
+    cell("c-h6", chgEl(t.chg_h6, 1, dead), 1);
+    cell("c-h24", chgEl(t.chg_h24, 1, dead), 1);
+    cell("c-liq", el("span", "n", usd(t.liq_usd)), 1);
     cell("c-fdv", fdvEl(t), 1);
     cell("c-txns", el("span", "n", num(t.txns24)), 1);
     cell("c-notable", notableEl(t));          /* null when nothing is notable */
 
-    /* two sub-lines, not one wrapping blob: the four chips get a line to
-       themselves so they read as a row of signals, and the badges follow. */
-    var ind = cell("c-ind");
-    var line1 = el("div", "ind-chips");
-    line1.appendChild(tierPill(t.tier));
-    BAND_ORDER.forEach(function(k){ line1.appendChild(chipFor(t, k)); });
-    ind.appendChild(line1);
+    /* The phone's strip: ring | three lines | money. Line 1 names the token,
+       line 2 is the four band signals and the buyer trend, line 3 is what is
+       notable and is left out when there is nothing to say. */
+    var ts = el("div", "ts");
+    var tl = el("div", "ts-l");
+    tl.appendChild(starBtn(t.ca));
+    tl.appendChild(ringMark(t, 22));
+    ts.appendChild(tl);
+    var tm = el("div", "ts-m");
+    var l1 = el("div", "ts-1");
+    l1.appendChild(el("span", "sym", t.symbol === null ? "(no symbol)" : t.symbol));
+    l1.appendChild(tierWord(t.tier));
+    l1.appendChild(tintChip(t, "age"));
+    tm.appendChild(l1);
+    var l2 = el("div", "ts-2");
+    l2.appendChild(depthChip(t));
+    l2.appendChild(tintChip(t, "heat"));
+    l2.appendChild(buyChip(t));
+    var sp2 = sparkEl(t);
+    if (sp2) l2.appendChild(sp2);
+    tm.appendChild(l2);
     var note = notableEl(t);
-    if (note) ind.appendChild(note);
+    if (note) tm.appendChild(note);
+    ts.appendChild(tm);
+    var trc = el("div", "ts-r");
+    trc.appendChild(el("span", "liqv", usd(t.liq_usd)));
+    trc.appendChild(fdvEl(t, "fdv-m"));
+    [["6h", t.chg_h6], ["24h", t.chg_h24]].forEach(function(p){
+      var c = el("span", "cl");
+      c.appendChild(el("span", null, p[0]));
+      c.appendChild(chgEl(p[1], 1, dead));
+      trc.appendChild(c);
+    });
+    ts.appendChild(trc);
+    cell("c-ind", ts);
 
     var xr = el("tr", "x");
     var xc = el("td");
@@ -1848,10 +2000,14 @@ function renderChipHelp(){
   mount.textContent = "";
   mount.appendChild(el("p", "sub-h", "What these chips mean"));
   mount.appendChild(el("p", "note",
-    "Four chips on every row: a shape showing where the token sits in that "
-    + "scale, a label, and a colour. Three of them label a band; the age "
-    + "chip prints the age itself and the bands below are what its popover "
-    + "explains. Tap a chip on a row for the rule behind it."));
+    "Four signals on every row, each a word plus a shape or a tint, plus a "
+    + "colour. AGE, on line 1, prints the age itself on a tint of its band; "
+    + "the bands below are what its popover explains. On line 2, DEPTH "
+    + "lights signal bars up to its band, HEAT is its band word on a tint, "
+    + "and BUYERS fills a bar to the buy share and prints it, or a dash under "
+    + BUYERS_MIN_TRADES + " trades. Beside them, the 24h buyer count over the "
+    + "last five snapshots, blue when buyers lead and grey otherwise. Tap a "
+    + "signal on a row for the rule behind it."));
 
   var wrap = el("div", "scroll");
   var tb = el("table", "g");
@@ -1905,8 +2061,8 @@ function renderChipHelp(){
     + "show more than three chips."],
    ["Event",
     "Blue outline. A recent change from data/changes.json, such as "
-    + "UPGRADED 2H AGO or NEW 3H AGO. Only events still inside that file's "
-    + "window appear."],
+    + "\u2191 UPGRADED 2H AGO or NEW 3H AGO. Only events still inside that "
+    + "file's window appear. A tier move also puts its arrow on the ring."],
    ["Standout",
     "Purple outline. This token is in the top or bottom tenth of the board "
     + "on " + NOTE_METRICS.map(function(m){ return m.label; }).join(", ")
@@ -1914,10 +2070,17 @@ function renderChipHelp(){
     + "any measure with fewer than " + NOTE_MIN_ROWS + " ranked tokens. "
     + "Purple means unusual, not good: on the collected history big recent "
     + "moves tended to come before worse 4-8 h returns."],
+   ["Fact",
+    "Grey. Plain facts with no judgement: the short contract address beside "
+    + "a shared ticker, and on a DEAD row with no liquidity at all, \"no "
+    + "liquidity \u00b7 moves not tradable\"."],
+   ["Ring",
+    "Not a chip. The ring round each token's mark is its tier colour, and a "
+    + "blue \u2191 or \u2193 on it is its latest tier move."],
    ["Age",
-    "Not a chip. The age signal on line 2 prints the figure itself -- 7H "
-    + "under a day, 8.3D under ten days, 49D after that -- and its three "
-    + "bands still colour the ladder and are what its popover explains."],
+    "Not a chip. The age chip on line 1 prints the figure itself -- 7H "
+    + "under a day, 8.3D under ten days, 49D after that -- tinted by its "
+    + "band, and its three bands are what its popover explains."],
    ["FDV",
     "Under the liquidity figure on a phone, its own sortable column on a "
     + "desktop. " + FDV_WHY]
@@ -1977,52 +2140,153 @@ function renderShortlists(){
   });
 }
 
-/* One tile per PERSISTENT token, coloured by chg_h6 on a diverging scale.
-   The tile carries the symbol and the number, so the colour is a third
-   encoding rather than the only one. */
-var HEAT_CAP = 20;
-function divergingColor(v){
-  if (v === null || v === undefined || isNaN(v)) return "var(--surface2)";
-  var x = Math.max(-1, Math.min(1, Number(v) / HEAT_CAP));
-  if (x >= 0) return "color-mix(in srgb, var(--ok) " + Math.round(18 + 62 * x)
-                     + "%, var(--surface2))";
-  return "color-mix(in srgb, var(--bad) " + Math.round(18 + 62 * -x)
-       + "%, var(--surface2))";
+/* The board in one line: a segment per tier, as wide as its share of
+   tier_counts. The filter chips below carry the same counts as numbers. */
+function renderBoard(d){
+  var mount = document.getElementById("board");
+  mount.textContent = "";
+  var counts = (d && d.tier_counts) || {};
+  var n = TIERS.reduce(function(s, t){ return s + (Number(counts[t]) || 0); }, 0);
+  if (!n) return;
+  mount.appendChild(el("div", "blab", "board \u00b7 " + n + " tokens"));
+  var bar = el("div", "bbar");
+  bar.setAttribute("role", "img");
+  bar.setAttribute("aria-label", "Tokens by tier: " + TIERS.map(function(t){
+    return tierLabel(t) + " " + (Number(counts[t]) || 0); }).join(", "));
+  TIERS.forEach(function(t){
+    var c = Number(counts[t]) || 0;
+    if (!c) return;
+    var seg = el("i");
+    seg.style.flexGrow = c;
+    seg.style.background = tierColor(t);
+    seg.title = tierLabel(t) + " " + c;
+    bar.appendChild(seg);
+  });
+  mount.appendChild(bar);
 }
-function renderHeatGrid(){
+
+/* "$6.6M", "$998K", "$23K": a tile has room for about five characters of
+   money. The row it opens prints the full figure. */
+function usdShort(v){
+  if (v === null || v === undefined || isNaN(v)) return "n/a";
+  var n = Number(v);
+  if (n >= 1e9) return "$" + (n/1e9).toFixed(n < 1e10 ? 1 : 0) + "B";
+  if (n >= 1e6) return "$" + (n/1e6).toFixed(n < 1e7 ? 1 : 0) + "M";
+  if (n >= 1e3) return "$" + Math.round(n/1e3) + "K";
+  return "$" + Math.round(n);
+}
+/* The symbol's width in monospace cells: a CJK or emoji glyph takes two. */
+function cells(s){
+  var n = 0;
+  Array.from(String(s)).forEach(function(c){ n += c.codePointAt(0) >= 0x1100 ? 2 : 1; });
+  return n;
+}
+
+/* One tile per PERSISTENT token -- the same tokens the heat grid showed --
+   sized by liq_usd and filled with its HEAT band colour. Tiles run largest
+   first and a row closes where the running total passes the next equal
+   share of the whole, so a row stands for the same amount of liquidity
+   everywhere and tile area tracks liq_usd down to the floors. The rows are
+   cut for the width they were measured at; each still wraps as a last
+   resort, so a narrow screen never scrolls sideways. */
+var MAP_CELL = 6.3;            /* px per monospace cell at the tile's 10.5px */
+var MAP_CELL_SM = 5.4;         /* ... and at its second line's 9px */
+var MAP_PAD = 10;              /* the tile's side padding */
+var MAP_BADGE = 12;            /* extra right padding when a move badge sits there */
+var MAP_GAP = 2;
+var MAP_ROWS_MAX = 6;
+var MAP_W = 0;                 /* the width the rows were last cut for */
+function renderMap(){
   var mount = document.getElementById("heat");
   mount.textContent = "";
-  var best = TOKENS.filter(function(t){ return t.tier === "BEST"; });
+  var liqOf = function(t){ var v = Number(t.liq_usd); return v > 0 ? v : 0; };
+  var best = TOKENS.filter(function(t){ return t.tier === "BEST"; })
+    .sort(function(a, b){ return liqOf(b) - liqOf(a); });
   if (!best.length) return;
-  var head = el("div", "hg-h");
-  head.appendChild(el("span", "lab", tierLabel("BEST") + " · 6h change"));
-  var leg = el("span", "hg-leg");
-  [["-" + HEAT_CAP + "%", -HEAT_CAP], ["0", 0], ["+" + HEAT_CAP + "%", HEAT_CAP]]
-    .forEach(function(p, i){
-      if (i) leg.appendChild(el("i", null));
-      var sw = el("i");
-      sw.style.background = divergingColor(p[1]);
-      leg.appendChild(sw);
-      leg.appendChild(el("span", null, p[0]));
-    });
-  head.appendChild(leg);
-  mount.appendChild(head);
+  mount.appendChild(el("div", "blab",
+    tierLabel("BEST") + " map \u00b7 size = liquidity \u00b7 colour = heat"));
+  var W = MAP_W = mount.clientWidth || 360;
+  var total = best.reduce(function(s, t){ return s + liqOf(t); }, 0);
+  /* about 90px per tile on average decides how many shares to cut */
+  var R = Math.max(2, Math.min(MAP_ROWS_MAX, Math.ceil(best.length * 90 / W)));
 
-  var grid = el("div", "hg");
-  best.slice().sort(function(a, b){
-    return (b.chg_h6 === null ? -1e9 : b.chg_h6) - (a.chg_h6 === null ? -1e9 : a.chg_h6);
-  }).forEach(function(t){
-    var b = el("button", "hgt");
-    b.type = "button";
-    b.style.background = divergingColor(t.chg_h6);
-    b.appendChild(el("span", "hgs", t.symbol || "?"));
-    b.appendChild(el("span", "hgv", pct(t.chg_h6, 1)));
-    b.title = (t.symbol || "?") + " · 6h " + pct(t.chg_h6, 1)
-            + " · tap to open its row";
-    b.addEventListener("click", function(){ revealRow(t.ca); });
-    grid.appendChild(b);
+  var shares = [[]], acc = 0;
+  best.forEach(function(t){
+    var mv = moveOf(t.ca);
+    if (mv && mv.h > MOVE_WINDOW_H) mv = null;
+    /* the floor: wide enough for the symbol and for the money under it */
+    var w = Math.ceil(Math.max(Math.min(cells(t.symbol || "?"), 14) * MAP_CELL,
+                               usdShort(t.liq_usd).length * MAP_CELL_SM))
+          + MAP_PAD + (mv ? MAP_BADGE : 0);
+    var cur = shares[shares.length - 1];
+    if (cur.length && shares.length < R
+        && acc + liqOf(t) / 2 > total * shares.length / R){
+      cur = []; shares.push(cur);
+    }
+    cur.push({t: t, w: w, mv: mv});
+    acc += liqOf(t);
   });
-  mount.appendChild(grid);
+  /* A share whose floors overrun one line -- in practice the long tail of
+     small tiles -- is packed from its small end: the smallest tiles fill a
+     line drawn close to their floors, and the room left over goes to the
+     larger tiles at the front, so a bigger pool never draws smaller than a
+     line-mate merely for sitting on an emptier line. */
+  var rows = [];
+  shares.forEach(function(sh){
+    var lines = [], line = [], used = 0;
+    for (var i = sh.length - 1; i >= 0; i--){
+      if (line.length && used + MAP_GAP + sh[i].w > W){
+        lines.unshift(line); line = []; used = 0;
+      }
+      used += (line.length ? MAP_GAP : 0) + sh[i].w;
+      line.unshift(sh[i]);
+    }
+    if (line.length) lines.unshift(line);
+    rows = rows.concat(lines);
+  });
+
+  var map = el("div", "tm");
+  rows.forEach(function(row){
+    var r = el("div", "tmr");
+    row.forEach(function(it){
+      var t = it.t, mv = it.mv, band = bandOf(t, "heat"), nd = dupCount(t);
+      var heat = band ? band.word : BANDS.heat.missing.word;
+      var b = el("button", "hgt" + (band ? "" : " nob") + (nd ? " dup" : "")
+                           + (mv ? " hasmv" : ""));
+      b.type = "button";
+      /* in dollars: a row of small tiles still adds up to at least 1, which
+         flex needs before it hands out all of the free space */
+      b.style.flexGrow = Math.max(1, liqOf(t));
+      b.style.minWidth = it.w + "px";
+      if (band) b.style.background = "var(" + band.cvar + ")";
+      b.appendChild(el("span", "hgs", t.symbol || "?"));
+      var v = el("span", "hgv", heat + " \u00b7 " + usdShort(t.liq_usd));
+      v.dataset.short = usdShort(t.liq_usd);
+      b.appendChild(v);
+      if (mv) b.appendChild(moveBadge(mv));
+      var label = (t.symbol || "?") + " \u00b7 heat " + heat + " \u00b7 liquidity "
+        + usd(t.liq_usd)
+        + (mv ? " \u00b7 " + (mv.up ? "upgraded " : "downgraded ")
+                + (mv.h < 1 ? "<1h" : Math.round(mv.h) + "h") + " ago" : "")
+        + (nd ? " \u00b7 ticker shared with " + nd + " other token"
+                + (nd === 1 ? "" : "s") : "");
+      b.title = label + " \u00b7 tap to open its row";
+      b.setAttribute("aria-label", label + ". Open its row.");
+      b.addEventListener("click", function(){ revealRow(t.ca); });
+      r.appendChild(b);
+    });
+    map.appendChild(r);
+  });
+  mount.appendChild(map);
+  /* A tile drawn at its floor may not fit its second line. Drop the heat
+     word first -- the fill already says it -- then the line, never the
+     symbol. The floor is set so the money fits; this is the guard for a
+     font that runs wider than the estimate. */
+  map.querySelectorAll(".hgv").forEach(function(v){
+    if (v.scrollWidth <= v.clientWidth + 0.5) return;
+    v.textContent = v.dataset.short;
+    if (v.scrollWidth > v.clientWidth + 0.5) v.hidden = true;
+  });
 }
 
 /* Clears whatever was filtering the list first: a tile must always be able to
@@ -2133,42 +2397,39 @@ function renderHealth(entries){
   });
 }
 
-/* Hidden entirely when data/changes.json is absent -- it is derived, the
-   collector may not have written one yet, and an empty strip would just be a
-   label with nothing after it. */
-function renderChanges(res){
+/* Tier moves from data/changes.json in the last MOVE_WINDOW_H hours, newest
+   first, one chip per token -- its latest move, the same one its ring and
+   tile badges show. A chip opens the token's row, as a map tile does.
+   Hidden entirely when changes.json is absent: it is derived, the collector
+   may not have written one yet. When it loads but nothing moved, the strip
+   says so rather than vanishing, so "quiet" and "missing" look different. */
+function renderMoves(res){
   var mount = document.getElementById("changed");
   mount.textContent = "";
   if (!res.ok) return;
-  var ev = (res.data && res.data.events) || [];
-  if (!ev.length) return;
+  var list = Object.keys(NOTE_EVENTS).map(moveOf).filter(function(m){
+    return m && m.h <= MOVE_WINDOW_H;
+  }).sort(function(a, b){ return a.h - b.h; });
   var strip = el("div", "chg-strip");
-  var cov = res.data.covers_h;
-  strip.appendChild(el("span", "lab",
-    "what changed" + (cov ? " \u00b7 last " + cov + "h" : "")));
-  ev.slice(-14).reverse().forEach(function(e){
-    var c = el("span", "ev");
-    c.appendChild(el("b", null, e.sym || "(no symbol)"));
-    if (e.kind === "new"){
-      c.appendChild(el("span", "arr", "new"));
-      var p = el("span", "pill", tierLabel(e.to));
-      p.style.color = tierColor(e.to);
-      c.appendChild(p);
-    } else if (e.kind === "tier"){
-      var f = el("span", "pill", tierLabel(e.from));
-      f.style.color = tierColor(e.from);
-      c.appendChild(f);
-      c.appendChild(el("span", "arr", "\u2192"));
-      var tt = el("span", "pill", tierLabel(e.to));
-      tt.style.color = tierColor(e.to);
-      c.appendChild(tt);
-    } else {
-      return;                       // avoid events duplicate their tier event
-    }
-    c.title = (e.ts || "").replace("T", " ").slice(0, 19) + " \u00b7 " + (e.ca || "");
+  strip.appendChild(el("span", "lab", "last " + MOVE_WINDOW_H + "h"
+    + (list.length ? " \u00b7 " + list.length + " tier move" + (list.length === 1 ? "" : "s")
+                   : "")));
+  if (!list.length) strip.appendChild(el("span", "none", "no tier changes"));
+  list.forEach(function(m){
+    var e = m.e, sym = e.sym || "(no symbol)";
+    var when = m.h < 1 ? "<1h" : Math.round(m.h) + "h";
+    var c = el("button", "mv");
+    c.type = "button";
+    c.appendChild(el("b", null, sym));
+    c.appendChild(el("span", null, (m.up ? "\u2191 " : "\u2193 ") + when));
+    var label = sym + " " + tierLabel(e.from) + " \u2192 " + tierLabel(e.to)
+              + ", " + when + " ago";
+    c.title = label + " \u00b7 " + (e.ca || "") + " \u00b7 tap to open its row";
+    c.setAttribute("aria-label", label + ". Open its row.");
+    c.addEventListener("click", function(){ revealRow(e.ca); });
     strip.appendChild(c);
   });
-  if (strip.children.length > 1) mount.appendChild(strip);
+  mount.appendChild(strip);
 }
 
 function renderPools(res){
@@ -2182,7 +2443,6 @@ function renderPools(res){
   stamps.push(["pools", d.generated_at]);
   renderHeader(d, true, ageMin(d.generated_at));
 
-  buildNoteEvents(CHANGES_RES);
   AVOID_REASON = {};
   (d.avoided || []).forEach(function(a){
     if (a && a.ca) AVOID_REASON[a.ca] = a.reason || "";
@@ -2194,9 +2454,10 @@ function renderPools(res){
     if (typeof t.persist_count === "number" && t.persist_count > PMAX) PMAX = t.persist_count;
   });
   buildNoteRanks();          /* after PMAX, which the persist metric reads */
+  renderBoard(d);
   renderControls(d);
   renderShortlists();
-  renderHeatGrid();
+  renderMap();
   renderTokens();
 
   /* Same sentence, same WATCH split, moved behind the info icon: on a 390px
@@ -2507,8 +2768,9 @@ Promise.all([
      meta: nftD.ok ? ((nftD.data.collections || []).length + " surfaced") : null}
   ]);
 
-  CHANGES_RES = changes;
-  renderChanges(changes);
+  /* before the pools: the rows, the map and the strip all read the moves */
+  buildNoteEvents(changes);
+  renderMoves(changes);
   renderPools(pools);
   renderStocks(stocks);
   renderNft(nftT, nftD);
@@ -2530,6 +2792,11 @@ function measureHeader(){
 }
 window.addEventListener("resize", measureHeader);
 measureHeader();
+/* the map's rows are cut for a width, so a new width needs new rows */
+window.addEventListener("resize", function(){
+  var m = document.getElementById("heat");
+  if (TOKENS.length && m.clientWidth !== MAP_W) renderMap();
+});
 </script>
 </body>
 </html>
