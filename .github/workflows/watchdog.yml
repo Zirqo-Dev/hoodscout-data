@@ -96,7 +96,7 @@ jobs:
               gh issue close "$extra" --comment "Duplicate of #$keep, closing."
             done
           else
-            gh issue create --title "$title" --body "$body"
+            gh issue create --title "$title" --body "$body" --label pipeline
           fi
 
       - name: Close the alert if the data is fresh again

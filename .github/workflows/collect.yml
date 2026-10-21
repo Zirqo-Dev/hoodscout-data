@@ -114,10 +114,14 @@ jobs:
               else
                 gh issue edit "$keep" --body "$line"
               fi
+              # label older issues once; an edit every poll would bump updatedAt
+              if ! gh issue view "$keep" --json labels --jq '.labels[].name' | grep -qx stock-alert; then
+                gh issue edit "$keep" --add-label stock-alert
+              fi
               for extra in "${issues[@]:1}"; do
                 gh issue close "$extra" --comment "Duplicate of #$keep, closing."
               done
             else
-              gh issue create --title "$title" --body "$line"
+              gh issue create --title "$title" --body "$line" --label stock-alert
             fi
           done 3< ALERT.txt
