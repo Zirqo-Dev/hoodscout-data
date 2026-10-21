@@ -674,7 +674,7 @@ b. **Registry.** Every commit touching `data/hypotheses.jsonl` only appended lin
 
 c. **Evaluator.** List every commit touching `scripts/evaluate.py` or `scripts/label.py` since 2026-10-18T14:00Z. Show that the decision path (the functions and constants in the HS-72 check) is AST-identical to f6ed629. Commits before 2026-10-18T18:45Z (5079b98, d5dfd54, 40ad08b) predate any possible post-watermark outcome; every later commit must be verdict-neutral. "AST-identical to f6ed629" means scripts/evaluate.py as it stood at commit f6ed629.
 
-d. **Labeler.** Compare `git hash-object scripts/label.py` with the registered labeler_version (17e925ee). If they differ, run a blind equivalence check: run both labeler versions on the pinned data and print only the number of (row, horizon) outcomes whose status or ret_net_500 differ. What a nonzero count means is decided before the read (Board HS-40).
+d. **Labeler.** Compare `git hash-object scripts/label.py` with the registered labeler_version (17e925ee). If they differ, run a blind equivalence check (`python scripts/label_equiv.py`): run both labeler versions on the pinned data and print only the number of (row, horizon) outcomes whose status or ret_net_500 differ. What a nonzero count means is decided before the read (Board HS-40).
 
 e. **Earlier reports.** No file in `reports/` dated before the read contains an H-0001 to H-0003 metric, beyond what the step 1 disclosure covers.
 
