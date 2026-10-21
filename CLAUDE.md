@@ -24,6 +24,9 @@ This repo is PUBLIC. Everything in it, including data/, is world-readable.
 - data/hypotheses.jsonl is append-only. Never edit or delete an existing line. A change is a new line that supersedes the old one, and only before anything has been evaluated against it.
 - Never register or change a hypothesis without Pete's explicit approval. After any registration, run scripts/evaluate.py --blind and confirm it does not crash. Never run --unblind or --report before the 2026-11-09 read.
 - No self-adapting logic. Thresholds change only through a new pre-registered hypothesis that Pete approves.
+- Before a hypothesis's read date, never run label.py --summary or any script that prints a return. Blind process metrics only.
+- Freeze rule: once an evaluator join exists for a hypothesis, never change its rule, exclusions, thresholds, population or deciding statistic. Any such change is a new hypothesis Pete must approve. Bug fixes must be shown verdict-neutral (AST-identical decision path or identical blind outputs).
+- Read day (2026-11-09) follows docs/EVIDENCE_LAYER.md "Layer 3d" exactly: fresh full clone at the pinned commit, commit the audit first, then run `python scripts/evaluate.py --unblind --report` ONCE, then HOLD before committing the report.
 
 ## Workflows
 - collect.yml and holders.yml are started by cron-job.org via workflow_dispatch; neither has a GitHub schedule. stocks.yml is dispatch-only too: the stocks collection runs inside collect.yml.

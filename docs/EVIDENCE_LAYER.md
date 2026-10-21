@@ -521,6 +521,8 @@ week when the random pick returned −6% is working.
 
 One file, `data/hypotheses.jsonl`, append-only, one object per line.
 
+*Illustrative format only. The registered lines in `data/hypotheses.jsonl` are authoritative and differ from this example (pile, polarity, censoring, gates and stop_by).*
+
 ```json
 {"id":"H-0001",
  "registered":"2026-10-20T09:00:00+00:00",
@@ -641,6 +643,117 @@ from nowhere — is worse, and because the honest response is to read a pass as
 weaker evidence than a pass on a blind threshold would be. Future hypotheses
 about a quantity nobody has measured yet do not carry this caveat, and should
 say so explicitly when they do not.
+
+### Layer 3d: reading a hypothesis
+
+This protocol governs H-0001, H-0002 and H-0003, read once on Monday 2026-11-09. It applies to every later hypothesis unless its registration says otherwise. Decided by Pete on 2026-10-20 and 2026-10-21, before any read.
+
+#### 1. Blind until the read date
+
+Before a hypothesis's read date, nobody computes, posts or discusses its metric, gap, clause or status. That covers the Board, Notion, chat, briefs and the dashboard.
+
+- Allowed before the read: eff_n, token counts, usable-week counts, and blind process metrics (row counts, gone_unseen share, fee-known share).
+- Forbidden before the read: `evaluate.py --unblind`, `evaluate.py --report`, `label.py --summary`, and any ad-hoc script that prints a return.
+
+**Disclosure.** Interim effect sizes for H-0001 to H-0003 were computed and seen on 2026-10-19 and 2026-10-20, before this rule existed (the first `label.py --summary` run and the 2026-10-20 independent review). Several later decisions were made by people who had seen those numbers: the reporting-only evaluator changes (b9e16bb2, 3e60d55e), the freeze rule, the replication rule and the censoring rule in step 5. None of them changed a deciding rule; the evaluator's decision path was verified AST-identical to f6ed629. Still, they were not made blind.
+
+#### 2. One run, on pinned data
+
+- **Data.** Use a fresh full (not shallow) clone, checked out at the first collector commit whose data timestamp is at or after 2026-11-09T07:00Z (2:00 AM Toronto). By then every W45 entry's 6h window [5.25h, 6.75h] has closed. The commit hash goes in the report.
+- **Command, exactly:** `python scripts/evaluate.py --unblind --report`. Use the default pile (scored, as registered), with no `--since` and no `--pile`.
+- **Once.** A run that crashes before printing any metric may be re-run after a fix. A run that printed any metric is the read. The report is committed unchanged, and commentary goes in a separate commit.
+- **W46 rows.** About the first 1.75 h of W46 entries are labelled at that commit and enter the pooled metric. If W46 reaches the 30-row floor for any hypothesis, it counts as a week under the evaluator's existing rule. The report lists the weeks used, and the verdict line says so.
+
+#### 3. Integrity audit, before unblinding
+
+The audit prints counts, hashes and dates only. It is committed as `reports/2026-11-09-audit.md` before the unblinded run.
+
+a. `git rev-parse --is-shallow-repository` prints false.
+
+b. **Registry.** Every commit touching `data/hypotheses.jsonl` only appended lines. The H-0001 to H-0003 lines are byte-identical to the commit that added them. That commit is dated before 2026-10-18T18:45Z, the watermark plus 5.25h, before which no 6h outcome after the watermark could exist.
+
+c. **Evaluator.** List every commit touching `scripts/evaluate.py` or `scripts/label.py` since 2026-10-18T14:00Z. Show that the decision path (the functions and constants in the HS-72 check) is AST-identical to f6ed629. Commits before 2026-10-18T18:45Z (5079b98, d5dfd54, 40ad08b) predate any possible post-watermark outcome; every later commit must be verdict-neutral. "AST-identical to f6ed629" means scripts/evaluate.py as it stood at commit f6ed629.
+
+d. **Labeler.** Compare `git hash-object scripts/label.py` with the registered labeler_version (17e925ee). If they differ, run a blind equivalence check: run both labeler versions on the pinned data and print only the number of (row, horizon) outcomes whose status or ret_net_500 differ. What a nonzero count means is decided before the read (Board HS-40).
+
+e. **Earlier reports.** No file in `reports/` dated before the read contains an H-0001 to H-0003 metric, beyond what the step 1 disclosure covers.
+
+#### 4. What a verdict may say
+
+- Each verdict quotes the registry clause that fired.
+- H-0001 is written with the null as its pass.
+  - A pass reads: "BEST did not beat a scored-pile random pick by 1.0pp or more in median 6h net return, net of modelled costs." It never reads "no information" or "BEST is worthless": the design can reject an edge of at least 1.0pp, not every edge.
+  - A fail reads: "BEST beat the scored pile by 1.0pp or more, sign held in at least 3 of 4 weeks." That is a pattern, not a signal (step 9).
+- Every verdict line carries:
+  - eff_n and tokens against the gates;
+  - censoring against max_censored_pct;
+  - fee-known share;
+  - usable weeks, all-tier and arm-own;
+  - whether the pooled and token-clustered medians agree in sign;
+  - whether the labeler version matches;
+  - a pointer to the thresholds-not-blind disclosure.
+- The report keeps its count line: registered, superseded before evaluation, evaluated.
+
+#### 5. Censoring above the registered cap
+
+A status is set by a person, never by the evaluator (Layer 3c, rule 3).
+
+When the read finds a population's gone_unseen share above that hypothesis's registered max_censored_pct, the person records **inconclusive (censoring)**, whatever clause fired. The share is gone_unseen rows over all population rows, as `gates_for` computes it. This applies to H-0001 (cap 20) and H-0002 (cap 25), whose clauses do not mention their cap, and matches what H-0003's registration already does (cap 50).
+
+The report still shows every number. Evaluator code and the registry are unchanged.
+
+Stated in advance: the blind check on 2026-10-21 at 02:30Z had H-0002 at 54.1% against its cap of 25, so H-0002 will very likely be recorded inconclusive on 2026-11-09.
+
+#### 6. Caveats, written before the read
+
+1. **Thresholds not chosen blind.** See the disclosure section.
+2. **Interim numbers were seen** on 2026-10-19 and 2026-10-20 (step 1).
+3. **Cost model.** The fee is known for only part of the rows (2026-10-21: H-0001 55%, H-0002 46%, H-0003 13%); the rest use the 1% fallback. H-0003's level clause (a) is therefore mostly a statement about the fallback. The fee sweep in the report shows the sensitivity.
+4. **Usable weeks.** They are counted on all-tier rows (30 per ISO week), not on the tested arm; the report shows the arm-own count beside it. W42 covers about 1.4 days from the 2026-10-18 13:30Z watermark, yet it weighs the same as a full week in the sign test.
+5. **Asymmetric burden.** For H-0001, a pass needs no stability and a fail needs 3 of 4 weeks. For H-0002, a fail needs no stability and a pass needs 3 of 4 weeks. The design keeps the null more easily than it rejects it, so a null is weak evidence of "no edge".
+6. **Pooled vs clustered.** The registered pooled median decides. The token-clustered statistic is shown beside it and never decides. A sign disagreement between the two goes in the verdict line.
+7. **Survivorship.** gone_unseen rows carry no return, so medians are over the rows that have one. Imputed -100% and flat-exit sensitivity is reported for H-0003 only.
+8. **Labeler version.** See audit step 3d.
+9. **H-0002's horizon** is narrower than the original 4 to 8h finding (registry notes). A null there does not fully refute the original.
+10. **Slippage** is modelled, not traded.
+11. **Gates beyond the clauses.** The evaluator also decides with two gates the registry clauses do not mention: the fee-sweep bound, and the known-fee-only re-run, which makes a verdict inconclusive if it flips it after meeting its own gates. Both were committed 2026-10-18 between 14:09Z and 15:05Z, after registration but before any post-watermark outcome existed, and are frozen with the rest of the decision path. The verdict line says which gate fired.
+
+#### 7. If H-0003 is not ready at the pinned commit
+
+evaluate.py computes a hypothesis's metric before it checks the gates, so an unblinded run prints H-0003's numbers even while it is waiting.
+
+If H-0003's eff_n is below 100 or its token count below 20 at the pinned commit:
+- its section of the 2026-11-09 report is an interim exposure, disclosed as such;
+- H-0003 is read at the first Monday pinned commit after its gates are met, by this same procedure.
+
+#### 8. Freeze rule
+
+Once an evaluator join exists for a hypothesis, none of these may change: its rule, exclusion list, threshold, population filter or deciding statistic. Any such change is a new hypothesis, registered with a fresh watermark and counted in the tally. This holds now for H-0001 to H-0003, and for H-0007 once its join is built.
+
+Allowed after the join:
+- bug fixes shown verdict-neutral, by an AST-identical decision path or identical outputs on the pinned data checked blind;
+- report-only additions;
+- docs.
+
+H-0007 is the last free supersession of the holders hypothesis.
+
+#### 9. Replication rule
+
+A result that supports a usable pattern is not a signal. "Supports a pattern" means an H-0001 fail, an H-0002 pass or an H-0003 pass; an H-0001 pass is the null and has nothing to confirm.
+
+- **Confirmation.** Before anything reaches Layer 4, it gets a confirmation hypothesis: the same population, metric, thresholds and clauses, a new watermark (fresh data only), and its own read date fixed at registration. It counts in the tally.
+- **Layer 4 entry.** Only a confirmed pattern may appear in a Layer 4 experimental panel, and from there only in Layer 5 paper trading with rules fixed in advance.
+- **Failed confirmation.** It retires the pattern. No third try with tweaks; a changed rule is a new hypothesis.
+- **Inconclusive confirmation.** It keeps the pattern out of Layer 4 but does not retire it. The confirmation hypothesis keeps waiting until its own stop_by.
+
+#### 10. Recording the verdict
+
+The evaluator never writes the registry. A verdict is recorded in three places:
+1. the committed report;
+2. a "Results" table appended to this document (id, read date, status, report path, commit);
+3. the Board card.
+
+No status lines go into `data/hypotheses.jsonl` until a status-line format exists and is tested against evaluate.py, because an unknown line type could crash it.
 
 ---
 
@@ -871,8 +984,7 @@ why `min_n_tokens` sits beside it.
 
 **Token clustering.** One token with 600 prints can carry a pooled median on its
 own. The baseline table has a worked case: pooled, BEST leads WATCH by 0.19pp;
-clustered by token, WATCH leads by 1.30pp. **Both statistics, always, and the
-paired within-token test when the populations overlap.**
+clustered by token, WATCH leads by 1.30pp. **Both statistics are always reported, and the paired within-token test when the populations overlap; the registered (pooled) statistic decides, and a sign disagreement is written into the verdict (Layer 3d, step 6).**
 
 **Regime.** The `chg_h6` mean-reversion effect was +0.06pp in one week and
 −1.13/−1.44pp in the next two. Three weeks of data found an effect that one of
