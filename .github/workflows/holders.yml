@@ -6,6 +6,11 @@ name: holders
 # external job off first, never both.
 on:
   workflow_dispatch:
+    inputs:
+      probe_rpc:
+        description: "Diagnostic only: eth_call token0/token1 on 4 fixed addresses, collect and commit nothing"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -39,9 +44,20 @@ jobs:
           # authorization header, never as a query parameter, so it cannot
           # reach a log line through a failing request's URL.
           BLOCKSCOUT_API_KEY: ${{ secrets.BLOCKSCOUT_API_KEY }}
-        run: python scripts/holders.py
-      - name: Commit
+          # empty on the cron-job.org dispatch, which sends no inputs
+          PROBE_RPC: ${{ inputs.probe_rpc }}
         run: |
+          if [ "$PROBE_RPC" = "true" ]; then
+            python scripts/holders.py --probe-rpc
+            exit 0
+          fi
+          python scripts/holders.py
+      - name: Commit
+        env:
+          PROBE_RPC: ${{ inputs.probe_rpc }}
+        run: |
+          # a probe run collected nothing and must commit nothing
+          if [ "$PROBE_RPC" = "true" ]; then exit 0; fi
           git config user.name "hoodscout-bot"
           git config user.email "actions@github.com"
           git add data/holders

@@ -613,6 +613,143 @@ def do_probe(api, n=3):
     return 0
 
 
+# ------------------------------------------------- --probe-rpc (diagnostic)
+# HS-73 phase 1: can the PRO API answer token0()/token1() by eth_call? A
+# contract that answers either with the token is a pool whatever it is
+# called, which a Blockscout label cannot tell us for the unlabelled ones.
+# Diagnostic only: four fixed addresses, no retries, nothing written.
+# Uniswap v4 liquidity sits in the PoolManager singleton, already excluded by
+# fixed address, so a revert there would be expected and is not a gap.
+#
+# ROUTES ARE UNVERIFIED. Neither has been exercised against the live API; the
+# probe tries the JSON-RPC endpoint first and the Etherscan-style proxy module
+# only if the first is not found, and prints which one answered.
+
+RPC_SELECTORS = (("token0", "0x0dfe1681"), ("token1", "0xd21220a7"))
+RPC_ROUTES = (
+    ("json-rpc", "https://api.blockscout.com/" + CHAIN_ID + "/api/eth-rpc"),
+    ("proxy", "https://api.blockscout.com/" + CHAIN_ID + "/api"),
+)
+# (holder, the token whose top-20 it sits in, what it is), all from
+# data/holders/2026-10-20/191022.jsonl. Addresses, not outcomes.
+RPC_PROBE = (
+    ("0xd4eb21209c4d6093f80b5b84f5c45cc093ea14a3",
+     "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec", "UniswapV3Pool"),
+    ("0x23d641feccd207e8794c593e8240444a0674c4ba",
+     "0x57c0e45cb534413d1c20a4240955d6bb250bb4f1", "main pool, label null"),
+    ("0xe537e1c473cb3b0a2beac59e9d0088ed1dc43047",
+     "0x88ad8ddf1e3898412146a534538d418c6f8a9062", "SafeProxy"),
+    ("0x4f878921046576fde82516f5a87caabdbc976188",
+     "0xcec185eb182c47d1ba1efc84e6959e18cd620be4", "PonsV2BondingCurve"),
+)
+RPC_MAX_CALLS = 2 * len(RPC_PROBE) * len(RPC_ROUTES) + 2   # + credits reads
+
+_urlopen = urllib.request.urlopen      # replaced in tests
+
+
+def parse_eth_call(payload):
+    """("ok", address) | ("revert", raw) | ("error", raw) from one response.
+
+    An address comes back as one 32-byte word, left-padded. Empty data ("0x")
+    from a contract is what a call to a function it does not have returns
+    when its fallback does not revert, so it counts as a revert: final either
+    way, and the raw value is kept beside it.
+    """
+    if not isinstance(payload, dict):
+        return "error", None
+    err = payload.get("error")
+    if err is not None:
+        msg = err.get("message") if isinstance(err, dict) else str(err)
+        if msg and "revert" in str(msg).lower():
+            return "revert", str(msg)[:120]
+        return "error", str(msg)[:120]
+    res = payload.get("result")
+    if payload.get("status") == "0":             # Etherscan-style failure
+        txt = "%s %s" % (payload.get("message"), res)
+        return ("revert" if "revert" in txt.lower() else "error"), txt[:120]
+    if not isinstance(res, str) or not res.startswith("0x"):
+        return "error", None if res is None else str(res)[:120]
+    if res == "0x":
+        return "revert", res
+    h = res[2:]
+    if len(h) != 64 or any(c not in "0123456789abcdefABCDEF" for c in h):
+        return "error", res[:120]
+    return "ok", "0x" + h[-40:].lower()
+
+
+def rpc_request(key, route, to, data):
+    """One eth_call. Returns (http_status, payload, credits_remaining).
+
+    The key goes in the authorization header only. No URL is ever printed
+    here, and an exception is reported by its type, never its text.
+    """
+    name, url = route
+    hdrs = {"Accept": "application/json", "User-Agent": UA,
+            "authorization": key}
+    if name == "json-rpc":
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "eth_call",
+                           "params": [{"to": to, "data": data}, "latest"]})
+        req = urllib.request.Request(
+            url, data=body.encode(), method="POST",
+            headers={**hdrs, "Content-Type": "application/json"})
+    else:
+        q = urllib.parse.urlencode({"module": "proxy", "action": "eth_call",
+                                    "to": to, "data": data, "tag": "latest"})
+        req = urllib.request.Request(url + "?" + q, headers=hdrs)
+    try:
+        with _urlopen(req, timeout=TIMEOUT) as r:
+            return (r.status, json.loads(r.read()),
+                    dict(r.headers).get("x-credits-remaining"))
+    except urllib.error.HTTPError as e:
+        cr = e.headers.get("x-credits-remaining") if e.headers else None
+        try:
+            payload = json.loads(e.read())
+        except Exception:                               # noqa: BLE001
+            payload = None
+        return e.code, payload, cr
+    except Exception as e:                              # noqa: BLE001
+        return type(e).__name__, None, None
+
+
+def do_probe_rpc(key):
+    """token0()/token1() on RPC_PROBE. Prints, writes nothing, never collects."""
+    print("probe-rpc: %d addresses, token0/token1, diagnostic only; nothing is "
+          "written. The key is sent as a header and is never printed."
+          % len(RPC_PROBE))
+    api = Api(key, cap=2)
+    api.get("/stats")
+    print("credits remaining before: %s" % api.credits)
+    calls, route = 0, None
+    for addr, ca, what in RPC_PROBE:
+        print("\n%s  (%s) in token %s" % (addr, what, ca))
+        for fn, sel in RPC_SELECTORS:
+            routes = [route] if route else list(RPC_ROUTES)
+            for i, r in enumerate(routes):
+                if calls >= RPC_MAX_CALLS - 2:
+                    print("  call cap reached")
+                    break
+                time.sleep(MIN_INTERVAL)
+                status, payload, cr = rpc_request(key, r, addr, sel)
+                calls += 1
+                kind, val = parse_eth_call(payload)
+                if status == 404 and route is None and i < len(routes) - 1:
+                    print("  %s via %s: HTTP 404, trying the next route"
+                          % (fn, r[0]))
+                    continue
+                if kind == "error" and status != 200:
+                    val = val or "HTTP %s" % status
+                print("  %s via %s: HTTP %s  %s  %s  credits %s"
+                      % (fn, r[0], status, kind, val, cr))
+                if status == 200 and route is None:
+                    route = r
+                break
+    api.get("/stats")
+    print("\ncredits remaining after: %s" % api.credits)
+    print("eth_call requests: %d, plus %d credits reads; route used: %s"
+          % (calls, api.calls, route[0] if route else "none answered"))
+    return 0
+
+
 def do_collect(api):
     now = datetime.now(timezone.utc)
     toks = load_tokens()
@@ -769,6 +906,9 @@ def main():
                     help="print the token list and planned calls, touch no network")
     ap.add_argument("--probe", action="store_true",
                     help="hit a few known tokens and print status, keys and credits")
+    ap.add_argument("--probe-rpc", action="store_true",
+                    help="eth_call token0()/token1() on four fixed holder "
+                         "addresses and print the raw results; writes nothing")
     a = ap.parse_args()
 
     if a.dry_run:
@@ -779,6 +919,13 @@ def main():
         print("BLOCKSCOUT_API_KEY is not set. Add it as a repository secret; "
               "a Blockscout PRO key starts with proapi_.", file=sys.stderr)
         return 1
+
+    if a.probe_rpc:
+        try:
+            return do_probe_rpc(key)
+        except Exception as e:                          # noqa: BLE001
+            print("WARN probe-rpc failed: %s" % type(e).__name__)
+            return 0
 
     api = Api(key)
     try:
