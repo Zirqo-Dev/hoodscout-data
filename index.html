@@ -28,11 +28,15 @@
   --b-cold:#5b8fd6; --b-cool:#7ba3c9; --b-flat:#8a95a6;
   --b-warm:#d59a4e; --b-hot:#e2703a;
   --b-buy:#4c9aff; --b-sell:#8a95a6;
-  /* line 3 outlines. Purple and blue read as "unusual", grey as "plain
-     fact", red as "warning". Green appears nowhere: a standout is not good
-     news, and the forward tests say so. */
+  /* notable-chip outlines. Purple and blue read as "unusual", grey as
+     "plain fact", red as "warning" -- and red is kept for warnings that are
+     rare. The three common flags get calm tones of their own instead, drawn
+     with a tinted fill so they never read as an event or a standout. Green
+     appears nowhere: a standout is not good news, and the forward tests say
+     so. */
   --n-flag:var(--bad); --n-event:#5b9bd5; --n-standout:#a97bea;
   --n-fact:var(--faint);
+  --f-thin:#d4a72c; --f-contra:#6ea8fe; --f-liq:#c084fc;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --r:6px;
@@ -51,6 +55,7 @@
     --b-warm:#9a6412; --b-hot:#b24a1c;
     --b-buy:#0b62d6; --b-sell:#5f6a76;
     --n-event:#1f5fab; --n-standout:#6d28d9; --n-fact:#6b7686;
+    --f-thin:#8a5b09; --f-contra:#1d4ed8; --f-liq:#7e22ce;
   }
 }
 *{box-sizing:border-box}
@@ -247,6 +252,15 @@ tr.r.op td{background:var(--surface2)}
 .pos{color:var(--ok)} .neg{color:var(--bad)} .dim{color:var(--faint)}
 .chg{display:inline-flex;align-items:center;gap:2px;font-family:var(--mono);
   font-variant-numeric:tabular-nums}
+/* In a token row the 6h/24h move is context, not the headline: smaller and
+   grey, arrow included (CSS fill outranks the SVG's own fill attribute). The
+   arrow's shape still says up or down. The expanded row keeps its colours. */
+table.tk td.c-h6 .chg,table.tk td.c-h24 .chg{font-size:10px}
+table.tk td.c-h6 .chg span,table.tk td.c-h24 .chg span{color:var(--faint)}
+table.tk td.c-h6 .chg polygon,table.tk td.c-h24 .chg polygon{fill:var(--faint)}
+/* DEAD is dimmed as a whole row, price moves and chips included: there is
+   nothing to trade against, so nothing on it should compete for attention. */
+table.tk tr.r.dead{opacity:.45}
 
 /* expansion row */
 tr.x{display:none} tr.x.on{display:table-row}
@@ -284,9 +298,13 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
   .chip{padding:11px 1px;gap:3px}
   .chip .cw{font-size:8.5px;letter-spacing:.03em}
 }
-/* the chips own one line; the badges take the next */
-.ind-chips{display:flex;align-items:center;gap:3px 5px;flex-wrap:nowrap;
-  width:100%;overflow:hidden}
+/* The band chips and the notable chips share one line, which wraps only when
+   they do not fit (HS-18): a quiet row is two lines, a crowded one three, and
+   every chip stays visible. The band chips always come first, so a wrapped
+   line holds only notable chips; 8px between wrapped lines for the reason
+   given on .bds below. No overflow:hidden -- it would clip the notable
+   chips' 40px finger targets. */
+.ind-chips{display:flex;align-items:center;gap:8px 5px;flex-wrap:wrap;width:100%}
 
 /* ---- line 3: notable chips ----
    Outline only, so the row stays quiet, and the same geometry as .pill down
@@ -307,6 +325,8 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
 .nchip.ne{color:var(--n-event)}
 .nchip.ns{color:var(--n-standout)}
 .nchip.nx{color:var(--n-fact)}
+.nchip.ft{color:var(--f-thin)} .nchip.fc{color:var(--f-contra)} .nchip.fl{color:var(--f-liq)}
+.nchip.ft,.nchip.fc,.nchip.fl{background:color-mix(in srgb,currentColor 13%,transparent)}
 /* 8px between wrapped lines, not 4. A chip's 40px hit area reaches 11.75px
    past its own 16.5px box, so two wrapped lines need more than 3.5px between
    them or the lower chip's target swallows the centre of the one above it --
@@ -425,7 +445,10 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
 .cards{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
 .card{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
   padding:8px 9px}
-.card.alarm{border-color:var(--bad)}
+/* Under the 40% floor is the usual state for these cards (4 of 5 when this
+   was written), so it is drawn grey, not red. Red stays for the alerts box,
+   which only fires when a symbol newly crosses the floor. */
+.card.low .big{color:var(--muted)}
 .ctop{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
 .big{font:700 22px var(--mono);font-variant-numeric:tabular-nums;margin:2px 0 0}
 .meter{height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin:5px 0 7px}
@@ -1203,14 +1226,16 @@ function markFor(url, key, size){
 /* ---------- state ---------- */
 var stamps = [];
 var TOKENS = [], PMAX = 1;
-var FILTER = {}, QUERY = "", SORT = {key: "liq_usd", dir: -1};
+var SORT0 = {key: "liq_usd", dir: -1};          /* the sort the page opens with */
+var FILTER = {}, QUERY = "", SORT = {key: SORT0.key, dir: SORT0.dir};
 var SHORTLIST = null;
 var CHANGES_RES = null;
 /* The unfiltered list opens short: pinned rows, PERSISTENT, and anything
    whose tier moved in the last RECENT_H hours of data (measured back from
    latest.json's generated_at, so a stalled collector does not silently empty
    it). New listings are not counted -- one run can add a dozen. Any search,
-   tier filter or shortlist shows every match. Display only: nothing here
+   tier filter, shortlist or column sort other than the opening one shows
+   every row, so a sort never ranks only the short list. Display only: nothing here
    reads or changes a tier. */
 var RECENT_H = 2;
 var RECENT = {};
@@ -1365,17 +1390,20 @@ function eventChip(t){
    Flags first and never dropped, then one event, then up to two standouts,
    then the age fact. Everything after the flags competes for what is left of
    NOTE_BUDGET once the age chip has taken its slot. */
+/* Flags common enough that red would stop meaning anything. Still flags --
+   never dropped, same popover -- each in its own calm tone (class -> CSS). */
+var FLAG_TONE = {thin_depth: "ft", contradiction: "fc", liq_anomaly: "fl"};
 function flagChips(t){
   var out = [], seen = {};
   if (t.flag_liq_anomaly){
     seen.liq_anomaly = 1;
-    out.push({kind: "flag", text: "LIQ ANOMALY",
+    out.push({kind: "flag", text: "LIQ ANOMALY", tone: FLAG_TONE.liq_anomaly,
       why: "Reported liquidity does not line up with the rest of this "
          + "token's numbers (flag_liq_anomaly)."});
   }
   if (t.flag_contradiction){
     seen.contradiction = 1;
-    out.push({kind: "flag", text: "CONTRADICTION",
+    out.push({kind: "flag", text: "CONTRADICTION", tone: FLAG_TONE.contradiction,
       why: "Two of the collector's own readings disagree for this token "
          + "(flag_contradiction)."});
   }
@@ -1389,7 +1417,8 @@ function flagChips(t){
       tpt_high:   "Trades per trader is high -- few wallets trading "
                 + "repeatedly rather than many separate ones (watch_reason)."
     }[wr] || "Collector warning: " + wr + " (watch_reason).";
-    out.push({kind: "flag", text: wr.replace(/_/g, " ").toUpperCase(), why: why});
+    out.push({kind: "flag", text: wr.replace(/_/g, " ").toUpperCase(), why: why,
+              tone: FLAG_TONE[wr]});
   }
   var nd = dupCount(t);
   if (nd){
@@ -1459,7 +1488,7 @@ function notableEl(t){
   if (!list.length) return null;
   var b = el("div", "bds");
   list.forEach(function(c){
-    var x = el("button", "nchip " + NOTE_KINDS[c.kind].cls, c.text);
+    var x = el("button", "nchip " + (c.tone || NOTE_KINDS[c.kind].cls), c.text);
     x.type = "button";
     x.setAttribute("aria-label", c.kind + ": " + c.text);
     x.addEventListener("click", function(ev){
@@ -1786,7 +1815,8 @@ function renderTokens(){
     return (t.symbol || "").toLowerCase().indexOf(q) >= 0
         || (t.ca || "").toLowerCase().indexOf(q) >= 0;
   });
-  var filtered = !!(sl || act.length || q);
+  var sorted = SORT.key !== SORT0.key || SORT.dir !== SORT0.dir;
+  var filtered = !!(sl || act.length || q || sorted);
   document.getElementById("flt-n").textContent =
     (act.length + (sl ? 1 : 0) + (q ? 1 : 0)) || "";
   var matched = rows.length;
@@ -1831,7 +1861,7 @@ function renderTokens(){
 
   var body = el("tbody");
   rows.forEach(function(t){
-    var tr = el("tr", "r");
+    var tr = el("tr", "r" + (t.tier === "DEAD" ? " dead" : ""));
     tr.tabIndex = 0;
     tr.setAttribute("aria-expanded", "false");
     function cell(cls, node, right){
@@ -1869,15 +1899,14 @@ function renderTokens(){
     cell("c-txns", el("span", "n", num(t.txns24)), 1);
     cell("c-notable", notableEl(t));          /* null when nothing is notable */
 
-    /* two sub-lines, not one wrapping blob: the four chips get a line to
-       themselves so they read as a row of signals, and the badges follow. */
+    /* one wrapping line: tier, the four band chips, then the notable chips */
     var ind = cell("c-ind");
     var line1 = el("div", "ind-chips");
     line1.appendChild(tierPill(t.tier));
     BAND_ORDER.forEach(function(k){ line1.appendChild(chipFor(t, k)); });
-    ind.appendChild(line1);
     var note = notableEl(t);
-    if (note) ind.appendChild(note);
+    while (note && note.firstChild) line1.appendChild(note.firstChild);
+    ind.appendChild(line1);
 
     var xr = el("tr", "x");
     var xc = el("td");
@@ -1938,7 +1967,7 @@ function renderTokens(){
 }
 
 /* "Show all (N)" under a collapsed list, "Show fewer" under an expanded
-   one. Neither appears while a filter is narrowing the list. */
+   one. Neither appears while a filter or a column sort is in force. */
 function renderMore(collapsed, filtered, matched, shown){
   var mount = document.getElementById("tok-more");
   mount.textContent = "";
@@ -2007,16 +2036,19 @@ function renderChipHelp(){
   cav.textContent = CHIPS_CAVEAT;
   mount.appendChild(cav);
 
-  mount.appendChild(el("p", "sub-h", "Line 3 = what's notable"));
+  mount.appendChild(el("p", "sub-h", "What's notable"));
   mount.appendChild(el("p", "note",
-    "Under the chips, a row shows up to three chips saying what stands out "
-    + "about that token, in this order. Tap any of them for the reason. A "
-    + "row with nothing notable shows no third line at all."));
+    "After the four chips, a row shows up to three chips saying what stands "
+    + "out about that token, in this order, wrapping onto a third line when "
+    + "they do not fit. Tap any of them for the reason. A row with nothing "
+    + "notable shows none."));
   var nl = el("div", "gloss");
   [["Flags",
     "Red outline. Warnings the collector raised: liquidity anomaly, "
     + "contradiction, the WATCH reason, or a ticker shared with other tokens "
-    + "on the board. Flags are never dropped, so a badly flagged token can "
+    + "on the board. THIN DEPTH (amber), CONTRADICTION (blue) and LIQ ANOMALY "
+    + "(purple) are common, so they take a calm colour with a tinted fill "
+    + "instead of red. Flags are never dropped, so a badly flagged token can "
     + "show more than three chips."],
    ["Event",
     "Blue outline. A recent change from data/changes.json, such as "
@@ -2397,8 +2429,8 @@ function renderStocks(res){
   }
   var anchor = anchorDate(d.anchor_utc);
   mount.appendChild(el("p", "note",
-    "Locked share under 40% is flagged. Alerts fire only when a symbol newly "
-    + "crosses the floor."));
+    "Locked share under 40% is marked on the card in grey: it is the usual "
+    + "state. Alerts fire only when a symbol newly crosses the floor."));
   mount.appendChild(el("p", "note",
     "Premium is measured against a fixed pre-blackout anchor"
     + (anchor ? " of " + anchor : "") + " and does not move, so it reads as stale. "
@@ -2409,7 +2441,7 @@ function renderStocks(res){
   (d.tokens || []).forEach(function(t){
     var low = t.locked_pct_est !== null && t.locked_pct_est !== undefined
               && Number(t.locked_pct_est) < 40;
-    var c = el("div", "card" + (low ? " alarm" : ""));
+    var c = el("div", "card" + (low ? " low" : ""));
     var top = el("div", "ctop");
     var left = el("div", "idc");
     /* the stock tokens are Robinhood Chain tokens like any other, so their
@@ -2420,13 +2452,13 @@ function renderStocks(res){
     top.appendChild(el("span", "cnt n", usd(t.price_usd)));
     c.appendChild(top);
     var big = el("div", "big", pct(t.locked_pct_est, 1));
-    big.style.color = low ? "var(--bad)" : "var(--ok)";
+    if (!low) big.style.color = "var(--ok)";
     c.appendChild(big);
     c.appendChild(el("div", "cnt", low ? "locked share — below the 40% floor"
                                       : "locked share"));
     if (t.locked_pct_est !== null && t.locked_pct_est !== undefined){
       c.appendChild(meter(Number(t.locked_pct_est) / 100,
-                    low ? "var(--bad)" : "var(--ok)"));
+                    low ? "var(--neutral)" : "var(--ok)"));
     }
     /* premium only means anything where an anchor row actually exists: NVDA,
        MSTR and GME were first tracked after the anchor date and carry no
