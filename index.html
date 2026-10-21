@@ -550,7 +550,7 @@ footer{color:var(--faint);font-size:10.5px;border-top:1px solid var(--line);
   <details class="sec"><summary>Discover <span class="cnt" id="disc-count"></span></summary>
     <div class="body" id="disc"></div></details>
 
-  <details class="sec" open><summary>Stock squeeze board <span class="cnt" id="stk-count"></span></summary>
+  <details class="sec"><summary>Stock squeeze board <span class="cnt" id="stk-count"></span></summary>
     <div class="body" id="stk"></div></details>
 
   <details class="sec"><summary>NFT <span class="cnt" id="nft-count"></span></summary>
@@ -2257,6 +2257,8 @@ function renderStocks(res){
 
   var alerts = d.alerts || [];
   if (alerts.length){
+    document.getElementById("stk-count").textContent +=
+      " · " + alerts.length + (alerts.length === 1 ? " alert" : " alerts");
     var ab = el("div", "err");
     ab.appendChild(el("div", null, "Active alerts"));
     alerts.forEach(function(a){
