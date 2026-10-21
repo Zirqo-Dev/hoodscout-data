@@ -755,6 +755,61 @@ The evaluator never writes the registry. A verdict is recorded in three places:
 
 No status lines go into `data/hypotheses.jsonl` until a status-line format exists and is tested against evaluate.py, because an unknown line type could crash it.
 
+#### 11. What a verdict can and cannot detect (HS-77)
+
+Simulated power, computed on pre-watermark data only: `data/history.jsonl` as of commit d9f8047 (2026-09-04 to 2026-10-02), the same rows the in-sample backtest already used. No post-watermark return was computed.
+
+Method:
+- The 6h outcomes and same-pile baselines mirror the labeler.
+- Whole tokens are resampled with replacement, which keeps clustering and overlap.
+- The in-sample gap is removed, then a known true edge is added.
+- Weekly regime noise of 0.5 to 1.0pp is added (the pre-watermark weekly deviation was 0.8pp).
+- The registered rules are applied at the projected 2026-11-09 sample size: 2,000 replicates per cell, seed 20261021.
+
+Code and output: `analysis/hs77/`.
+
+**H-0001** (eff_n about 1,800, about 126 tokens):
+
+| True BEST edge | Read as fail (edge detected) | Read as pass |
+|---|---|---|
+| 0 | 1–3% | 96–99% |
+| +0.5pp | 12–14% | 85–88% |
+| +0.75pp | 25–26% | 74–75% |
+| +1.0pp | 38–45% | 55–61% |
+| +1.5pp | 65–77% | 23–34% |
+| +2.0pp | 86–92% | 8–13% |
+| +3.0pp | 98–100% | 0–2% |
+
+Inconclusive was 1% or less in every cell.
+
+**H-0002** (eff_n about 2,000 per arm; 4 equal time bins stand in for weeks, because rms was only logged from 2026-09-14):
+
+| True gap (+4 arm minus −4 arm) | Read as pass (edge found) |
+|---|---|
+| 0 | 4–8% |
+| −0.5pp | 20–25% |
+| −1.0pp | 51–53% |
+| −1.5pp | 77–85% |
+| −2.0pp | 91–98% |
+
+These H-0002 figures are moot if step 5 records it inconclusive (censoring).
+
+**What this means for the wording**
+
+- An H-0001 pass rules out a large edge, not a small one. Its verdict line adds: "This design detects a +2pp edge about 9 times in 10 and a +1pp edge about 4 times in 10; a pass does not exclude an edge below about 1.5pp."
+- An H-0001 fail is unlikely to be a false alarm (1–3% when there is no edge), but it is still only a pattern until confirmed (step 9).
+- An H-0002 pass is a false alarm 4–8% of the time when there is no edge, and it also needs confirmation.
+
+**Limits**
+- September tokens at 30-minute cadence; the regime may differ.
+- The scored pile is approximated as rows with a tier, because there was no txns24 field then.
+- A 1% fallback fee on every row.
+- The edge is added as a constant to every row.
+- eff_n is projected linearly (H-0001 about 80 a day).
+- Weekly noise is assumed Normal.
+- Not simulated: the fee-sweep and known-fee-only gates, and the step 5 censoring rule. They can only add inconclusives, so the detection rates above are upper bounds.
+- Subperiods: the simulation always uses exactly 4 subperiods with a 30-row floor on the tested arm. The real read will likely have 5 usable ISO weeks (a short W42 and a near-empty W46, both above the evaluator's all-tier 30-row floor) and needs 3 sharing the pooled sign. Extra short weeks make "sign holds" slightly easier to reach, so real inconclusives would be even rarer than the simulated 1% or less; detection rates barely change because an H-0001 pass needs no stability. Also simplified: an empty arm-week counts as a zero gap rather than being dropped, and BEST rows with no baseline are left out of the simulated BEST median (few rows). Reviewed by Claude Code on 2026-10-21; seeded rerun matched on numpy 2.5.3.
+
 ---
 
 ## Layer 2 — attention, via the xAI API
