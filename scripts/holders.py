@@ -621,15 +621,14 @@ def do_probe(api, n=3):
 # Uniswap v4 liquidity sits in the PoolManager singleton, already excluded by
 # fixed address, so a revert there would be expected and is not a gap.
 #
-# ROUTES ARE UNVERIFIED. Neither has been exercised against the live API; the
-# probe tries the JSON-RPC endpoint first and the Etherscan-style proxy module
-# only if the first is not found, and prints which one answered.
+# The route is the PRO API's ETH JSON-RPC endpoint, from
+# docs.blockscout.com/devs/pro-api-responses-and-routes.md. The 984b6fab run
+# showed the two guessed before it do not exist (/api/eth-rpc 404, and
+# module=proxy 400 "Unknown module None"), so there is no fallback.
 
 RPC_SELECTORS = (("token0", "0x0dfe1681"), ("token1", "0xd21220a7"))
-RPC_ROUTES = (
-    ("json-rpc", "https://api.blockscout.com/" + CHAIN_ID + "/api/eth-rpc"),
-    ("proxy", "https://api.blockscout.com/" + CHAIN_ID + "/api"),
-)
+RPC_URL = "https://api.blockscout.com/" + CHAIN_ID + "/json-rpc"
+RPC_CHAIN_ID = "0x1237"                  # 4663, what eth_chainId must answer
 # (holder, the token whose top-20 it sits in, what it is), all from
 # data/holders/2026-10-20/191022.jsonl. Addresses, not outcomes.
 RPC_PROBE = (
@@ -642,7 +641,7 @@ RPC_PROBE = (
     ("0x4f878921046576fde82516f5a87caabdbc976188",
      "0xcec185eb182c47d1ba1efc84e6959e18cd620be4", "PonsV2BondingCurve"),
 )
-RPC_MAX_CALLS = 2 * len(RPC_PROBE) * len(RPC_ROUTES) + 2   # + credits reads
+RPC_MAX_CALLS = 1 + 2 * len(RPC_PROBE)   # eth_chainId, then token0/token1
 
 _urlopen = urllib.request.urlopen      # replaced in tests
 
@@ -677,25 +676,20 @@ def parse_eth_call(payload):
     return "ok", "0x" + h[-40:].lower()
 
 
-def rpc_request(key, route, to, data):
-    """One eth_call. Returns (http_status, payload, credits_remaining).
+def rpc_request(key, method, params, rid=1):
+    """One JSON-RPC call. Returns (http_status, payload, credits_remaining).
 
-    The key goes in the authorization header only. No URL is ever printed
-    here, and an exception is reported by its type, never its text.
+    The key goes in the authorization header only, as a Bearer token. No URL
+    is ever printed here, and an exception is reported by its type, never
+    its text.
     """
-    name, url = route
-    hdrs = {"Accept": "application/json", "User-Agent": UA,
-            "authorization": key}
-    if name == "json-rpc":
-        body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "eth_call",
-                           "params": [{"to": to, "data": data}, "latest"]})
-        req = urllib.request.Request(
-            url, data=body.encode(), method="POST",
-            headers={**hdrs, "Content-Type": "application/json"})
-    else:
-        q = urllib.parse.urlencode({"module": "proxy", "action": "eth_call",
-                                    "to": to, "data": data, "tag": "latest"})
-        req = urllib.request.Request(url + "?" + q, headers=hdrs)
+    auth = key if key.lower().startswith("bearer ") else "Bearer " + key
+    body = json.dumps({"jsonrpc": "2.0", "id": rid, "method": method,
+                       "params": params})
+    req = urllib.request.Request(
+        RPC_URL, data=body.encode(), method="POST",
+        headers={"Accept": "application/json", "User-Agent": UA,
+                 "Content-Type": "application/json", "authorization": auth})
     try:
         with _urlopen(req, timeout=TIMEOUT) as r:
             return (r.status, json.loads(r.read()),
@@ -711,42 +705,46 @@ def rpc_request(key, route, to, data):
         return type(e).__name__, None, None
 
 
+def _raw(payload):
+    """A response's result or error, short, for the log. Never the request."""
+    if not isinstance(payload, dict):
+        return "-"
+    v = payload.get("error", payload.get("result"))
+    return json.dumps(v)[:120]
+
+
 def do_probe_rpc(key):
-    """token0()/token1() on RPC_PROBE. Prints, writes nothing, never collects."""
-    print("probe-rpc: %d addresses, token0/token1, diagnostic only; nothing is "
-          "written. The key is sent as a header and is never printed."
-          % len(RPC_PROBE))
+    """eth_chainId, then token0()/token1() on RPC_PROBE. Prints, writes
+    nothing, never collects."""
+    print("probe-rpc: eth_chainId, then token0/token1 on %d addresses via "
+          "/%s/json-rpc; diagnostic only, nothing is written. The key is sent "
+          "as a header and is never printed." % (len(RPC_PROBE), CHAIN_ID))
     api = Api(key, cap=2)
     api.get("/stats")
     print("credits remaining before: %s" % api.credits)
-    calls, route = 0, None
+    calls = 1
+    status, payload, cr = rpc_request(key, "eth_chainId", [], rid=calls)
+    got = payload.get("result") if isinstance(payload, dict) else None
+    print("eth_chainId: HTTP %s  %s  (expect %s: %s)  credits %s"
+          % (status, _raw(payload), RPC_CHAIN_ID,
+             "match" if got == RPC_CHAIN_ID else "NO MATCH", cr))
     for addr, ca, what in RPC_PROBE:
         print("\n%s  (%s) in token %s" % (addr, what, ca))
         for fn, sel in RPC_SELECTORS:
-            routes = [route] if route else list(RPC_ROUTES)
-            for i, r in enumerate(routes):
-                if calls >= RPC_MAX_CALLS - 2:
-                    print("  call cap reached")
-                    break
-                time.sleep(MIN_INTERVAL)
-                status, payload, cr = rpc_request(key, r, addr, sel)
-                calls += 1
-                kind, val = parse_eth_call(payload)
-                if status == 404 and route is None and i < len(routes) - 1:
-                    print("  %s via %s: HTTP 404, trying the next route"
-                          % (fn, r[0]))
-                    continue
-                if kind == "error" and status != 200:
-                    val = val or "HTTP %s" % status
-                print("  %s via %s: HTTP %s  %s  %s  credits %s"
-                      % (fn, r[0], status, kind, val, cr))
-                if status == 200 and route is None:
-                    route = r
+            if calls >= RPC_MAX_CALLS:
+                print("  call cap reached")
                 break
+            time.sleep(MIN_INTERVAL)
+            calls += 1
+            status, payload, cr = rpc_request(
+                key, "eth_call", [{"to": addr, "data": sel}, "latest"],
+                rid=calls)
+            kind, val = parse_eth_call(payload)
+            print("  %s: HTTP %s  %s  %s  raw %s  credits %s"
+                  % (fn, status, kind, val, _raw(payload), cr))
     api.get("/stats")
     print("\ncredits remaining after: %s" % api.credits)
-    print("eth_call requests: %d, plus %d credits reads; route used: %s"
-          % (calls, api.calls, route[0] if route else "none answered"))
+    print("json-rpc requests: %d, plus %d credits reads" % (calls, api.calls))
     return 0
 
 

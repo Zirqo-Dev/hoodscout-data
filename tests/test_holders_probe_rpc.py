@@ -64,43 +64,72 @@ def test_http_error_is_reported_not_raised(monkeypatch):
         raise urllib.error.HTTPError(req.full_url, 503, "x", {}, io.BytesIO(b""))
     monkeypatch.setattr(holders, "_urlopen", boom)
     status, payload, _ = holders.rpc_request(
-        "proapi_secret", holders.RPC_ROUTES[0], "0x" + "1" * 40, "0x0dfe1681")
+        "proapi_secret", "eth_call",
+        [{"to": "0x" + "1" * 40, "data": "0x0dfe1681"}, "latest"])
     assert status == 503 and holders.parse_eth_call(payload)[0] == "error"
 
 
-def test_key_in_header_only(monkeypatch):
+def test_one_route_bearer_header_key_never_in_url(monkeypatch):
     seen = []
 
     def fake(req, timeout=None):
         seen.append(req)
         return Resp({"jsonrpc": "2.0", "id": 1, "result": WORD})
     monkeypatch.setattr(holders, "_urlopen", fake)
-    for route in holders.RPC_ROUTES:
-        holders.rpc_request("proapi_secret", route, "0x" + "1" * 40,
-                            "0x0dfe1681")
-    for req in seen:
-        assert "proapi_secret" not in req.full_url
-        assert req.get_header("Authorization") == "proapi_secret"
+    holders.rpc_request("proapi_secret", "eth_call",
+                        [{"to": "0x" + "1" * 40, "data": "0x0dfe1681"},
+                         "latest"], rid=7)
+    req = seen[0]
+    assert req.full_url == "https://api.blockscout.com/4663/json-rpc"
+    assert req.get_method() == "POST"
+    assert "proapi_secret" not in req.full_url
+    assert req.get_header("Authorization") == "Bearer proapi_secret"
+    assert json.loads(req.data) == {
+        "jsonrpc": "2.0", "id": 7, "method": "eth_call",
+        "params": [{"to": "0x" + "1" * 40, "data": "0x0dfe1681"}, "latest"]}
 
 
-def test_probe_mode_writes_nothing_and_never_collects(monkeypatch, tmp_path,
-                                                      capsys):
+def _run_probe(monkeypatch, tmp_path, answers):
     monkeypatch.chdir(tmp_path)
     for name in ("do_collect", "do_probe", "do_dry_run"):
         monkeypatch.setattr(holders, name, lambda *a, **k: pytest.fail(name))
     monkeypatch.setattr(holders.time, "sleep", lambda s: None)
     monkeypatch.setattr(holders.urllib.request, "urlopen",
                         lambda req, timeout=None: Resp({"status": "ok"}))
-    answers = iter([WORD, "0x"] * 8)
-    monkeypatch.setattr(holders, "_urlopen", lambda req, timeout=None: Resp(
-        {"jsonrpc": "2.0", "id": 1, "result": next(answers)}))
+    sent, it = [], iter(answers)
+
+    def fake(req, timeout=None):
+        sent.append(json.loads(req.data)["method"])
+        return Resp(next(it))
+    monkeypatch.setattr(holders, "_urlopen", fake)
     monkeypatch.setenv("BLOCKSCOUT_API_KEY", "proapi_secret")
     monkeypatch.setattr(sys, "argv", ["holders.py", "--probe-rpc"])
     assert holders.main() == 0
     assert list(tmp_path.iterdir()) == []
+    return sent
+
+
+def test_probe_mode_writes_nothing_and_never_collects(monkeypatch, tmp_path,
+                                                      capsys):
+    ok = {"jsonrpc": "2.0", "id": 1, "result": WORD}
+    rev = {"jsonrpc": "2.0", "id": 1,
+           "error": {"code": 3, "message": "execution reverted"}}
+    sent = _run_probe(monkeypatch, tmp_path,
+                      [{"jsonrpc": "2.0", "id": 1, "result": "0x1237"}]
+                      + [ok, rev] * 4)
+    assert sent == ["eth_chainId"] + ["eth_call"] * 8   # chain id first
     out = capsys.readouterr().out
     assert "proapi_secret" not in out and "https://" not in out
+    assert "eth_chainId: HTTP 200" in out and "match" in out
+    assert "NO MATCH" not in out
     for addr, ca, _ in holders.RPC_PROBE:
         assert addr in out and ca in out
     assert out.count(" ok ") == 4 and out.count(" revert ") == 4
     assert "credits remaining before" in out and "after" in out
+
+
+def test_probe_flags_a_wrong_chain(monkeypatch, tmp_path, capsys):
+    _run_probe(monkeypatch, tmp_path,
+               [{"jsonrpc": "2.0", "id": 1, "result": "0x1"}]
+               + [{"jsonrpc": "2.0", "id": 1, "result": "0x"}] * 8)
+    assert "NO MATCH" in capsys.readouterr().out
