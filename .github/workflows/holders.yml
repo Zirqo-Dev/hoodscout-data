@@ -11,6 +11,10 @@ on:
         description: "Diagnostic only: eth_call token0/token1 on 4 fixed addresses, collect and commit nothing"
         type: boolean
         default: false
+      probe_backfill:
+        description: "Probe up to N uncached contract holders from existing snapshots; no collection, commits only contract_probe.json (0 = normal run)"
+        type: number
+        default: 0
 
 permissions:
   contents: write
@@ -46,23 +50,37 @@ jobs:
           BLOCKSCOUT_API_KEY: ${{ secrets.BLOCKSCOUT_API_KEY }}
           # empty on the cron-job.org dispatch, which sends no inputs
           PROBE_RPC: ${{ inputs.probe_rpc }}
+          PROBE_BACKFILL: ${{ inputs.probe_backfill }}
         run: |
           if [ "$PROBE_RPC" = "true" ]; then
             python scripts/holders.py --probe-rpc
             exit 0
           fi
+          case "${PROBE_BACKFILL:-0}" in
+            ''|0) ;;
+            *[!0-9]*) echo "probe_backfill must be a whole number"; exit 1 ;;
+            *) python scripts/holders.py --probe-backfill "$PROBE_BACKFILL"
+               exit 0 ;;
+          esac
           python scripts/holders.py
       - name: Commit
         env:
           PROBE_RPC: ${{ inputs.probe_rpc }}
+          PROBE_BACKFILL: ${{ inputs.probe_backfill }}
         run: |
           # a probe run collected nothing and must commit nothing
           if [ "$PROBE_RPC" = "true" ]; then exit 0; fi
           git config user.name "hoodscout-bot"
           git config user.email "actions@github.com"
-          git add data/holders
+          case "${PROBE_BACKFILL:-0}" in
+            ''|0) git add data/holders
+                  msg="holders: $(date -u +%Y-%m-%dT%H:%MZ)" ;;
+            # a backfill collected nothing: the probe cache is all it may commit
+            *) git add data/holders/contract_probe.json
+               msg="holders: probe backfill $(date -u +%Y-%m-%dT%H:%MZ)" ;;
+          esac
           git diff --staged --quiet && exit 0
-          git commit -m "holders: $(date -u +%Y-%m-%dT%H:%MZ)"
+          git commit -m "$msg"
           for i in 1 2 3 4 5; do
             git push && exit 0
             echo "push rejected, rebasing (attempt $i)"

@@ -748,7 +748,245 @@ def do_probe_rpc(key):
     return 0
 
 
-def do_collect(api):
+# ------------------------------------------------ contract probe (HS-73)
+# A contract that answers token0()/token1() is a pool, whatever Blockscout
+# calls it -- and most main pools carry no label at all. This records the raw
+# answers, once per address, and makes no judgement: data/holders/
+# contract_probe.json holds token0, token1 and whether the call answered, and
+# deciding what counts as a pool is left to a registered hypothesis.
+#
+# Holders first, always. Probing runs only after the collection loop is
+# done, under its own call cap, and stops while there are still credits
+# for the rest of the day's holders runs.
+#
+#   cost: 20 credits per answered call; 5xx failures are not charged. The
+#     eleven holders sidecars fit (calls - 5xx) * 20 to within 100 credits
+#     each, and the 984b6fab+json-rpc probe run spent ~20 per eth_call.
+#   refill: the allowance is back at 100,000 after 00:00 UTC. Every sidecar
+#     on a new day fits 100,000 minus that day's calls. ASSERTED from two
+#     day boundaries, not from documentation.
+#   a holders run: 142-289 calls in the eleven sidecars (mean 217, so about
+#     4,300 credits), and never more than MAX_CALLS_PER_RUN = 6,000 credits.
+#     Eight runs a day (cron-job.org, every three hours from 01:10): about
+#     35,000 credits typical and 48,000 at worst.
+#
+# PROBE_FLOOR: after the 01:10 run, seven more holders runs remain in the
+# day; 7 * 6,000 = 42,000 at worst, plus 3,000 margin. Probing below 45,000
+# could be the reason a later run that day hits zero, so it stops there.
+# PROBE_CAP: 100 calls = 2,000 credits a run, 16,000 a day at most. Holders
+# worst case plus probing worst case is 64,000 of 100,000. Steady state is
+# 25-110 new contract addresses a run (the last ten snapshots), and a token0
+# revert costs one call, so 100 keeps up with most runs and the rest carry
+# over: an address that is not probed this run is probed in the next one.
+
+POOL_MANAGER = "0x8366a39cc670b4001a1121b8f6a443a643e40951"
+LAUNCH_LOCKER = "0x267444d099b10fb5ed7c3cc7b7c767adca574952"
+PROBE_CAP = 100             # eth_calls per run, after collection
+PROBE_FLOOR = 45000         # credits; probing stops below this
+PROBE_SETTLED = ("ok", "revert")      # final; "error" is retried
+
+
+def probe_cache_path():
+    return os.path.join(OUT_DIR, "contract_probe.json")
+
+
+def fixed_excluded(addr, ca):
+    """Addresses a fixed rule already handles, so there is nothing to ask:
+    the token contract itself, a burn address, the v4 PoolManager and the
+    PonsV2LaunchLocker. The same fixed list H-0006 registered."""
+    a = (addr or "").lower()
+    return (a == (ca or "").lower() or a == "0x" + "0" * 40
+            or a.endswith("dead") or a in (POOL_MANAGER, LAUNCH_LOCKER))
+
+
+def load_probe_cache(path=None):
+    try:
+        c = json.load(open(path or probe_cache_path()))
+        return c if isinstance(c, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def settled(cache, addr):
+    e = cache.get(addr.lower())
+    return isinstance(e, dict) and e.get("result") in PROBE_SETTLED
+
+
+def probe_candidates(row):
+    """A row's is_contract holders that no fixed rule handles, in holder
+    order (largest first), lower-cased."""
+    out = []
+    for h in row.get("holders") or []:
+        a = (h.get("address") or "").lower()
+        if (a and h.get("is_contract") and not fixed_excluded(a, row.get("ca"))
+                and a not in out):
+            out.append(a)
+    return out
+
+
+def probe_targets(rows, cache):
+    """Unsettled candidates across rows, first seen first."""
+    out, seen = [], set()
+    for r in rows:
+        for a in probe_candidates(r):
+            if a not in seen and not settled(cache, a):
+                seen.add(a)
+                out.append(a)
+    return out
+
+
+def contracts_unprobed(row, cache):
+    """How many of the row's probe candidates have no ok/revert result."""
+    return sum(1 for a in probe_candidates(row) if not settled(cache, a))
+
+
+def _ask(key, addr, selector, rid):
+    """("ok"|"revert"|"error", value, http_status, credits). A revert only
+    counts as one on an HTTP 200; anything else is retried later."""
+    status, payload, cr = rpc_request(
+        key, "eth_call", [{"to": addr, "data": selector}, "latest"], rid=rid)
+    kind, val = parse_eth_call(payload)
+    if status != 200:
+        kind = "error"
+    return kind, (val if kind == "ok" else None), status, cr
+
+
+def probe_addresses(key, targets, cache, cap, floor=PROBE_FLOOR,
+                    credits=None, now=None):
+    """Probe targets in order until done, the call cap, or the credit floor.
+
+    token0 first; token1 only if token0 answered. A token0 revert is final
+    and token1 is never asked. An address is only started with two calls of
+    budget left, so the cap is never overrun mid-address. Mutates `cache`;
+    returns the run summary.
+    """
+    ts = iso(now)
+    calls, probed, stopped = 0, 0, "done"
+    results = {"ok": 0, "revert": 0, "error": 0}
+
+    def low(cr):
+        try:
+            return cr is not None and int(cr) < floor
+        except (TypeError, ValueError):
+            return False
+
+    for addr in targets:
+        if cap - calls < 2:
+            stopped = "cap"
+            break
+        if low(credits):
+            stopped = "floor"
+            break
+        time.sleep(MIN_INTERVAL)
+        calls += 1
+        k0, t0, st, cr = _ask(key, addr, RPC_SELECTORS[0][1], calls)
+        credits = cr if cr is not None else credits
+        t1, k1 = None, None
+        if k0 == "ok":
+            time.sleep(MIN_INTERVAL)
+            calls += 1
+            k1, t1, st, cr = _ask(key, addr, RPC_SELECTORS[1][1], calls)
+            credits = cr if cr is not None else credits
+        # token0 answered and token1 reverted is still an answer: kept as ok
+        # with token1 null. An error on either call is retried in full.
+        result = k0 if k0 != "ok" else ("error" if k1 == "error" else "ok")
+        cache[addr] = {"token0": t0, "token1": t1 if result == "ok" else None,
+                       "probed_at": ts, "result": result}
+        results[result] += 1
+        probed += 1
+        if st == 429 or st in (401, 403):
+            stopped = "rate_limited" if st == 429 else "auth_%d" % st
+            break
+        if credits is None:
+            # without a credits header the floor cannot be enforced, so this
+            # run stops after one address rather than probe blind
+            stopped = "credits_unknown"
+            break
+    return {"cap": cap, "floor": floor, "calls": calls, "probed": probed,
+            "results": results, "stopped": stopped,
+            "credits_remaining": credits}
+
+
+def save_probe_cache(cache, path=None):
+    json.dump(cache, open(path or probe_cache_path(), "w"), indent=1,
+              sort_keys=True)
+
+
+def probe_after_collect(api, rows, cap):
+    """The probe pass of a holders run. Never raises: a probe failure must not
+    cost the snapshot. Returns (summary, cache)."""
+    cache = load_probe_cache()
+    targets = probe_targets(rows, cache)
+    key = getattr(api, "key", None)
+    if cap <= 0 or not key or not targets or api.gave_up:
+        why = ("disabled" if cap <= 0 else "no key" if not key else
+               "nothing to probe" if not targets else "holders gave up")
+        s = {"cap": cap, "floor": PROBE_FLOOR, "calls": 0, "probed": 0,
+             "results": {"ok": 0, "revert": 0, "error": 0}, "stopped": why,
+             "credits_remaining": api.credits}
+        return s, cache
+    try:
+        s = probe_addresses(key, targets, cache, cap, credits=api.credits)
+        save_probe_cache(cache)
+    except Exception as e:                              # noqa: BLE001
+        print("WARN contract probe failed: %s" % type(e).__name__)
+        s = {"cap": cap, "floor": PROBE_FLOOR, "calls": None, "probed": None,
+             "results": None, "stopped": "failed: %s" % type(e).__name__,
+             "error": type(e).__name__, "credits_remaining": api.credits}
+    return s, cache
+
+
+def probe_step(api, rows, cap):
+    """The whole probe step of a holders run: probe, then count. Returns
+    (summary, {ca: unprobed contract holders}) and never raises. Any failure
+    -- an exception, bad JSON, a timeout, a bug here -- is logged by type,
+    recorded in the summary, and the snapshot is written and committed as
+    if the probe had not run."""
+    try:
+        s, cache = probe_after_collect(api, rows, cap)
+        s["cache_size"] = len(cache)
+        s["unprobed_total"] = len(probe_targets(rows, cache))
+        return s, {r["ca"]: contracts_unprobed(r, cache) for r in rows}
+    except Exception as e:                              # noqa: BLE001
+        print("WARN contract probe step failed: %s" % type(e).__name__)
+        return {"cap": cap, "floor": PROBE_FLOOR, "calls": None,
+                "probed": None, "results": None,
+                "stopped": "failed: %s" % type(e).__name__,
+                "error": type(e).__name__,
+                "credits_remaining": getattr(api, "credits", None),
+                "cache_size": None, "unprobed_total": None}, None
+
+
+def do_probe_backfill(key, n, cap=None):
+    """Probe up to n uncached addresses from every snapshot already written.
+    No collection; writes contract_probe.json and nothing else."""
+    import glob
+    rows = []
+    for p in sorted(glob.glob(os.path.join(OUT_DIR, "*", "*.jsonl"))):
+        for line in open(p):
+            if line.strip():
+                rows.append(json.loads(line))
+    cache = load_probe_cache()
+    targets = probe_targets(rows, cache)
+    print("probe backfill: %d uncached addresses in %d rows; asking up to %d"
+          % (len(targets), len(rows), n))
+    api = Api(key, cap=1)
+    api.get("/stats")
+    print("credits remaining before: %s (floor %d)" % (api.credits, PROBE_FLOOR))
+    s = probe_addresses(key, targets[:n], cache,
+                        cap if cap is not None else 2 * n,
+                        credits=api.credits)
+    if s["probed"]:
+        save_probe_cache(cache)
+    print("probed %d (%s), calls %d, stopped: %s, credits remaining %s"
+          % (s["probed"], ", ".join("%s %d" % kv for kv in s["results"].items()),
+             s["calls"], s["stopped"], s["credits_remaining"]))
+    print("cache %d addresses; %d still unprobed"
+          % (len(cache), len(probe_targets(rows, cache))))
+    return 0
+
+
+def do_collect(api, probe_cap=PROBE_CAP):
     now = datetime.now(timezone.utc)
     toks = load_tokens()
     if not toks:
@@ -846,6 +1084,10 @@ def do_collect(api):
         print("calls %d, errors %s" % (api.calls, api.errors or "none"))
         return 0
 
+    # Holders are done; only now may the probe spend anything. Its per-row
+    # counts go in the sidecar, so the snapshot rows keep their fixed keys.
+    probe, unprobed = probe_step(api, rows, probe_cap)
+
     day = now.strftime("%Y-%m-%d")
     os.makedirs(os.path.join(OUT_DIR, day), exist_ok=True)
     path = os.path.join(OUT_DIR, day, now.strftime("%H%M%S") + ".jsonl")
@@ -864,6 +1106,8 @@ def do_collect(api):
         skipped=skipped, errors=api.errors, calls=api.calls, cap=api.cap,
         duration_s=round(time.monotonic() - started, 1),
         gave_up=api.gave_up, credits=api.credits)
+    cover["probe"] = probe
+    cover["contracts_unprobed"] = unprobed
     json.dump(cover, open(meta_path_for(path), "w"), indent=1)
 
     hint = build_hint(rows)
@@ -888,6 +1132,11 @@ def do_collect(api):
     print("token meta: %d cached (+%d this run); %d/%d rows carry a supply"
           % (len(meta), len(meta) - meta_before, sup, len(rows)))
     print("backfill calls this run: %d/%d allowed" % (backfill, allow))
+    print("contract probe: %s probed (%s), %s calls of %s, stopped: %s; "
+          "cache %s, %s unprobed in this snapshot"
+          % (probe.get("probed"), probe.get("results"), probe.get("calls"),
+             probe.get("cap"), probe.get("stopped"), probe.get("cache_size"),
+             probe.get("unprobed_total")))
     print("exclusion hints: %d address(es)" % len(hint))
     for h in hint[:8]:
         print("  %s  in %d tokens  %s" % (h["address"], h["tokens"],
@@ -907,6 +1156,10 @@ def main():
     ap.add_argument("--probe-rpc", action="store_true",
                     help="eth_call token0()/token1() on four fixed holder "
                          "addresses and print the raw results; writes nothing")
+    ap.add_argument("--probe-backfill", type=int, default=0, metavar="N",
+                    help="probe up to N uncached contract holders from the "
+                         "snapshots already written; no collection, writes "
+                         "only contract_probe.json")
     a = ap.parse_args()
 
     if a.dry_run:
@@ -923,6 +1176,13 @@ def main():
             return do_probe_rpc(key)
         except Exception as e:                          # noqa: BLE001
             print("WARN probe-rpc failed: %s" % type(e).__name__)
+            return 0
+
+    if a.probe_backfill > 0:
+        try:
+            return do_probe_backfill(key, a.probe_backfill)
+        except Exception as e:                          # noqa: BLE001
+            print("WARN probe backfill failed: %s" % type(e).__name__)
             return 0
 
     api = Api(key)
