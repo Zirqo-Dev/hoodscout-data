@@ -64,7 +64,7 @@ a{color:var(--accent)}
 
 /* ---- header ---- */
 header{position:sticky;top:0;z-index:30;background:var(--bg);
-  border-bottom:1px solid var(--line);padding:6px 0 0;margin-bottom:10px}
+  border-bottom:1px solid var(--line);padding:8px 0 6px;margin-bottom:10px}
 .hrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .brand{font:600 15px/1 var(--mono);letter-spacing:.02em;white-space:nowrap}
 .brand span{color:var(--accent)}
@@ -83,20 +83,16 @@ header{position:sticky;top:0;z-index:30;background:var(--bg);
 .s-warn .pdot,.s-warn.pdot{background:var(--warn)}
 .s-bad .pdot,.s-bad.pdot{background:var(--bad)}
 .spacer{flex:1 1 auto}
+.k{display:inline-flex;align-items:baseline;gap:4px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r);padding:2px 7px;
+  font-size:10.5px;color:var(--muted);white-space:nowrap}
+.k b{font:600 12px var(--mono);font-variant-numeric:tabular-nums;color:var(--text)}
+.k i{width:7px;height:7px;border-radius:2px;display:inline-block;flex:0 0 auto}
+.k.on{border-color:var(--accent);background:var(--surface2)}
 /* 40px is the touch floor; a mouse does not need it, so desktop goes dense */
+button.k{cursor:pointer;min-height:40px}
 .tgl{cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:5px}
-@media (min-width:1000px){.tgl{min-height:26px}}
-
-/* ---- jump bar ----
-   Lives inside the sticky header, so it is always one tap from any section.
-   A link opens its section if it is closed, then scrolls to it. */
-.jump{display:flex;gap:0 2px;margin:2px -8px 0}
-.jump a{display:inline-flex;align-items:center;min-height:36px;padding:0 8px;
-  color:var(--muted);text-decoration:none;font:600 10.5px/1 var(--mono);
-  letter-spacing:.06em;text-transform:uppercase}
-.jump a:hover{color:var(--text)}
-@media (min-width:1000px){.jump a{min-height:26px}}
-details.sec{scroll-margin-top:calc(var(--hh,46px) + 6px)}
+@media (min-width:1000px){button.k,.tgl{min-height:26px}}
 
 /* ---- status line ----
    Four freshness cards became one line. A healthy feed is a dot and a word;
@@ -171,25 +167,6 @@ details[open]>summary::after{content:"\2212"}
   background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
 .fchip i{width:7px;height:7px;border-radius:2px;display:inline-block}
 .fchip b{font:600 11px var(--mono);font-variant-numeric:tabular-nums}
-/* One row of toggles above the list. Everything that used to stand between
-   the section header and the first token -- shortlists, search, tier chips,
-   the heat grid -- now sits behind one of these, closed by default. The run
-   totals are plain text: they are facts, not controls. */
-.tbar{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin:0 0 8px}
-.tbtn{cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:6px;
-  background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
-  color:var(--muted);font:600 11px var(--sans);padding:0 10px}
-.tbtn::after{content:"+";color:var(--faint);font-weight:400}
-.tbtn[aria-expanded="true"]{border-color:var(--accent);color:var(--text)}
-.tbtn[aria-expanded="true"]::after{content:"\2212"}
-.tbtn b{font:600 10.5px var(--mono);color:var(--accent)}
-.tbtn b:empty{display:none}
-@media (min-width:1000px){.tbtn{min-height:28px}}
-.runk{flex:1 1 100%;font:10.5px var(--mono);color:var(--faint)}
-.tpanel{margin:0 0 8px}
-.more{display:block;width:100%;margin-top:8px;cursor:pointer;min-height:40px;
-  background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
-  color:var(--accent);font:600 11.5px var(--sans)}
 
 /* ---- token table ---- */
 /* Below the table breakpoint the wrapper scrolls sideways. Above it the table
@@ -430,19 +407,6 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
 .big{font:700 22px var(--mono);font-variant-numeric:tabular-nums;margin:2px 0 0}
 .meter{height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin:5px 0 7px}
 .meter i{display:block;height:100%}
-/* One quiet link row per card instead of four 40px buttons. The full
-   address stays visible -- it is the identity -- just smaller. Each text
-   link keeps a 40px finger target from a transparent ::after that costs no
-   layout, the same trick the notable chips use. */
-.lrow{margin-top:8px}
-.lrow code{display:block;font-size:9.5px;padding:3px 5px;color:var(--muted)}
-.lrow .lk{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:6px}
-.tl{position:relative;background:none;border:0;padding:0;cursor:pointer;
-  font:600 11px/1 var(--sans);color:var(--accent);text-decoration:none}
-.tl::after{content:"";position:absolute;left:-6px;right:-6px;top:50%;
-  transform:translateY(-50%);height:40px}
-.tl:hover{color:var(--text)}
-.tl.done{color:var(--ok)}
 
 /* ---- generic tables (NFT) ---- */
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;
@@ -489,9 +453,6 @@ footer{color:var(--faint);font-size:10.5px;border-top:1px solid var(--line);
     <button class="ibtn" id="info" type="button" aria-expanded="false"
             aria-controls="intro" aria-label="About this page">i</button>
   </div>
-  <nav class="jump" aria-label="Jump to section">
-    <a href="#sec-tok">Tokens</a><a href="#sec-stk">Stocks</a><a href="#sec-nft">NFT</a><a href="#sec-avoid">Avoid</a>
-  </nav>
 </header>
 <div class="statline" id="health"></div>
 <div class="intro" id="intro" hidden>
@@ -501,22 +462,13 @@ footer{color:var(--faint);font-size:10.5px;border-top:1px solid var(--line);
 </div>
 <div id="changed"></div>
 
-  <details class="sec" id="sec-tok" open><summary>Tokens <span class="cnt" id="tok-count"></span></summary>
+  <div id="heat"></div>
+
+  <details class="sec" open><summary>Tokens <span class="cnt" id="tok-count"></span></summary>
     <div class="body">
-      <div class="tbar">
-        <button class="tbtn" id="flt-btn" type="button" aria-expanded="false"
-                aria-controls="flt">Filters <b id="flt-n"></b></button>
-        <button class="tbtn" id="heat-btn" type="button" aria-expanded="false"
-                aria-controls="heat" hidden></button>
-        <span class="runk" id="runk"></span>
-      </div>
-      <div class="tpanel" id="flt" hidden>
-        <div class="shorts" id="shorts"></div>
-        <div class="ctl" id="ctl"></div>
-      </div>
-      <div class="tpanel" id="heat" hidden></div>
+      <div class="shorts" id="shorts"></div>
+      <div class="ctl" id="ctl"></div>
       <div class="tw" id="tok"></div>
-      <div id="tok-more"></div>
     </div></details>
 
   <details class="sec"><summary>How to read this <span class="cnt">what each tier means</span></summary>
@@ -598,13 +550,13 @@ footer{color:var(--faint);font-size:10.5px;border-top:1px solid var(--line);
   <details class="sec"><summary>Discover <span class="cnt" id="disc-count"></span></summary>
     <div class="body" id="disc"></div></details>
 
-  <details class="sec" id="sec-stk"><summary>Stock squeeze board <span class="cnt" id="stk-count"></span></summary>
+  <details class="sec"><summary>Stock squeeze board <span class="cnt" id="stk-count"></span></summary>
     <div class="body" id="stk"></div></details>
 
-  <details class="sec" id="sec-nft"><summary>NFT <span class="cnt" id="nft-count"></span></summary>
+  <details class="sec"><summary>NFT <span class="cnt" id="nft-count"></span></summary>
     <div class="body" id="nft"></div></details>
 
-  <details class="sec" id="sec-avoid"><summary>Avoid list <span class="cnt" id="avoid-count"></span></summary>
+  <details class="sec"><summary>Avoid list <span class="cnt" id="avoid-count"></span></summary>
     <div class="body" id="avoid"></div></details>
 
   <footer id="footer"></footer>
@@ -926,8 +878,8 @@ function fail(mount, label, msg){
   box.textContent = "";
   box.appendChild(el("div", "err", "Could not load " + label + " — " + msg));
 }
-function copyBtn(text, cls){
-  var b = el("button", cls || "copy", "Copy");
+function copyBtn(text){
+  var b = el("button", "copy", "Copy");
   b.type = "button";
   b.setAttribute("aria-label", "Copy contract address " + text);
   b.addEventListener("click", function(ev){
@@ -1007,27 +959,6 @@ function addrRow(ca, tok){
   /* searched by address, not ticker: the address is what is unique */
   d.appendChild(linkBtn("X search", xUrl(ca),
     "Search X for posts mentioning " + ca));
-  return d;
-}
-/* The stock cards' version of addrRow: same address, same link targets,
-   one row of text links instead of four buttons. */
-function linkRow(ca, tok){
-  var d = el("div", "lrow");
-  d.appendChild(el("code", null, ca));
-  var lk = el("div", "lk");
-  lk.appendChild(copyBtn(ca, "tl"));
-  var pool = poolOf(tok);
-  [["Dex", dexUrl(ca, tok),
-    pool ? "DexScreener pool " + pool : "Search DexScreener for " + ca],
-   ["Gecko", geckoUrl(ca, tok),
-    pool ? "GeckoTerminal pool " + pool : "GeckoTerminal token " + ca],
-   ["X", xUrl(ca), "Search X for posts mentioning " + ca]].forEach(function(l){
-    var a = linkBtn(l[0], l[1], l[2]);
-    a.className = "tl";
-    a.setAttribute("aria-label", l[2]);
-    lk.appendChild(a);
-  });
-  d.appendChild(lk);
   return d;
 }
 function kv(pairs){
@@ -1206,28 +1137,6 @@ var TOKENS = [], PMAX = 1;
 var FILTER = {}, QUERY = "", SORT = {key: "liq_usd", dir: -1};
 var SHORTLIST = null;
 var CHANGES_RES = null;
-/* The unfiltered list opens short: pinned rows, PERSISTENT, and anything
-   whose tier moved in the last RECENT_H hours of data (measured back from
-   latest.json's generated_at, so a stalled collector does not silently empty
-   it). New listings are not counted -- one run can add a dozen. Any search,
-   tier filter or shortlist shows every match. Display only: nothing here
-   reads or changes a tier. */
-var RECENT_H = 2;
-var RECENT = {};
-var SHOW_ALL = false;
-function inDefault(t){
-  return pinned(t.ca) || t.tier === "BEST" || !!RECENT[t.ca];
-}
-function buildRecent(genAt){
-  RECENT = {};
-  var ref = Date.parse(genAt);
-  if (isNaN(ref)) return;
-  Object.keys(NOTE_EVENTS).forEach(function(ca){
-    var e = NOTE_EVENTS[ca], at = Date.parse(e.ts);
-    if (e.kind !== "tier" || e.from === e.to || isNaN(at)) return;
-    if (ref - at <= RECENT_H * 3600000) RECENT[ca] = 1;
-  });
-}
 /* Pins are a per-viewer convenience, so localStorage is the right home and
    every access is guarded: it throws in a private window and comes back empty
    with site data cleared. A pin is a contract address, which is the identity
@@ -1786,12 +1695,6 @@ function renderTokens(){
     return (t.symbol || "").toLowerCase().indexOf(q) >= 0
         || (t.ca || "").toLowerCase().indexOf(q) >= 0;
   });
-  var filtered = !!(sl || act.length || q);
-  document.getElementById("flt-n").textContent =
-    (act.length + (sl ? 1 : 0) + (q ? 1 : 0)) || "";
-  var matched = rows.length;
-  var collapsed = !filtered && !SHOW_ALL && rows.some(inDefault);
-  if (collapsed) rows = rows.filter(inDefault);
   var col = COLS.filter(function(c){ return c.k === SORT.key; })[0] || COLS[6];
   /* pinned first, then whatever column the reader chose: a pin is a reading
      aid, so it outranks the sort rather than replacing it */
@@ -1803,7 +1706,6 @@ function renderTokens(){
 
   document.getElementById("tok-count").textContent =
     rows.length + " of " + TOKENS.length + " shown";
-  renderMore(collapsed, filtered, matched, rows.length);
 
   if (!rows.length){
     mount.appendChild(el("div", "empty", "No token matches that filter."));
@@ -1935,23 +1837,6 @@ function renderTokens(){
   });
   tb.appendChild(body);
   mount.appendChild(tb);
-}
-
-/* "Show all (N)" under a collapsed list, "Show fewer" under an expanded
-   one. Neither appears while a filter is narrowing the list. */
-function renderMore(collapsed, filtered, matched, shown){
-  var mount = document.getElementById("tok-more");
-  mount.textContent = "";
-  if (filtered || (!collapsed && !SHOW_ALL)) return;
-  if (collapsed && matched <= shown) return;
-  var b = el("button", "more", collapsed ? "Show all (" + matched + ")" : "Show fewer");
-  b.type = "button";
-  b.addEventListener("click", function(){
-    SHOW_ALL = collapsed;
-    renderTokens();
-    if (!SHOW_ALL) document.getElementById("sec-tok").scrollIntoView({block: "start"});
-  });
-  mount.appendChild(b);
 }
 
 /* Generated from BANDS, SHORTLISTS and GLOSSARY, so the card and the chips
@@ -2106,12 +1991,9 @@ function divergingColor(v){
 }
 function renderHeatGrid(){
   var mount = document.getElementById("heat");
-  var btn = document.getElementById("heat-btn");
   mount.textContent = "";
   var best = TOKENS.filter(function(t){ return t.tier === "BEST"; });
-  btn.hidden = !best.length;
-  btn.textContent = tierLabel("BEST") + " 6h grid";
-  if (!best.length){ mount.hidden = true; return; }
+  if (!best.length) return;
   var head = el("div", "hg-h");
   head.appendChild(el("span", "lab", tierLabel("BEST") + " · 6h change"));
   var leg = el("span", "hg-leg");
@@ -2158,11 +2040,6 @@ function revealRow(ca){
     renderTokens();
   }
   var tr = document.getElementById("row-" + ca);
-  if (!tr && !SHOW_ALL){
-    SHOW_ALL = true;
-    renderTokens();
-    tr = document.getElementById("row-" + ca);
-  }
   if (!tr) return;
   var xr = tr.nextElementSibling;
   if (xr && xr.classList.contains("x") && !xr.classList.contains("on")) tr.click();
@@ -2170,9 +2047,10 @@ function revealRow(ca){
   tr.focus();
 }
 
-/* The search box and the tier chips (with their counts) live in the Filters
-   panel, closed by default. The run totals are plain text in the bar above
-   it, not chips: they are facts, and a chip looked like a button. */
+/* One row, not two. The KPI strip and the filter chips were printing the same
+   six tier counts twice; the chips keep the counts and the run totals join
+   them as plain chips, which also buys back the vertical space the token
+   table needs to start inside the first phone screen. */
 function renderControls(d){
   var counts = (d && d.tier_counts) || {};
   var c = document.getElementById("ctl");
@@ -2198,12 +2076,14 @@ function renderControls(d){
     });
     c.appendChild(b);
   });
-  document.getElementById("runk").textContent =
-    [["tokens", d ? d.tokens_seen : null],
-     ["pools", d ? d.pools_seen : null],
-     ["lookups failed", d ? d.pool_lookups_failed : null]].map(function(kv){
-      return (kv[1] === null || kv[1] === undefined ? "n/a" : kv[1]) + " " + kv[0];
-    }).join(" \u00b7 ");
+  [["tokens", d ? d.tokens_seen : null],
+   ["pools", d ? d.pools_seen : null],
+   ["lookups failed", d ? d.pool_lookups_failed : null]].forEach(function(kv){
+    var k = el("span", "k");
+    k.appendChild(el("span", null, kv[0]));
+    k.appendChild(el("b", null, kv[1] === null || kv[1] === undefined ? "n/a" : kv[1]));
+    c.appendChild(k);
+  });
 }
 
 /* ---------- render ---------- */
@@ -2303,7 +2183,6 @@ function renderPools(res){
   renderHeader(d, true, ageMin(d.generated_at));
 
   buildNoteEvents(CHANGES_RES);
-  buildRecent(d.generated_at);
   AVOID_REASON = {};
   (d.avoided || []).forEach(function(a){
     if (a && a.ca) AVOID_REASON[a.ca] = a.reason || "";
@@ -2402,8 +2281,7 @@ function renderStocks(res){
   mount.appendChild(el("p", "note",
     "Premium is measured against a fixed pre-blackout anchor"
     + (anchor ? " of " + anchor : "") + " and does not move, so it reads as stale. "
-    + "Symbols first tracked after that date have no anchor, so their card has "
-    + "no premium line."));
+    + "Symbols first tracked after that date have no anchor and show —."));
 
   var cards = el("div", "cards");
   (d.tokens || []).forEach(function(t){
@@ -2430,20 +2308,19 @@ function renderStocks(res){
     }
     /* premium only means anything where an anchor row actually exists: NVDA,
        MSTR and GME were first tracked after the anchor date and carry no
-       anchor_price at all, so the line is left out rather than showing a
-       fabricated 0% or an empty dash (kv skips an undefined value). */
+       anchor_price at all, so they get a dash rather than a fabricated 0%. */
     var hasAnchor = t.anchor_price !== null && t.anchor_price !== undefined
                     && !isNaN(t.anchor_price);
     c.appendChild(kv([
       ["free float", num(t.free_float_units) + " u"],
       [(anchor ? "premium vs " + anchor + " anchor (stale)" : "premium (stale)"),
-        hasAnchor ? pct(t.premium_pct, 2) : undefined,
+        hasAnchor ? pct(t.premium_pct, 2) : "—",
         hasAnchor && Number(t.premium_pct) < 0 ? "neg" : null, "dim"],
       ["supply 6h", t.supply_chg_6h_pct === null || t.supply_chg_6h_pct === undefined
         ? "—" : pct(t.supply_chg_6h_pct,2)],
       ["pools", num(t.pool_count) + (t.pools_capped ? "+" : "")]
     ]));
-    c.appendChild(linkRow(t.ca, t));
+    c.appendChild(addrRow(t.ca, t));
     cards.appendChild(c);
   });
   mount.appendChild(cards);
@@ -2589,25 +2466,6 @@ function renderFooter(){
   f.appendChild(d);
 }
 
-/* Filters and the heat grid share one toggle pattern: a button that shows
-   or hides its panel and says which state it is in. */
-["flt-btn", "heat-btn"].forEach(function(id){
-  var b = document.getElementById(id);
-  b.addEventListener("click", function(){
-    var panel = document.getElementById(b.getAttribute("aria-controls"));
-    panel.hidden = !panel.hidden;
-    b.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
-  });
-});
-document.querySelectorAll(".jump a").forEach(function(a){
-  a.addEventListener("click", function(ev){
-    var sec = document.getElementById(a.getAttribute("href").slice(1));
-    if (!sec) return;
-    ev.preventDefault();
-    sec.open = true;
-    sec.scrollIntoView({block: "start"});
-  });
-});
 (function(){
   var b = document.getElementById("info"), panel = document.getElementById("intro");
   b.addEventListener("click", function(){
