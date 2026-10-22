@@ -105,10 +105,10 @@ button.k{cursor:pointer;min-height:40px}
    Four freshness cards became one line. A healthy feed is a dot and a word;
    only a stale one earns a chip with its age, and only a stale one can be
    opened for the detail the cards used to show all the time. */
-.statline{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;
-  margin:0 0 8px;font-size:10.5px;color:var(--muted)}
+.statline{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;
+  margin:0 0 8px;font-size:12px;color:var(--muted)}
 .sd{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
-.sd i{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+.sd i{width:6px;height:6px;border-radius:50%;flex:0 0 auto}
 .sd i.s-ok{background:var(--ok)} .sd i.s-warn{background:var(--warn)}
 .sd i.s-bad{background:var(--bad)}
 button.sd{min-height:40px;cursor:pointer;background:var(--surface2);
@@ -128,11 +128,11 @@ button.sd[aria-expanded="true"]{background:var(--surface)}
 .intro .sub + .sub{margin-top:6px}
 
 /* ---- scope switch ---- */
-.scope{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:0 0 9px}
+.scope{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0}
 .scope:empty{display:none}
-.scope .sc{cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:5px;
-  background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
-  color:var(--muted);font:600 11px var(--sans);padding:0 10px}
+.scope .sc{cursor:pointer;min-height:28px;display:inline-flex;align-items:center;gap:5px;
+  background:var(--surface2);border:1px solid var(--line);border-radius:8px;
+  color:var(--muted);font:600 13px var(--sans);padding:5px 10px}
 .scope .sc b{font-weight:700;color:var(--text)}
 .scope .sc[aria-pressed="true"]{border-color:var(--accent);color:var(--text);
   background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
@@ -150,7 +150,10 @@ button.sd[aria-expanded="true"]{background:var(--surface)}
 .blab{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
   color:var(--faint);margin:0 0 4px;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis}
-#board{margin:0 0 9px}
+#board{margin:8px 0 9px}
+/* the scope chip already carries the count, so the caption is not shown;
+   renderBoard still writes it, which keeps the aria text and the JS intact */
+#board .blab{display:none}
 #board:empty{display:none}
 .bbar{display:flex;gap:1px;height:7px;border-radius:2px;overflow:hidden}
 .bbar i{flex:1 1 0;min-width:2px;display:block}
@@ -974,6 +977,15 @@ function ageMin(iso){
   var t = Date.parse(iso);
   if (isNaN(t)) return null;
   return (Date.now() - t) / 60000;
+}
+/* compact form for the freshness line: "6m", "4.9h", "3d" */
+function ageShort(m){
+  if (m === null) return "?";
+  if (m < 1) return "<1m";
+  if (m < 60) return Math.round(m) + "m";
+  var h = m / 60;
+  if (h < 48) return (h < 10 ? h.toFixed(1) : Math.round(h)) + "h";
+  return Math.round(h / 24) + "d";
 }
 function ageText(m){
   if (m === null) return "unknown";
@@ -2558,7 +2570,7 @@ function renderHealth(entries){
     if (cls === "s-ok"){
       var span = el("span", "sd");
       span.appendChild(el("i", "s-ok"));
-      span.appendChild(el("span", null, e.short + " " + (e.ok ? ageText(m) : "")));
+      span.appendChild(el("span", null, e.short + " " + (e.ok ? ageShort(m) : "")));
       span.title = e.name + " \u2014 " + detail;
       mount.appendChild(span);
       return;
