@@ -127,6 +127,25 @@ button.sd[aria-expanded="true"]{background:var(--surface)}
 .intro .sub{margin:0}
 .intro .sub + .sub{margin-top:6px}
 
+/* ---- scope switch ---- */
+.scope{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:0 0 9px}
+.scope:empty{display:none}
+.scope .sc{cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:5px;
+  background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
+  color:var(--muted);font:600 11px var(--sans);padding:0 10px}
+.scope .sc b{font-weight:700;color:var(--text)}
+.scope .sc[aria-pressed="true"]{border-color:var(--accent);color:var(--text);
+  background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
+.scope .sfail{flex:1 1 100%;font-size:10.5px;color:var(--faint)}
+/* the line under the Tokens header saying what the scope hides */
+.snote{font-size:11px;color:var(--n-standout);margin:0 0 6px;display:flex;
+  align-items:center;gap:6px;flex-wrap:wrap}
+.snote:empty{display:none}
+.snote button{cursor:pointer;background:none;border:0;color:inherit;font:600 11px var(--sans);
+  text-decoration:underline;padding:12px 4px;margin:-12px 0;min-height:40px}
+.stag{flex:0 0 auto;font:600 9px/1 var(--sans);letter-spacing:.05em;
+  color:var(--n-standout);border:1px solid currentColor;border-radius:3px;padding:2px 3px}
+
 /* ---- board summary: tier bar, persistent map, last 2h ---- */
 .blab{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
   color:var(--faint);margin:0 0 4px;white-space:nowrap;overflow:hidden;
@@ -225,10 +244,9 @@ tr.r.op td{background:var(--surface2)}
 .idc .sym{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:13ch}
 .av{flex:0 0 auto;display:inline-block;line-height:0}
 .av img{background:var(--surface2)}
-/* the tier, as a ring round the mark; a 1px gap keeps a logo's own edge from
-   merging into it */
-.ring{position:relative;flex:0 0 auto;display:inline-block;line-height:0;
-  border:3px solid var(--neutral);border-radius:50%;padding:1px}
+/* the mark's box: transparent padding keeps the footprint the tier ring
+   had, so the mark and the text beside it sit where they did */
+.mk{position:relative;flex:0 0 auto;display:inline-block;line-height:0;padding:4px}
 /* a tier move from data/changes.json: the arrow says which way */
 .mvb{position:absolute;right:-5px;bottom:-5px;width:12px;height:12px;
   border-radius:50%;background:var(--n-event);color:var(--on-band);
@@ -409,7 +427,7 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
 
 /* ---- mobile: terminal strip rows ---- */
 /* Mobile keeps every fact the desktop table shows, rearranged into one cell
-   as a strip: the tier ring on the left, three lines in the middle, the
+   as a strip: the mark on the left, three lines in the middle, the
    money on the right. Nothing is hidden on the phone -- only rearranged. */
 /* Every selector below carries the table.tk prefix on purpose: the
    display:block reset is written as "table.tk tr" / "table.tk td", which
@@ -519,19 +537,36 @@ footer{color:var(--faint);font-size:10.5px;border-top:1px solid var(--line);
     advice, and no flag is a verdict.</p>
   <p class="sub" id="intro-note"></p>
 </div>
+<div class="scope" id="scope"></div>
 <div id="board"></div>
 <div id="heat"></div>
 <div id="changed"></div>
 
   <details class="sec" open><summary>Tokens <span class="cnt" id="tok-count"></span></summary>
     <div class="body">
+      <div class="snote" id="scope-note"></div>
       <div class="shorts" id="shorts"></div>
       <div class="ctl" id="ctl"></div>
       <div class="tw" id="tok"></div>
     </div></details>
 
+  <details class="sec"><summary>Discover <span class="cnt" id="disc-count"></span></summary>
+    <div class="body" id="disc"></div></details>
+
+  <details class="sec"><summary>Stock squeeze board <span class="cnt" id="stk-count"></span></summary>
+    <div class="body" id="stk"></div></details>
+
+  <details class="sec"><summary>NFT <span class="cnt" id="nft-count"></span></summary>
+    <div class="body" id="nft"></div></details>
+
+  <details class="sec"><summary>Avoid list <span class="cnt" id="avoid-count"></span></summary>
+    <div class="body" id="avoid"></div></details>
+
   <details class="sec"><summary>How to read this <span class="cnt">what each tier means</span></summary>
     <div class="body">
+    <p class="note">The switch at the top of the page picks which tokens every
+      part of it shows: crypto tokens, the stock tokens (tokenised shares, matched
+      by contract address), or all of them. Nothing is removed, only hidden.</p>
     <p class="note">Tiers describe the market a token trades in, not whether it is worth
       owning.
       Numbers below come from forward tests over the collected history and are stated so
@@ -605,18 +640,6 @@ footer{color:var(--faint);font-size:10.5px;border-top:1px solid var(--line);
         yet. It sees trading data, not whether the project is any good.</p>
     </div>
     </div></details>
-
-  <details class="sec"><summary>Discover <span class="cnt" id="disc-count"></span></summary>
-    <div class="body" id="disc"></div></details>
-
-  <details class="sec"><summary>Stock squeeze board <span class="cnt" id="stk-count"></span></summary>
-    <div class="body" id="stk"></div></details>
-
-  <details class="sec"><summary>NFT <span class="cnt" id="nft-count"></span></summary>
-    <div class="body" id="nft"></div></details>
-
-  <details class="sec"><summary>Avoid list <span class="cnt" id="avoid-count"></span></summary>
-    <div class="body" id="avoid"></div></details>
 
   <footer id="footer"></footer>
 </div>
@@ -1199,6 +1222,46 @@ var stamps = [];
 var TOKENS = [], PMAX = 1;
 var FILTER = {}, QUERY = "", SORT = {key: "liq_usd", dir: -1};
 var SHORTLIST = null;
+
+/* ---- scope: crypto, stock tokens, or all ----
+   Display only: every token stays in TOKENS and every board-wide figure on a
+   row (rank, ticker count) is still computed over all of them; the scope
+   only decides which tokens the page shows. A stock token is decided by
+   contract address, never by ticker or liquidity -- other tokens reuse
+   GME and AMC and are not stock tokens. */
+/* Display-only. scripts/stocks.py is imported by collect.py, so adding an
+   address there is a data-path change, which waits until after the
+   2026-11-09 read; then this constant moves into stocks.py.
+   0x117c...4c0c is SPY, "SPDR S&P 500 ETF Trust • Robinhood Token", tagged
+   robinhood tokenized securities on GeckoTerminal and paired with NVDA. */
+var EXTRA_STOCK_TOKEN_CAS = ["0x117cc2133c37b721f49de2a7a74833232b3b4c0c"];
+var STOCK_CAS = {};
+var STOCK_LIST_OK = true;
+var SCOPES = [{id: "crypto", label: "Crypto"}, {id: "stock", label: "Stock tokens"},
+              {id: "all", label: "All"}];
+var SCOPE = "crypto";
+try {
+  var savedScope = localStorage.getItem("hs.scope");
+  if (SCOPES.some(function(x){ return x.id === savedScope; })) SCOPE = savedScope;
+} catch(e){}
+function setStockCas(res){
+  STOCK_CAS = {};
+  STOCK_LIST_OK = !!(res && res.ok);
+  if (STOCK_LIST_OK){
+    ((res.data && res.data.tokens) || []).forEach(function(t){
+      if (t && typeof t.ca === "string") STOCK_CAS[t.ca.toLowerCase()] = 1;
+    });
+  }
+  EXTRA_STOCK_TOKEN_CAS.forEach(function(ca){ STOCK_CAS[ca.toLowerCase()] = 1; });
+}
+function isStock(ca){ return !!STOCK_CAS[String(ca || "").toLowerCase()]; }
+function inScope(ca, scope){
+  scope = scope || SCOPE;
+  return scope === "all" || (scope === "stock") === isStock(ca);
+}
+function scoped(scope){
+  return TOKENS.filter(function(t){ return inScope(t.ca, scope); });
+}
 /* Pins are a per-viewer convenience, so localStorage is the right home and
    every access is guarded: it throws in a private window and comes back empty
    with site data cleared. A pin is a contract address, which is the identity
@@ -1313,7 +1376,7 @@ function hoursAgo(ts){
   return (Date.now() - t) / 3600000;
 }
 /* The token's latest event, when it is a move between two known tiers. One
-   reading for every place that shows a move -- the line-3 chip, the ring
+   reading for every place that shows a move -- the line-3 chip, the mark
    badge, the map badge and the last-2h strip -- so they cannot disagree. */
 var MOVE_WINDOW_H = 2;
 function moveOf(ca){
@@ -1824,15 +1887,19 @@ function tierWord(tier){
   p.style.color = tierColor(tier);
   return p;
 }
-/* the mark inside a ring in its tier's colour, with the move badge when its
-   latest event is a tier move */
-function ringMark(t, px){
-  var r = el("span", "ring");
-  r.style.borderColor = tierColor(t.tier);
+/* the plain round mark, with the move badge on its corner when its latest
+   event is a tier move. The tier itself is the word beside the symbol. */
+function markMove(t, px){
+  var r = el("span", "mk");
   r.appendChild(markFor(t.image_url, t.ca, px));
   var mv = moveOf(t.ca);
   if (mv) r.appendChild(moveBadge(mv));
   return r;
+}
+function stockTag(){
+  var s = el("span", "stag", "STOCK");
+  s.title = "a stock token: a tokenised share, matched by contract address";
+  return s;
 }
 function labelled(txt, node){
   var w = el("span");
@@ -1847,7 +1914,8 @@ function renderTokens(){
   var q = QUERY.trim().toLowerCase();
   var act = TIERS.filter(function(t){ return FILTER[t]; });
   var sl = SHORTLIST && SHORTLISTS.filter(function(x){ return x.id === SHORTLIST; })[0];
-  var rows = TOKENS.filter(function(t){
+  var pool = scoped();
+  var rows = pool.filter(function(t){
     if (sl && !sl.test(t)) return false;
     if (act.length && act.indexOf(t.tier) < 0) return false;
     if (!q) return true;
@@ -1864,7 +1932,7 @@ function renderTokens(){
   });
 
   document.getElementById("tok-count").textContent =
-    rows.length + " of " + TOKENS.length + " shown";
+    rows.length + " of " + pool.length + " shown";
 
   if (!rows.length){
     mount.appendChild(el("div", "empty", "No token matches that filter."));
@@ -1907,7 +1975,7 @@ function renderTokens(){
     tr.id = "row-" + t.ca;
     var dead = t.tier === "DEAD";
     var idc = el("div", "idc");
-    idc.appendChild(ringMark(t, 18));
+    idc.appendChild(markMove(t, 18));
     idc.appendChild(el("span", "sym", t.symbol === null ? "(no symbol)" : t.symbol));
     var pm = pinMark(t.ca);
     if (pm) idc.appendChild(pm);
@@ -1915,7 +1983,10 @@ function renderTokens(){
        persistence run is a line-3 chip, each with a popover that explains
        itself -- printing either twice in one row taught nothing. */
     cell("c-id", idc);
-    cell("c-tier", tierWord(t.tier));
+    var tc = el("div", "idc");
+    tc.appendChild(tierWord(t.tier));
+    if (isStock(t.ca)) tc.appendChild(stockTag());
+    cell("c-tier", tc);
     cell("c-age", tintChip(t, "age"));
     cell("c-depth", depthChip(t));
     cell("c-heat", tintChip(t, "heat"));
@@ -1931,12 +2002,12 @@ function renderTokens(){
     cell("c-txns", el("span", "n", num(t.txns24)), 1);
     cell("c-notable", notableEl(t));          /* null when nothing is notable */
 
-    /* The phone's strip: ring | three lines | money. Line 1 names the token,
+    /* The phone's strip: mark | three lines | money. Line 1 names the token,
        line 2 is the four band signals and the buyer trend, line 3 is what is
        notable and is left out when there is nothing to say. */
     var ts = el("div", "ts");
     var tl = el("div", "ts-l");
-    tl.appendChild(ringMark(t, 22));
+    tl.appendChild(markMove(t, 22));
     ts.appendChild(tl);
     var tm = el("div", "ts-m");
     var l1 = el("div", "ts-1");
@@ -1944,6 +2015,7 @@ function renderTokens(){
     var pm2 = pinMark(t.ca);
     if (pm2) l1.appendChild(pm2);
     l1.appendChild(tierWord(t.tier));
+    if (isStock(t.ca)) l1.appendChild(stockTag());
     l1.appendChild(tintChip(t, "age"));
     tm.appendChild(l1);
     var l2 = el("div", "ts-2");
@@ -2099,7 +2171,7 @@ function renderChipHelp(){
    ["Event",
     "Blue outline. A recent change from data/changes.json, such as "
     + "\u2191 UPGRADED 2H AGO or NEW 3H AGO. Only events still inside that "
-    + "file's window appear. A tier move also puts its arrow on the ring."],
+    + "file's window appear. A tier move also puts its arrow on the token's mark."],
    ["Standout",
     "Purple outline. This token is in the top or bottom tenth of the board "
     + "on " + NOTE_METRICS.map(function(m){ return m.label; }).join(", ")
@@ -2111,9 +2183,9 @@ function renderChipHelp(){
     "Grey. Plain facts with no judgement: the short contract address beside "
     + "a shared ticker, and on a DEAD row with no liquidity at all, \"no "
     + "liquidity \u00b7 moves not tradable\"."],
-   ["Ring",
-    "Not a chip. The ring round each token's mark is its tier colour, and a "
-    + "blue \u2191 or \u2193 on it is its latest tier move."],
+   ["Mark",
+    "Not a chip. A blue \u2191 or \u2193 on the corner of a token's mark "
+    + "is its latest tier move."],
    ["Age",
     "Not a chip. The age chip on line 1 prints the figure itself -- 7H "
     + "under a day, 8.3D under ten days, 49D after that -- tinted by its "
@@ -2160,8 +2232,9 @@ function renderShortlists(){
   mount.textContent = "";
   if (!TOKENS.length) return;
   mount.appendChild(el("span", "lab", "shortlists"));
+  var pool = scoped();
   SHORTLISTS.forEach(function(sl){
-    var n = TOKENS.filter(sl.test).length;
+    var n = pool.filter(sl.test).length;
     var b = el("button", "sl" + (SHORTLIST === sl.id ? " on" : ""));
     b.type = "button";
     b.title = sl.why;
@@ -2177,15 +2250,23 @@ function renderShortlists(){
   });
 }
 
-/* The board in one line: a segment per tier, as wide as its share of
-   tier_counts. The filter chips below carry the same counts as numbers. */
-function renderBoard(d){
+/* Tier counts over the tokens in scope. In the All view these are the same
+   numbers as latest.json's tier_counts, counted from the rows instead. */
+function scopeCounts(){
+  var c = {};
+  scoped().forEach(function(t){ c[t.tier] = (c[t.tier] || 0) + 1; });
+  return c;
+}
+/* The board in one line: a segment per tier, as wide as its share of the
+   tokens in scope. The filter chips below carry the same counts as numbers. */
+function renderBoard(){
   var mount = document.getElementById("board");
   mount.textContent = "";
-  var counts = (d && d.tier_counts) || {};
+  var counts = scopeCounts();
   var n = TIERS.reduce(function(s, t){ return s + (Number(counts[t]) || 0); }, 0);
-  if (!n) return;
-  mount.appendChild(el("div", "blab", "board \u00b7 " + n + " tokens"));
+  if (!TOKENS.length) return;
+  mount.appendChild(el("div", "blab", "board \u00b7 " + n
+    + {crypto: " crypto tokens", stock: " stock tokens", all: " tokens"}[SCOPE]));
   var bar = el("div", "bbar");
   bar.setAttribute("role", "img");
   bar.setAttribute("aria-label", "Tokens by tier: " + TIERS.map(function(t){
@@ -2238,7 +2319,7 @@ function renderMap(){
   var mount = document.getElementById("heat");
   mount.textContent = "";
   var liqOf = function(t){ var v = Number(t.liq_usd); return v > 0 ? v : 0; };
-  var best = TOKENS.filter(function(t){ return t.tier === "BEST"; })
+  var best = scoped().filter(function(t){ return t.tier === "BEST"; })
     .sort(function(a, b){ return liqOf(b) - liqOf(a); });
   if (!best.length) return;
   mount.appendChild(el("div", "blab",
@@ -2354,13 +2435,14 @@ function revealRow(ca){
    them as plain chips, which also buys back the vertical space the token
    table needs to start inside the first phone screen. */
 function renderControls(d){
-  var counts = (d && d.tier_counts) || {};
+  var counts = scopeCounts();
   var c = document.getElementById("ctl");
   c.textContent = "";
   var inp = el("input");
   inp.type = "search";
   inp.placeholder = "filter by symbol or address";
   inp.setAttribute("aria-label", "Filter tokens by symbol or contract address");
+  inp.value = QUERY;
   inp.addEventListener("input", function(){ QUERY = inp.value; renderTokens(); });
   c.appendChild(inp);
   TIERS.forEach(function(t){
@@ -2436,7 +2518,7 @@ function renderHealth(entries){
 }
 
 /* Tier moves from data/changes.json in the last MOVE_WINDOW_H hours, newest
-   first, one chip per token -- its latest move, the same one its ring and
+   first, one chip per token -- its latest move, the same one its mark and
    tile badges show. A chip opens the token's row, as a map tile does.
    Hidden entirely when changes.json is absent: it is derived, the collector
    may not have written one yet. When it loads but nothing moved, the strip
@@ -2445,7 +2527,8 @@ function renderMoves(res){
   var mount = document.getElementById("changed");
   mount.textContent = "";
   if (!res.ok) return;
-  var list = Object.keys(NOTE_EVENTS).map(moveOf).filter(function(m){
+  var list = Object.keys(NOTE_EVENTS).filter(function(ca){ return inScope(ca); })
+    .map(moveOf).filter(function(m){
     return m && m.h <= MOVE_WINDOW_H;
   }).sort(function(a, b){ return a.h - b.h; });
   var strip = el("div", "chg-strip");
@@ -2470,6 +2553,46 @@ function renderMoves(res){
   mount.appendChild(strip);
 }
 
+var LATEST = null, CHANGES = null;
+/* The switch, and the line under the Tokens header saying what it hides. */
+function renderScope(){
+  var mount = document.getElementById("scope");
+  mount.textContent = "";
+  var n = {crypto: scoped("crypto").length, stock: scoped("stock").length,
+           all: TOKENS.length};
+  SCOPES.forEach(function(x){
+    var b = el("button", "sc");
+    b.type = "button";
+    b.setAttribute("aria-pressed", SCOPE === x.id ? "true" : "false");
+    b.appendChild(el("span", null, x.label));
+    b.appendChild(el("b", null, n[x.id]));
+    b.addEventListener("click", function(){ setScope(x.id); });
+    mount.appendChild(b);
+  });
+  if (!STOCK_LIST_OK) mount.appendChild(el("div", "sfail", "stock list unavailable"));
+  var note = document.getElementById("scope-note");
+  note.textContent = "";
+  if (SCOPE === "all") return;
+  var other = SCOPE === "crypto" ? n.stock : n.crypto;
+  note.appendChild(el("span", null, other + (SCOPE === "crypto" ? " stock" : " crypto")
+    + " token" + (other === 1 ? "" : "s") + " hidden \u00b7"));
+  var show = el("button", null, SCOPE === "crypto" ? "Show" : "Show all");
+  show.type = "button";
+  show.addEventListener("click", function(){ setScope("all"); });
+  note.appendChild(show);
+}
+function setScope(id){
+  SCOPE = id;
+  try { localStorage.setItem("hs.scope", id); } catch(e){}
+  renderScope();
+  renderBoard();
+  renderMap();
+  if (CHANGES) renderMoves(CHANGES);
+  renderControls(LATEST);
+  renderShortlists();
+  renderTokens();
+}
+
 function renderPools(res){
   if (!res.ok){
     fail("tok", "data/latest.json", res.error);
@@ -2492,7 +2615,9 @@ function renderPools(res){
     if (typeof t.persist_count === "number" && t.persist_count > PMAX) PMAX = t.persist_count;
   });
   buildNoteRanks();          /* after PMAX, which the persist metric reads */
-  renderBoard(d);
+  LATEST = d;
+  renderScope();
+  renderBoard();
   renderControls(d);
   renderShortlists();
   renderMap();
@@ -2808,6 +2933,8 @@ Promise.all([
 
   /* before the pools: the rows, the map and the strip all read the moves */
   buildNoteEvents(changes);
+  setStockCas(stocks);       /* before anything that applies the scope */
+  CHANGES = changes;
   renderMoves(changes);
   renderPools(pools);
   renderStocks(stocks);
