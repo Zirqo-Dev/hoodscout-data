@@ -25,8 +25,11 @@
      temperature scale, BUYERS is one hue against a muted counterpart. */
   --b-age1:#a78bfa; --b-age2:#7f8cf0; --b-age3:#6b7686;
   --b-dep1:#6b7280; --b-dep2:#2f9aa3; --b-dep3:#14b8a6;
-  --b-cold:#5b8fd6; --b-cool:#7ba3c9; --b-flat:#8a95a6;
-  --b-warm:#d59a4e; --b-hot:#e2703a;
+  --b-flat:#8a95a6;
+  /* heat, palette B "thermal": solid fills carrying #f0f6fc text, the same in
+     both themes so a tile means the same thing on either */
+  --h-cold:#1d4f91; --h-cool:#2b3f57; --h-flat:#262c35; --h-warm:#8a4f12; --h-hot:#c2410c;
+  --on-heat:#f0f6fc;
   --b-buy:#4c9aff; --b-sell:#8a95a6;
   /* line 3 outlines. Purple and blue read as "unusual", grey as "plain
      fact", red as "warning". Green appears nowhere: a standout is not good
@@ -37,7 +40,7 @@
      dark-theme fills, white on the deeper light-theme ones */
   --on-band:#0a0d12;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
-  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --r:6px;
 }
 @media (prefers-color-scheme: light){
@@ -50,8 +53,7 @@
     --t-watch:#2f5f9e; --t-dead:#8a544f;
     --b-age1:#6d28d9; --b-age2:#3f4fc4; --b-age3:#4a5566;
     --b-dep1:#4b5563; --b-dep2:#0f7a82; --b-dep3:#0d8f82;
-    --b-cold:#1f5fab; --b-cool:#3c71a4; --b-flat:#5f6a76;
-    --b-warm:#9a6412; --b-hot:#b24a1c;
+    --b-flat:#5f6a76;
     --b-buy:#0b62d6; --b-sell:#5f6a76;
     --n-event:#1f5fab; --n-standout:#6d28d9; --n-fact:#6b7686;
     --on-band:#ffffff;
@@ -60,8 +62,9 @@
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--text);
-  font:13px/1.45 var(--sans);padding-bottom:30px}
-.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  font:13px/1.45 var(--sans);font-variant-numeric:tabular-nums;
+  padding-bottom:30px}
+.n{font-weight:700}
 .wrap{max-width:1360px;margin:0 auto;padding:0 10px}
 a{color:var(--accent)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -70,7 +73,7 @@ a{color:var(--accent)}
 header{position:sticky;top:0;z-index:30;background:var(--bg);
   border-bottom:1px solid var(--line);padding:8px 0 6px;margin-bottom:10px}
 .hrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.brand{font:600 15px/1 var(--mono);letter-spacing:.02em;white-space:nowrap}
+.brand{font:600 15px/1 var(--sans);letter-spacing:.02em;white-space:nowrap}
 .brand span{color:var(--accent)}
 .chain{font-size:10.5px;color:var(--faint);border:1px solid var(--line);
   border-radius:999px;padding:2px 7px;white-space:nowrap}
@@ -90,7 +93,7 @@ header{position:sticky;top:0;z-index:30;background:var(--bg);
 .k{display:inline-flex;align-items:baseline;gap:4px;background:var(--surface);
   border:1px solid var(--line);border-radius:var(--r);padding:2px 7px;
   font-size:10.5px;color:var(--muted);white-space:nowrap}
-.k b{font:600 12px var(--mono);font-variant-numeric:tabular-nums;color:var(--text)}
+.k b{font:600 12px var(--sans);font-variant-numeric:tabular-nums;color:var(--text)}
 .k i{width:7px;height:7px;border-radius:2px;display:inline-block;flex:0 0 auto}
 .k.on{border-color:var(--accent);background:var(--surface2)}
 /* 40px is the touch floor; a mouse does not need it, so desktop goes dense */
@@ -117,7 +120,7 @@ button.sd[aria-expanded="true"]{background:var(--surface)}
   border-radius:var(--r);padding:6px 8px;font-size:10.5px;color:var(--faint)}
 .ibtn{min-width:40px;min-height:40px;cursor:pointer;background:var(--surface2);
   border:1px solid var(--line);border-radius:50%;color:var(--muted);
-  font:600 12px var(--mono);line-height:1}
+  font:600 12px var(--sans);line-height:1}
 .ibtn[aria-expanded="true"]{border-color:var(--accent);color:var(--accent)}
 .intro{background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r);padding:8px 10px;margin:0 0 8px}
@@ -146,7 +149,7 @@ button.sd[aria-expanded="true"]{background:var(--surface)}
   height:24px;padding:0 7px;border-radius:var(--r);white-space:nowrap;
   border:1px solid color-mix(in srgb,var(--n-event) 60%,transparent);
   background:color-mix(in srgb,var(--n-event) 13%,var(--bg));color:var(--n-event);
-  font:10.5px/1 var(--mono)}
+  font:10.5px/1 var(--sans)}
 .mv b{font-weight:700}
 .mv::after{content:"";position:absolute;left:0;right:0;top:50%;
   transform:translateY(-50%);height:40px}
@@ -160,12 +163,12 @@ details.sec{background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r);margin:0 0 10px;overflow:clip}
 details.sec>summary{cursor:pointer;padding:8px 10px;list-style:none;
   display:flex;align-items:center;gap:8px;min-height:40px;
-  font:600 12px/1 var(--mono);letter-spacing:.04em;text-transform:uppercase}
+  font:600 12px/1 var(--sans);letter-spacing:.04em;text-transform:uppercase}
 summary::-webkit-details-marker{display:none}
 summary::after{content:"+";margin-left:auto;color:var(--faint);font-weight:400;font-size:15px}
 details[open]>summary::after{content:"\2212"}
 .sec>.body{padding:0 10px 10px}
-.cnt{font:400 10.5px var(--mono);color:var(--faint);text-transform:none;letter-spacing:0}
+.cnt{font:400 10.5px var(--sans);color:var(--faint);text-transform:none;letter-spacing:0}
 .note{font-size:11.5px;color:var(--muted);margin:0 0 8px}
 .empty{color:var(--faint);font-size:12px;padding:10px 0}
 .err{background:color-mix(in srgb,var(--bad) 12%,var(--surface));
@@ -176,7 +179,7 @@ details[open]>summary::after{content:"\2212"}
 .ctl{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
 .ctl input{flex:1 1 150px;min-width:120px;min-height:40px;background:var(--surface2);
   color:var(--text);border:1px solid var(--line);border-radius:var(--r);
-  padding:6px 9px;font:12px var(--mono)}
+  padding:6px 9px;font:12px var(--sans)}
 .ctl input::placeholder{color:var(--faint)}
 .fchip{cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:5px;
   background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
@@ -184,7 +187,7 @@ details[open]>summary::after{content:"\2212"}
 .fchip[aria-pressed="true"]{border-color:var(--accent);color:var(--text);
   background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
 .fchip i{width:7px;height:7px;border-radius:50%;display:inline-block}
-.fchip b{font:600 11px var(--mono);font-variant-numeric:tabular-nums}
+.fchip b{font:600 11px var(--sans);font-variant-numeric:tabular-nums}
 
 /* ---- token table ---- */
 /* Below the table breakpoint the wrapper scrolls sideways. Above it the table
@@ -192,8 +195,14 @@ details[open]>summary::after{content:"\2212"}
    1000px), and the wrapper must NOT be a scroll container: an overflow box
    captures position:sticky, and the sticky header row would scroll away with
    the page instead of holding under the site header. */
-.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
-@media (min-width:1000px){.tw{overflow:visible}}
+/* Never a scroll container: the page scrolls, once. The mobile rows are
+   stacked blocks that fit their column, so there is nothing to scroll
+   sideways, and an overflow box here would add an inner scrollbar. */
+.tw{overflow:visible;min-width:0}
+/* The last row's 40px finger targets hang past its bottom edge; the padding
+   gives them room inside the box, so it reports no overflow of its own. The
+   FDV target is kept to the row's 2px gutter for the same reason sideways. */
+.tw{padding-bottom:12px}
 table.tk{width:100%;border-collapse:collapse;font-size:11.5px}
 /* --hh is written by JS from the header's measured height; the 46px is only
    the value used before that first measurement lands. */
@@ -211,7 +220,7 @@ table.tk td.r{text-align:right}
 tr.r{cursor:pointer}
 tr.r:hover td{background:var(--surface2)}
 tr.r.op td{background:var(--surface2)}
-.sym{font:600 12px var(--mono);letter-spacing:-.01em}
+.sym{font:700 12px var(--sans);letter-spacing:-.01em}
 .idc{display:flex;align-items:center;gap:6px;min-width:0}
 .idc .sym{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:13ch}
 .av{flex:0 0 auto;display:inline-block;line-height:0}
@@ -225,13 +234,14 @@ tr.r.op td{background:var(--surface2)}
   border-radius:50%;background:var(--n-event);color:var(--on-band);
   box-shadow:0 0 0 1.5px var(--surface);font:700 9px/12px var(--sans);
   text-align:center}
-/* The star is a 40px tap target that does not push the row taller: the
-   padding provides the area, the negative margin gives the space back. */
-.star{flex:0 0 auto;cursor:pointer;background:none;border:0;padding:12px 4px;
-  margin:-12px -2px;min-width:22px;min-height:40px;line-height:1;
-  font-size:13px;color:var(--faint)}
-.star.on{color:var(--warn)}
-.star:hover{color:var(--text)}
+/* A pin is a reading aid, set from the expanded row. A pinned row carries a
+   small star after its symbol. */
+.pinmark{flex:0 0 auto;color:var(--warn);font:600 11px/1 var(--sans)}
+.pinbtn{flex:0 0 auto;min-height:40px;display:inline-flex;align-items:center;
+  background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
+  padding:0 10px;font:600 11px var(--sans);cursor:pointer;color:var(--muted)}
+.pinbtn:hover{border-color:var(--accent);color:var(--text)}
+.pinbtn.on{color:var(--warn);border-color:var(--warn)}
 .why{font-size:11px;line-height:1.5;color:var(--muted);
   border-left:2px solid var(--line);padding-left:8px;margin:0 0 8px}
 .why div + div{margin-top:3px}
@@ -249,7 +259,7 @@ tr.r.op td{background:var(--surface2)}
 .bd.warnb{color:var(--warn);border-color:var(--warn)}
 .bd.badb{color:var(--bad);border-color:var(--bad)}
 .pos{color:var(--ok)} .neg{color:var(--bad)} .dim{color:var(--faint)}
-.chg{display:inline-flex;align-items:center;gap:2px;font-family:var(--mono);
+.chg{display:inline-flex;align-items:center;gap:2px;font-weight:500;
   font-variant-numeric:tabular-nums}
 
 /* expansion row */
@@ -258,7 +268,7 @@ tr.x>td{background:var(--bg);padding:8px 6px 10px}
 .xg{display:grid;gap:4px 14px;grid-template-columns:repeat(auto-fit,minmax(118px,1fr))}
 .xg div{font-size:10.5px;color:var(--muted);display:flex;justify-content:space-between;
   gap:8px;border-bottom:1px dotted var(--line);padding-bottom:2px}
-.xg b{font:600 11.5px var(--mono);font-variant-numeric:tabular-nums;color:var(--text)}
+.xg b{font:600 11.5px var(--sans);font-variant-numeric:tabular-nums;color:var(--text)}
 .addr{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:8px}
 code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--line);
   border-radius:4px;padding:4px 6px;word-break:break-all;color:var(--text)}
@@ -282,15 +292,19 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
    check asserts. */
 .sig,.tint{position:relative;z-index:1;display:inline-flex;align-items:center;gap:3px;
   cursor:pointer;background:none;border:0;padding:0;color:inherit;
-  font:600 9px/1 var(--mono);letter-spacing:.03em;text-transform:uppercase;
+  font:600 9px/1 var(--sans);letter-spacing:.03em;text-transform:uppercase;
   white-space:nowrap}
 .sig::after,.tint::after{content:"";position:absolute;left:-2px;right:-2px;top:50%;
   transform:translateY(-50%);height:40px}
 .tint{color:var(--c);background:color-mix(in srgb,var(--c) 17%,transparent);
   border-radius:3px;padding:3px 4px}
 .tint:hover{background:color-mix(in srgb,var(--c) 28%,transparent)}
+/* heat: the band's own fill with light text, as on the map tiles */
+.hw{background:var(--c);color:var(--on-heat);border-radius:3px;padding:1px 5px}
+.tint.hw{padding:3px 4px}
+.tint.hw:hover{background:var(--c);filter:brightness(1.2)}
 .sig svg{flex:0 0 auto}
-.tword{font:600 9px/1 var(--mono);letter-spacing:.04em;white-space:nowrap}
+.tword{flex:0 0 auto;font:600 9px/1 var(--sans);letter-spacing:.04em;white-space:nowrap}
 .spk{flex:0 0 auto;display:block}
 .bc{display:flex;align-items:center;gap:6px}
 .sca{font:9.5px/1 var(--mono);color:var(--faint);white-space:nowrap}
@@ -324,9 +338,9 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
    than the number above it, and takes its 40px finger target from the same
    transparent ::after the notable chips use, so it costs no height. */
 .fdvb{position:relative;cursor:pointer;background:none;border:0;padding:0;
-  color:var(--faint);font:9.5px/1 var(--mono);font-variant-numeric:tabular-nums;
+  color:var(--faint);font:9.5px/1 var(--sans);font-variant-numeric:tabular-nums;
   white-space:nowrap}
-.fdvb::after{content:"";position:absolute;left:-4px;right:-4px;top:50%;
+.fdvb::after{content:"";position:absolute;left:-2px;right:-2px;top:50%;
   transform:translateY(-50%);height:40px}
 .fdvb:hover{color:var(--text)}
 td.c-fdv .fdvb{font-size:11.5px;color:var(--muted)}
@@ -338,14 +352,14 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
   box-shadow:0 6px 22px rgba(0,0,0,.35);font-size:11px;color:var(--muted)}
 .pop-h{display:flex;align-items:baseline;gap:6px;font:600 10px var(--sans);
   letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
-.pop-h b{font:700 12px var(--mono);letter-spacing:0;text-transform:none}
+.pop-h b{font:700 12px var(--sans);letter-spacing:0;text-transform:none}
 .pop-p{margin:5px 0 0;line-height:1.45}
-.pop-r{margin:5px 0 0;font:11px var(--mono);color:var(--text)}
-.pop-f{margin:3px 0 0;font:10px var(--mono);color:var(--faint)}
+.pop-r{margin:5px 0 0;font:11px var(--sans);color:var(--text)}
+.pop-f{margin:3px 0 0;font:10px var(--sans);color:var(--faint)}
 .pop-all{margin-top:7px;border-top:1px dotted var(--line);padding-top:6px}
 .pop-all > div{display:flex;gap:7px;align-items:baseline;margin-top:3px}
 .pop-w{font:700 9.5px var(--sans);letter-spacing:.05em;flex:0 0 66px}
-.pop-c{font:10px var(--mono);color:var(--faint)}
+.pop-c{font:10px var(--sans);color:var(--faint)}
 .pop-x{margin-top:8px;min-height:40px;width:100%;cursor:pointer;
   background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
   color:var(--muted);font:600 11px var(--sans)}
@@ -357,7 +371,7 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
 .sl{display:inline-flex;align-items:center;gap:5px;cursor:pointer;min-height:40px;
   background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
   padding:0 9px;color:var(--muted);font:11px var(--sans)}
-.sl b{font:600 11px var(--mono);font-variant-numeric:tabular-nums}
+.sl b{font:600 11px var(--sans);font-variant-numeric:tabular-nums}
 .sl.on{border-color:var(--accent);color:var(--text);
   background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
 
@@ -374,23 +388,23 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
 .hgt{position:relative;flex:1 1 0;height:36px;cursor:pointer;border:0;
   border-radius:3px;padding:0 5px;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:3px;overflow:hidden;
-  color:var(--on-band);font:600 10.5px/1 var(--mono)}
+  color:#f0f6fc;font:700 10.5px/1 var(--sans)}
 .hgt.nob{background:var(--surface2);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
 /* a shared ticker: red outside, a hairline of page colour inside so it
    separates from the hot end of the fill */
 .hgt.dup{box-shadow:inset 0 0 0 2px var(--bad),inset 0 0 0 3px var(--bg)}
 .hgs,.hgv{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hgv{font:500 9px/1 var(--mono);font-variant-numeric:tabular-nums;opacity:.85}
+.hgv{font:500 9px/1 var(--sans);font-variant-numeric:tabular-nums;opacity:.9}
 .hgt:hover{filter:brightness(1.12)}
 .hgt.hasmv{padding-right:17px}
 .hgt .mvb{right:2px;top:2px;bottom:auto;width:11px;height:11px;
-  font-size:8.5px;line-height:11px;box-shadow:0 0 0 1px var(--bg)}
+  font-size:9px;line-height:11px;box-shadow:0 0 0 1px var(--bg)}
 
 /* ---- glossary ---- */
 .gloss > div{display:flex;gap:8px;align-items:baseline;padding:4px 0;
   border-bottom:1px dotted var(--line);font-size:11px;color:var(--muted)}
 .gloss > div:last-child{border-bottom:0}
-.gloss b{font:600 11px var(--mono);color:var(--text);flex:0 0 108px}
+.gloss b{font:600 11px var(--sans);color:var(--text);flex:0 0 108px}
 .warn-t{color:var(--warn)}
 
 /* ---- mobile: terminal strip rows ---- */
@@ -410,7 +424,7 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
     padding:7px 2px;border-bottom:1px solid var(--line);min-height:52px;
     /* scoped to the row, not :root, so the how-to card keeps its full-size
        pills */
-    --pill-f:8.5px; --pill-pad:3px 4px}
+    --pill-f:9px; --pill-pad:3px 4px}
   table.tk td{border:0;padding:0}
   table.tk td.c-ind{flex:1 1 100%;min-width:0}
   table.tk td.c-id,table.tk td.c-tier,table.tk td.c-age,table.tk td.c-depth,
@@ -427,14 +441,14 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
 .ts-m{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:5px}
 .ts-1,.ts-2{display:flex;align-items:center;min-width:0;height:17px}
 .ts-1{gap:6px}
-.ts-1 .sym{font:700 13px/1 var(--mono);flex:0 1 auto;min-width:0;
+.ts-1 .sym{font:700 13px/1 var(--sans);flex:0 1 auto;min-width:0;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ts-2{gap:9px}
 .ts-r{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
-.ts-r .liqv{font:600 14px/1 var(--mono);font-variant-numeric:tabular-nums}
+.ts-r .liqv{font:700 14px/1 var(--sans);font-variant-numeric:tabular-nums}
 .ts-r .chg{font-size:9.5px;line-height:1}
 .ts-r .cl{display:flex;align-items:center;gap:4px}
-.ts-r .cl > span:first-child{font:9px/1 var(--mono);color:var(--faint)}
+.ts-r .cl > span:first-child{font:9px/1 var(--sans);color:var(--faint)}
 @media (min-width:1000px){
   table.tk td.c-ind{display:none}
   .mo{display:none}
@@ -449,7 +463,7 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
   padding:8px 9px}
 .card.alarm{border-color:var(--bad)}
 .ctop{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
-.big{font:700 22px var(--mono);font-variant-numeric:tabular-nums;margin:2px 0 0}
+.big{font:700 22px var(--sans);font-variant-numeric:tabular-nums;margin:2px 0 0}
 .meter{height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin:5px 0 7px}
 .meter i{display:block;height:100%}
 
@@ -461,7 +475,7 @@ table.g th{background:var(--surface2);color:var(--muted);font:600 10px var(--san
   letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:6px 8px;
   border-bottom:1px solid var(--line);white-space:nowrap}
 table.g td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
-table.g td.num,table.g th.num{text-align:right;font-family:var(--mono);
+table.g td.num,table.g th.num{text-align:right;
   font-variant-numeric:tabular-nums}
 table.g tr:last-child td{border-bottom:0}
 
@@ -693,15 +707,15 @@ var BANDS = {
     fields: ["recent_move_score"],
     missing: {word: "–", why: "no move score this run"},
     bands: [
-      {word: "COLD", cvar: "--b-cold", rule: "recent_move_score ≤ -4",
+      {word: "COLD", cvar: "--h-cold", solid: true, rule: "recent_move_score ≤ -4",
        test: function(t){ return t.recent_move_score <= -4; }},
-      {word: "COOL", cvar: "--b-cool", rule: "recent_move_score -3 to -1",
+      {word: "COOL", cvar: "--h-cool", solid: true, rule: "recent_move_score -3 to -1",
        test: function(t){ return t.recent_move_score < 0; }},
-      {word: "FLAT", cvar: "--b-flat", rule: "recent_move_score = 0",
+      {word: "FLAT", cvar: "--h-flat", solid: true, rule: "recent_move_score = 0",
        test: function(t){ return t.recent_move_score === 0; }},
-      {word: "WARM", cvar: "--b-warm", rule: "recent_move_score +1 to +3",
+      {word: "WARM", cvar: "--h-warm", solid: true, rule: "recent_move_score +1 to +3",
        test: function(t){ return t.recent_move_score < 4; }},
-      {word: "HOT",  cvar: "--b-hot",  rule: "recent_move_score ≥ +4",
+      {word: "HOT",  cvar: "--h-hot", solid: true,  rule: "recent_move_score ≥ +4",
        test: function(){ return true; }}
     ],
     has: function(t){
@@ -1146,7 +1160,7 @@ function avatarSvg(ca, size){
   t.setAttribute("x", 9); t.setAttribute("y", 12.2);
   t.setAttribute("text-anchor", "middle");
   t.setAttribute("font-size", "7");
-  t.setAttribute("font-family", "ui-monospace,monospace");
+  t.setAttribute("font-family", "ui-monospace,monospace");  /* hex initials of the address */
   t.setAttribute("fill", "hsl(" + hue + ",70%,78%)");
   t.textContent = (a.slice(0, 2) || "??").toUpperCase();
   s.appendChild(t);
@@ -1628,12 +1642,23 @@ function sigBtn(t, key, cls, word){
   return btn;
 }
 function bandColor(b){ return b ? "var(" + b.cvar + ")" : "var(--faint)"; }
+/* A word in its band's colour. The heat bands are dark fills made for light
+   text, so their word sits on the fill instead of being drawn in it. */
+function paintWord(node, b){
+  if (b && b.solid){
+    node.classList.add("hw");
+    node.style.setProperty("--c", "var(" + b.cvar + ")");
+  } else {
+    node.style.color = bandColor(b);
+  }
+}
 /* AGE and HEAT: the word on a tint of its band colour */
 function tintChip(t, key){
   var g = BANDS[key], b = bandOf(t, key);
   var word = !b ? g.missing.word : g.display ? g.display(t) : b.word;
   var btn = sigBtn(t, key, "tint", word);
   btn.style.setProperty("--c", bandColor(b));
+  if (b && b.solid) btn.classList.add("hw");
   btn.textContent = word;
   return btn;
 }
@@ -1713,7 +1738,7 @@ function showChipPop(anchorEl, t, key){
   var head = el("div", "pop-h");
   head.appendChild(el("span", null, g.label));
   var word = el("b", null, b ? b.word : g.missing.word);
-  word.style.color = b ? "var(" + b.cvar + ")" : "var(--faint)";
+  paintWord(word, b);
   head.appendChild(word);
   pop.appendChild(head);
   pop.appendChild(el("p", "pop-p", g.plain));
@@ -1724,7 +1749,7 @@ function showChipPop(anchorEl, t, key){
   g.bands.forEach(function(x){
     var r = el("div");
     var sw = el("span", "pop-w", x.word);
-    sw.style.color = "var(" + x.cvar + ")";
+    paintWord(sw, x);
     r.appendChild(sw);
     r.appendChild(el("span", "pop-c", x.rule));
     all.appendChild(r);
@@ -1762,23 +1787,31 @@ document.addEventListener("keydown", function(ev){
   if (ev.key === "Escape") closeChipPop();
 });
 
-function starBtn(ca){
-  var b = el("button", "star");
+/* "☆ Pin" / "★ Pinned" inside the expanded row. The list re-renders to sort
+   the pin to the top, so the row is opened again and brought back into view. */
+function pinBtn(ca){
+  var on = pinned(ca);
+  var b = el("button", "pinbtn" + (on ? " on" : ""), on ? "\u2605 Pinned" : "\u2606 Pin");
   b.type = "button";
-  var paint = function(){
-    var on = pinned(ca);
-    b.textContent = on ? "\u2605" : "\u2606";      // filled vs outline star
-    b.classList.toggle("on", on);
-    b.setAttribute("aria-pressed", on ? "true" : "false");
-    b.setAttribute("aria-label", (on ? "Unpin " : "Pin ") + ca);
-  };
-  paint();
+  b.setAttribute("aria-pressed", on ? "true" : "false");
+  b.setAttribute("aria-label", (on ? "Unpin " : "Pin ") + ca);
   b.addEventListener("click", function(ev){
-    ev.stopPropagation();                            // the row toggles on click
+    ev.stopPropagation();
     pinToggle(ca);
     renderTokens();
+    var tr = document.getElementById("row-" + ca);
+    if (!tr) return;
+    tr.click();
+    tr.scrollIntoView({block: "center"});
   });
   return b;
+}
+function pinMark(ca){
+  if (!pinned(ca)) return null;
+  var m = el("span", "pinmark", "\u2605");
+  m.title = "pinned";
+  m.setAttribute("aria-label", "pinned");
+  return m;
 }
 function tierPill(tier){
   var p = el("span", "pill", tierLabel(tier));
@@ -1874,9 +1907,10 @@ function renderTokens(){
     tr.id = "row-" + t.ca;
     var dead = t.tier === "DEAD";
     var idc = el("div", "idc");
-    idc.appendChild(starBtn(t.ca));
     idc.appendChild(ringMark(t, 18));
     idc.appendChild(el("span", "sym", t.symbol === null ? "(no symbol)" : t.symbol));
+    var pm = pinMark(t.ca);
+    if (pm) idc.appendChild(pm);
     /* No badges here any more. The shared ticker is a line-3 flag and the
        persistence run is a line-3 chip, each with a popover that explains
        itself -- printing either twice in one row taught nothing. */
@@ -1902,12 +1936,13 @@ function renderTokens(){
        notable and is left out when there is nothing to say. */
     var ts = el("div", "ts");
     var tl = el("div", "ts-l");
-    tl.appendChild(starBtn(t.ca));
     tl.appendChild(ringMark(t, 22));
     ts.appendChild(tl);
     var tm = el("div", "ts-m");
     var l1 = el("div", "ts-1");
     l1.appendChild(el("span", "sym", t.symbol === null ? "(no symbol)" : t.symbol));
+    var pm2 = pinMark(t.ca);
+    if (pm2) l1.appendChild(pm2);
     l1.appendChild(tierWord(t.tier));
     l1.appendChild(tintChip(t, "age"));
     tm.appendChild(l1);
@@ -1972,7 +2007,9 @@ function renderTokens(){
         nd + " other token" + (nd === 1 ? "" : "s") + " use this ticker \u2014 "
         + "check the address below, not the name."));
     }
-    xc.appendChild(addrRow(t.ca, t));
+    var ar = addrRow(t.ca, t);
+    ar.insertBefore(pinBtn(t.ca), ar.firstChild.nextSibling.nextSibling);
+    xc.appendChild(ar);
     xr.appendChild(xc);
 
     var toggle = function(){
@@ -2024,7 +2061,7 @@ function renderChipHelp(){
       tr.appendChild(el("td", null, i === 0 ? g.label : ""));
       var td = el("td");
       var w = el("b", null, b.word);
-      w.style.color = "var(" + b.cvar + ")";
+      paintWord(w, b);
       td.appendChild(w);
       tr.appendChild(td);
       tr.appendChild(el("td", null, b.rule));
@@ -2175,11 +2212,14 @@ function usdShort(v){
   if (n >= 1e3) return "$" + Math.round(n/1e3) + "K";
   return "$" + Math.round(n);
 }
-/* The symbol's width in monospace cells: a CJK or emoji glyph takes two. */
-function cells(s){
-  var n = 0;
-  Array.from(String(s)).forEach(function(c){ n += c.codePointAt(0) >= 0x1100 ? 2 : 1; });
-  return n;
+/* Text width in px, measured in the page's own font, so a tile's floor is
+   what its symbol and money really need rather than a character-count guess. */
+var MEASURE_CTX = null;
+function textW(txt, weight, px){
+  if (!MEASURE_CTX) MEASURE_CTX = document.createElement("canvas").getContext("2d");
+  MEASURE_CTX.font = weight + " " + px + "px "
+    + getComputedStyle(document.body).fontFamily;
+  return MEASURE_CTX.measureText(txt).width;
 }
 
 /* One tile per PERSISTENT token -- the same tokens the heat grid showed --
@@ -2189,8 +2229,6 @@ function cells(s){
    everywhere and tile area tracks liq_usd down to the floors. The rows are
    cut for the width they were measured at; each still wraps as a last
    resort, so a narrow screen never scrolls sideways. */
-var MAP_CELL = 6.3;            /* px per monospace cell at the tile's 10.5px */
-var MAP_CELL_SM = 5.4;         /* ... and at its second line's 9px */
 var MAP_PAD = 10;              /* the tile's side padding */
 var MAP_BADGE = 12;            /* extra right padding when a move badge sits there */
 var MAP_GAP = 2;
@@ -2215,9 +2253,9 @@ function renderMap(){
     var mv = moveOf(t.ca);
     if (mv && mv.h > MOVE_WINDOW_H) mv = null;
     /* the floor: wide enough for the symbol and for the money under it */
-    var w = Math.ceil(Math.max(Math.min(cells(t.symbol || "?"), 14) * MAP_CELL,
-                               usdShort(t.liq_usd).length * MAP_CELL_SM))
-          + MAP_PAD + (mv ? MAP_BADGE : 0);
+    var w = Math.ceil(Math.max(Math.min(textW(t.symbol || "?", 700, 10.5), 100),
+                               textW(usdShort(t.liq_usd), 500, 9)))
+          + MAP_PAD + 2 + (mv ? MAP_BADGE : 0);
     var cur = shares[shares.length - 1];
     if (cur.length && shares.length < R
         && acc + liqOf(t) / 2 > total * shares.length / R){
@@ -2466,7 +2504,7 @@ function renderPools(res){
   var wrk = Object.keys(wr);
   document.getElementById("intro-note").textContent =
     "Tier is a filter on market shape, not a signal. Sort any column; tap a row "
-    + "for the address and chart links. Tap a star to pin a token to the top. "
+    + "for the address and chart links. Open a row and tap Pin to keep a token at the top. "
     + "The contract address is the identity; tickers repeat. PERSISTENT is "
     + "still keyed BEST in the data."
     + (wrk.length ? "  WATCH split: " + wrk.map(function(k){
