@@ -195,18 +195,25 @@ details[open]>summary::after{content:"\2212"}
   font-size:11.5px;margin-bottom:8px}
 
 /* ---- controls ---- */
-.ctl{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
-.ctl input{flex:1 1 150px;min-width:120px;min-height:40px;background:var(--surface2);
-  color:var(--text);border:1px solid var(--line);border-radius:var(--r);
-  padding:6px 9px;font:12px var(--sans)}
+.ctl{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+.ctl input{flex:1 1 100%;min-width:0;min-height:34px;box-sizing:border-box;
+  background:var(--surface2);color:var(--text);border:1px solid var(--line);
+  border-radius:8px;padding:5px 10px;font:13px var(--sans)}
+/* the run totals as one plain line under the tier chips */
+.ctl-k{flex:1 1 100%;font:12px var(--sans);color:var(--muted)}
+.ctl-k .k{display:inline;background:none;border:0;padding:0;gap:0;color:var(--muted);
+  font:12px var(--sans)}
+.ctl-k .k + .k::before{content:" \00b7  "}
+.ctl-k .k span::after{content:" "}
+.ctl-k .k b{font:12px var(--sans);color:var(--muted)}
 .ctl input::placeholder{color:var(--faint)}
-.fchip{cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:5px;
-  background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
-  color:var(--muted);font:11px var(--sans);padding:0 9px}
+.fchip{cursor:pointer;min-height:28px;display:inline-flex;align-items:center;gap:5px;
+  background:var(--surface2);border:1px solid var(--line);border-radius:8px;
+  color:var(--muted);font:12px var(--sans);padding:4px 8px}
 .fchip[aria-pressed="true"]{border-color:var(--accent);color:var(--text);
   background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
 .fchip i{width:7px;height:7px;border-radius:50%;display:inline-block}
-.fchip b{font:600 11px var(--sans);font-variant-numeric:tabular-nums}
+.fchip b{font:600 12px var(--sans);font-variant-numeric:tabular-nums}
 
 /* ---- token table ---- */
 /* Below the table breakpoint the wrapper scrolls sideways. Above it the table
@@ -422,13 +429,13 @@ td.c-fdv .fdvb::after{display:none}      /* the desktop row is a mouse target */
   color:var(--muted);font:600 11px var(--sans)}
 
 /* ---- shortlists ---- */
-.shorts{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0 0 6px}
+.shorts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 6px}
 .shorts .lab{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
   color:var(--faint);margin-right:2px}
-.sl{display:inline-flex;align-items:center;gap:5px;cursor:pointer;min-height:40px;
-  background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);
-  padding:0 9px;color:var(--muted);font:11px var(--sans)}
-.sl b{font:600 11px var(--sans);font-variant-numeric:tabular-nums}
+.sl{display:inline-flex;align-items:center;gap:5px;cursor:pointer;min-height:28px;
+  background:var(--surface2);border:1px solid var(--line);border-radius:8px;
+  padding:4px 8px;color:var(--muted);font:12px var(--sans)}
+.sl b{font:600 12px var(--sans);font-variant-numeric:tabular-nums}
 .sl.on{border-color:var(--accent);color:var(--text);
   background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
 
@@ -2514,14 +2521,16 @@ function renderControls(d){
     });
     c.appendChild(b);
   });
+  var tot = el("div", "ctl-k");
   [["tokens", d ? d.tokens_seen : null],
    ["pools", d ? d.pools_seen : null],
    ["lookups failed", d ? d.pool_lookups_failed : null]].forEach(function(kv){
     var k = el("span", "k");
     k.appendChild(el("span", null, kv[0]));
     k.appendChild(el("b", null, kv[1] === null || kv[1] === undefined ? "n/a" : kv[1]));
-    c.appendChild(k);
+    tot.appendChild(k);
   });
+  c.appendChild(tot);
 }
 
 /* ---------- render ---------- */
