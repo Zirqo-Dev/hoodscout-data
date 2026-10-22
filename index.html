@@ -297,6 +297,45 @@ code{font:10.5px var(--mono);background:var(--surface2);border:1px solid var(--l
 .copy:hover,.lnk:hover{border-color:var(--accent);color:var(--text)}
 .copy.done{color:var(--ok);border-color:var(--ok)}
 
+/* expanded token row: one panel, one step lighter than the page */
+.xp{background:var(--surface);border-radius:10px;padding:10px;min-width:0;
+  font-family:var(--sans)}
+.xp .why{border:0;padding:0;margin:0 0 8px;font-size:12px;line-height:1.45}
+.xp .why div + div{margin-top:3px}
+.xp .w1{color:var(--text);font-weight:600}
+.xp .w2{color:var(--text)}
+.xp .wb{color:var(--faint);font-size:10.5px}
+.xp .wc{color:var(--warn);margin-top:6px}
+.xp .wd{font-size:11.5px;line-height:1.45;margin:0 0 8px}
+.xt{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0 0 10px}
+.xtile{background:var(--surface2);border-radius:8px;padding:7px 8px;min-width:0;
+  display:flex;flex-direction:column;gap:2px}
+.xl{font:600 9px/1.2 var(--sans);letter-spacing:.05em;color:var(--faint);text-transform:uppercase}
+.xtile b{font:700 13px/1.25 var(--sans);font-variant-numeric:tabular-nums;color:var(--text);
+  overflow-wrap:anywhere}
+.xs{font:10px/1.2 var(--sans);color:var(--muted)}
+.xh{font:600 9px/1.2 var(--sans);letter-spacing:.05em;color:var(--faint);margin:0 0 4px}
+.xb{display:flex;align-items:center;gap:10px;background:var(--surface2);
+  border-radius:8px;padding:8px 10px;margin:0 0 10px;font:12px/1.4 var(--sans);
+  font-variant-numeric:tabular-nums;color:var(--text)}
+.xb svg{flex:0 0 auto}
+.xb span{min-width:0;flex:1 1 auto}
+.xa{display:flex;align-items:stretch;gap:6px;margin:0 0 8px}
+.xa code{flex:1 1 auto;min-width:0;display:flex;align-items:center;font:12px var(--mono);
+  padding:0 10px;min-height:40px;border-radius:var(--r);white-space:nowrap}
+.xk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.xk .pinbtn,.xk .lnk{justify-content:center;padding:0 4px;min-width:0;white-space:nowrap;
+  text-align:center}
+@media (min-width:1000px){
+  .xp{max-width:640px}
+}
+@media (max-width:399px){
+  .xk{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:379px){
+  .xt{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
 /* ---- band signals ----
    Each one is a word, plus a shape or a tint, plus colour -- dropping the
    colour leaves it readable, which is the test that matters. DEPTH lights
@@ -1580,55 +1619,55 @@ var MOVE_CAVEAT_AT = 4;
 var AVOID_REASON = {};
 
 function whyLine(t){
-  var one, f = [];
-  var sc = t.persist_count, lf = t.liq_fdv_pct;
+  var one, f = [], sc = t.persist_count;
+  var miss = function(v){ return v === null || v === undefined; };
+  /* tier word first, then the reason from the same fields as before */
   if (t.tier === "BEST"){
-    one = "PERSISTENT: healthy in " + num(sc) + " recent snapshots"
-        + (lf === null || lf === undefined ? "" : ", liquidity " + pct(lf, 1) + " of FDV")
-        + ".";
+    one = miss(sc) ? "" : "healthy in " + num(sc) + " of " + num(PMAX) + " snapshots";
   } else if (t.tier === "EMERGING"){
-    one = "EMERGING: " + (t.age_days === null || t.age_days === undefined
-            ? "age unknown" : num(t.age_days, 1) + " days old")
+    one = (miss(t.age_days) ? "age unknown" : num(t.age_days, 1) + " days old")
         + ", buyer count rising across recent snapshots"
-        + (t.trades_per_trader === null || t.trades_per_trader === undefined
-            ? "" : ", " + num(t.trades_per_trader, 2) + " trades per trader")
-        + ".";
+        + (miss(t.trades_per_trader) ? "" : ", " + num(t.trades_per_trader, 2) + " trades per trader");
   } else if (t.tier === "WATCH"){
-    one = "WATCH: " + num(t.txns24) + " txns in 24h, short of a higher bar"
-        + (t.watch_reason ? " on " + t.watch_reason : "") + ".";
+    one = num(t.txns24) + " txns in 24h, short of a higher bar"
+        + (t.watch_reason ? " on " + t.watch_reason : "");
   } else if (t.tier === "SPECULATIVE"){
-    one = "SPECULATIVE: thin or new \u2014 " + usd(t.liq_usd) + " liquidity across "
-        + num(t.txns24) + " txns in 24h.";
+    one = "thin or new \u2014 " + usd(t.liq_usd) + " liquidity across "
+        + num(t.txns24) + " txns in 24h";
   } else if (t.tier === "DEAD"){
-    one = "DEAD: " + num(t.txns24) + " txns in the last 24 hours.";
+    one = num(t.txns24) + " txns in the last 24 hours";
   } else if (t.tier === "AVOID"){
-    one = "AVOID: listed by hand"
-        + (AVOID_REASON[t.ca] ? " \u2014 " + AVOID_REASON[t.ca] : "") + ".";
+    one = "listed by hand" + (AVOID_REASON[t.ca] ? " \u2014 " + AVOID_REASON[t.ca] : "");
   } else {
-    one = String(t.tier || "unclassified") + ".";
+    one = "";
   }
+  one = (t.tier ? tierLabel(t.tier) : "unclassified") + (one ? " \u00b7 " + one : "");
   if (t.flag_contradiction) f.push("contradiction");
   if (t.flag_liq_anomaly) f.push("liquidity anomaly");
-  if (f.length) one += " Flagged: " + f.join(" and ") + ".";
+  if (f.length) one += " \u00b7 Flagged: " + f.join(" and ");
 
+  var sgn = function(v, dp){
+    if (miss(v) || isNaN(v)) return "n/a";
+    return (Number(v) > 0 ? "+" : "") + pct(v, dp);
+  };
   var two, rms = t.recent_move_score;
-  if (rms === null || rms === undefined){
-    two = "No move score this run.";
+  if (miss(rms)){
+    two = "No move score this run";
   } else {
-    two = "Move score " + rms
-        + (t.recent_move_basis ? " on " + t.recent_move_basis : "")
-        + ": 6h " + pct(t.chg_h6, 1) + ", 24h " + pct(t.chg_h24, 1)
-        + (t.recent_move_accel_pct === null || t.recent_move_accel_pct === undefined
-            ? "" : ", buyer acceleration " + pct(t.recent_move_accel_pct, 1))
-        + ".";
-    if (Number(rms) >= MOVE_CAVEAT_AT){
-      two += " High move scores tended to come before worse 4-8 h returns in"
-           + " past data.";
-    }
+    two = "Heat " + (Number(rms) > 0 ? "+" : "") + rms
+        + " \u00b7 6h " + sgn(t.chg_h6, 1)
+        + (miss(t.recent_move_accel_pct) ? "" : " \u00b7 buyer rate " + sgn(t.recent_move_accel_pct, 1));
   }
   var box = el("div", "why");
-  box.appendChild(el("div", null, one));
-  box.appendChild(el("div", null, two));
+  box.appendChild(el("div", "w1", one));
+  box.appendChild(el("div", "w2", two));
+  if (t.recent_move_basis && t.recent_move_basis !== "price+accel"){
+    box.appendChild(el("div", "wb", t.recent_move_basis));
+  }
+  if (!miss(rms) && Number(rms) >= MOVE_CAVEAT_AT){
+    box.appendChild(el("div", "wc",
+      "\u26a0 High heat tended to precede worse 4-8h returns in past data."));
+  }
   return box;
 }
 
@@ -2043,45 +2082,60 @@ function renderTokens(){
     var xr = el("tr", "x");
     var xc = el("td");
     xc.colSpan = COLS.length;
-    xc.appendChild(whyLine(t));
-    xc.appendChild(kv([
-      ["healthy snapshots", t.persist_count === undefined || t.persist_count === null
-                              ? "n/a" : num(t.persist_count)],
-      ["age", t.age_days === null ? "n/a" : num(t.age_days, 1) + " d"],
-      ["liq", usd(t.liq_usd)],
-      ["liq/FDV", pct(t.liq_fdv_pct, 2)],
-      ["trades/trader", t.trades_per_trader === null ? "n/a" : num(t.trades_per_trader, 2)],
-      ["txns 24h", num(t.txns24)],
-      ["24h vol", usd(t.vol24_usd)],
-      ["buyers 24h", num(t.buyers24)],
-      ["6h", pct(t.chg_h6, 1), Number(t.chg_h6) < 0 ? "neg" : "pos"],
-      ["24h", pct(t.chg_h24, 1), Number(t.chg_h24) < 0 ? "neg" : "pos"],
-      ["move score", t.recent_move_score === null || t.recent_move_score === undefined
-        ? "n/a" : String(t.recent_move_score)],
-      ["venue", (t.main_dex || "n/a") + " \u00b7 " + feeBadge(t)]
-    ]));
+    var xp = el("div", "xp");
+    xp.appendChild(whyLine(t));
+    var nd = dupCount(t);
+    if (nd){
+      xp.appendChild(el("div", "wd warn-t",
+        nd + " other token" + (nd === 1 ? "" : "s") + " use this ticker \u2014 "
+        + "check the address below, not the name."));
+    }
+    var tiles = el("div", "xt");
+    [["LIQ / FDV", pct(t.liq_fdv_pct, 1)],
+     ["TXNS 24H", num(t.txns24)],
+     ["BUYERS 24H", num(t.buyers24)],
+     ["TRADES / TRADER", t.trades_per_trader === null || t.trades_per_trader === undefined
+                           ? "n/a" : num(t.trades_per_trader, 2)],
+     ["24H VOLUME", usd(t.vol24_usd)],
+     ["VENUE", t.main_dex || "n/a", feeBadge(t)]
+    ].forEach(function(p){
+      var c = el("div", "xtile");
+      c.appendChild(el("span", "xl", p[0]));
+      c.appendChild(el("b", null, p[1]));
+      if (p[2]) c.appendChild(el("span", "xs", p[2]));
+      tiles.appendChild(c);
+    });
+    xp.appendChild(tiles);
     /* distinct from the BUYERS chip: that one is the buy share of the last
        six hours of trades, this is the 24h buyer count across the last five
        snapshots. Both are kept because they answer different questions. */
     if (t.last5_byr24 && t.last5_byr24.length){
-      var bt = el("div", "reason");
-      bt.appendChild(el("span", "mo", "buyers 24h, last 5 snapshots"));
+      xp.appendChild(el("div", "xh", "BUYERS \u00b7 LAST 5 SNAPSHOTS"));
+      var bt = el("div", "xb");
       bt.appendChild(sparkSvg(t.last5_byr24));
-      bt.appendChild(el("span", null, " " + t.last5_byr24.join(" \u2192 ")));
-      xc.appendChild(bt);
+      bt.appendChild(el("span", null, t.last5_byr24.join("\u00a0\u2192 ")));
+      xp.appendChild(bt);
     }
-    if (t.recent_move_basis){
-      xc.appendChild(el("div", "reason", "move basis: " + t.recent_move_basis));
-    }
-    var nd = dupCount(t);
-    if (nd){
-      xc.appendChild(el("div", "reason warn-t",
-        nd + " other token" + (nd === 1 ? "" : "s") + " use this ticker \u2014 "
-        + "check the address below, not the name."));
-    }
-    var ar = addrRow(t.ca, t);
-    ar.insertBefore(pinBtn(t.ca), ar.firstChild.nextSibling.nextSibling);
-    xc.appendChild(ar);
+    /* the full address stays in the title, in the copy button and in the
+       data the search reads; only the display is shortened */
+    var xca = t.ca;
+    var ad = el("div", "xa");
+    var cd = el("code", null, xca.length > 14 ? xca.slice(0, 6) + "\u2026" + xca.slice(-5) : xca);
+    cd.title = xca;
+    ad.appendChild(cd);
+    ad.appendChild(copyBtn(xca));
+    xp.appendChild(ad);
+    var xpool = poolOf(t);
+    var bs = el("div", "xk");
+    bs.appendChild(pinBtn(xca));
+    bs.appendChild(linkBtn("DexScreener", dexUrl(xca, t),
+      xpool ? "DexScreener pool " + xpool : "Search DexScreener for " + xca));
+    bs.appendChild(linkBtn("Gecko", geckoUrl(xca, t),
+      xpool ? "GeckoTerminal pool " + xpool : "GeckoTerminal token " + xca));
+    bs.appendChild(linkBtn("X search", xUrl(xca),
+      "Search X for posts mentioning " + xca));
+    xp.appendChild(bs);
+    xc.appendChild(xp);
     xr.appendChild(xc);
 
     var toggle = function(){
