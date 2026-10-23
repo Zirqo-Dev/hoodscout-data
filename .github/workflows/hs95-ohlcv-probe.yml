@@ -1,0 +1,35 @@
+name: hs95-ohlcv-probe
+# HS-95 step 1. One-off, read-only: does GeckoTerminal serve hourly OHLCV for
+# pools whose tokens dropped off our lists? Run by hand (Actions -> Run
+# workflow). No secrets, no commit, no push; the JSON goes to an artifact.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hs95-ohlcv-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Probe
+        env:
+          OUT: ${{ runner.temp }}/ohlcv_probe.json
+        run: python analysis/hs95/ohlcv_probe.py --out "$OUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hs95-ohlcv-probe
+          path: ${{ runner.temp }}/ohlcv_probe.json
+          if-no-files-found: warn
