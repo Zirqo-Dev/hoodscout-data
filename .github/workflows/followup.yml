@@ -1,0 +1,49 @@
+name: followup
+# HS-95 step 2: follow-up watch (scripts/followup.py). Started by cron-job.org
+# via workflow_dispatch at 5 */3 * * * UTC; there is deliberately no GitHub
+# schedule (see collect.yml's header for why). No secrets: GeckoTerminal is
+# public. Writes and commits only data/followup/, so a rebase over the
+# collector's commits never touches the same files.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: followup
+  cancel-in-progress: false
+
+jobs:
+  followup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # main's tip at job start, as in collect.yml.
+          ref: main
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Follow-up watch
+        run: python scripts/followup.py
+      # Also after a failed run: followup.py writes what it fetched plus its
+      # meta before exiting non-zero, and that is worth keeping.
+      - name: Commit
+        if: success() || failure()
+        run: |
+          git config user.name "hoodscout-bot"
+          git config user.email "actions@github.com"
+          # Leftover .tmp files (a run killed mid-write) are never committed.
+          # In git's default pathspec mode * also matches /, so this covers
+          # every depth, including data/followup/enrolled.json.tmp.
+          git add -- data/followup ':(exclude)data/followup/*.tmp'
+          git diff --staged --quiet && exit 0
+          git commit -m "followup: $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            echo "push failed, retrying (attempt $i)"
+            sleep 5
+          done
+          echo "push failed after 3 attempts"; exit 1

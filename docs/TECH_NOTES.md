@@ -379,3 +379,28 @@ window that keeps recent snapshots whole and older ones summarised. Each
 trades something different away, and the measurement decides which trade is
 worth making. Note that compaction interacts with the as-of join: anything
 that rewrites older snapshots changes what a past evaluation would have seen.
+
+## Follow-up watch (HS-95)
+
+Purpose: keep observing tokens for 7 days after we first see them, so a
+future hypothesis is not blind to tokens that fall off our lists. Raw data
+only; `scripts/followup.py` computes no return, gap or outcome, and reads
+`data/history.jsonl` for `ts`, `ca` and `main_pool` only.
+
+- Population: a token is enrolled once it has 4+ distinct snapshot `ts`
+  (decided by Pete 2026-10-23) and its first_seen is within the last 7
+  days. `data/followup/enrolled.json` records ca, main_pool, first_seen and
+  enrolled_at; entries are frozen once written. The first run enrolled
+  tokens already mid-window, which their enrolled_at shows.
+- Schedule: `followup.yml`, workflow_dispatch only, started by cron-job.org
+  at `5 */3 * * *` UTC. No GitHub schedule.
+- Files: `watch/YYYY-MM-DD/HHMMSS.jsonl.gz` (multi-pool attributes verbatim
+  plus ca, pool, run ts, one line per token), `watch/.../HHMMSS.meta.json`
+  (process counts and pools not returned), `candles/<pool>.json` (hourly
+  OHLCV up to first_seen + 7 d + 1 h, verbatim, fetched once per pool).
+- Rate: 6 s between calls, 30 calls per run including the retry, watch
+  first and backfill (at most 8, oldest first) with what is left. The first
+  429 of a run waits 30 s and retries once; another 429 stops the run's calls.
+  A failed backfill is due again next run, never retried in a loop.
+
+data/followup is exploratory until a hypothesis that uses it is registered; nothing reads it into a report before then.
