@@ -685,6 +685,7 @@ e. **Earlier reports.** No file in `reports/` dated before the read contains an 
   - A pass reads: "BEST did not beat a scored-pile random pick by 1.0pp or more in median 6h net return, net of modelled costs." It never reads "no information" or "BEST is worthless": the design can reject an edge of at least 1.0pp, not every edge.
   - A fail reads: "BEST beat the scored pile by 1.0pp or more, sign held in at least 3 of 4 weeks." That is a pattern, not a signal (step 9).
 - Every verdict line carries:
+  - the words **"out-of-sample check of a backtest-tuned specification"**: the thresholds were set after the in-sample backtest, and interim numbers were seen before this protocol existed (caveats 1 and 2), so a pass or fail is not a clean pre-registered test. What may follow a pattern is set by the replication rule (step 9).
   - eff_n and tokens against the gates;
   - censoring against max_censored_pct;
   - fee-known share;
@@ -704,12 +705,22 @@ The report still shows every number. Evaluator code and the registry are unchang
 
 Stated in advance: the blind check on 2026-10-21 at 02:30Z had H-0002 at 54.1% against its cap of 25, so H-0002 will very likely be recorded inconclusive on 2026-11-09.
 
+#### 5b. Stability counted on more than four weeks
+
+Decided by Pete on 2026-10-26, blind, before the read.
+
+The registry says the sign must hold "in at least 3 of 4 weekly subperiods". evaluate.py instead counts at least 3 matching weeks among all usable weeks (30+ all-tier rows). The read will likely see 5 (a short W42 and a near-empty W46). The report's line "sign holds in 3 of 4" uses that count. The code stays frozen (step 8), so the registered wording is applied by hand:
+- If the report says the sign holds and more than 4 weeks are usable, take the 4 usable weeks with the most all-tier rows, from the report's Weeks table. On a tie, take the later week.
+- Read each of those weeks' signs from the Weekly subperiods table. If fewer than 3 of the 4 share the pooled metric's sign, the person records **inconclusive (instability)**.
+- This can only turn a stability-dependent verdict (an H-0001 fail or an H-0002 pass) into inconclusive. It never creates a pass or a fail. H-0003's clauses do not use stability.
+- With exactly 4 usable weeks, the evaluator's count already matches the registry and nothing changes.
+
 #### 6. Caveats, written before the read
 
 1. **Thresholds not chosen blind.** See the disclosure section.
 2. **Interim numbers were seen** on 2026-10-19 and 2026-10-20 (step 1).
-3. **Cost model.** The fee is known for only part of the rows (2026-10-21: H-0001 55%, H-0002 46%, H-0003 13%); the rest use the 1% fallback. H-0003's level clause (a) is therefore mostly a statement about the fallback. The fee sweep in the report shows the sensitivity.
-4. **Usable weeks.** They are counted on all-tier rows (30 per ISO week), not on the tested arm; the report shows the arm-own count beside it. W42 covers about 1.4 days from the 2026-10-18 13:30Z watermark, yet it weighs the same as a full week in the sign test.
+3. **Cost model.** The fee is known for only part of the rows; the rest use the 1% fallback. Share of population rows with `fee_source == "name"`, as `evaluate.py --blind` prints it, on 2026-10-26: H-0001 55.7%, H-0002 46.4%, H-0003 18.0%. The share drifts as rows accrue. The read quotes the report's own per-arm figures, which can differ from the population share. H-0003's level clause (a) is therefore mostly a statement about the fallback. The fee sweep in the report shows the sensitivity.
+4. **Usable weeks.** They are counted on all-tier rows (30 per ISO week), not on the tested arm; the report shows the arm-own count beside it. W42 covers about 1.4 days from the 2026-10-18 13:30Z watermark, yet it weighs the same as a full week in the sign test. Step 5b covers a read with more than 4 usable weeks.
 5. **Asymmetric burden.** For H-0001, a pass needs no stability and a fail needs 3 of 4 weeks. For H-0002, a fail needs no stability and a pass needs 3 of 4 weeks. The design keeps the null more easily than it rejects it, so a null is weak evidence of "no edge".
 6. **Pooled vs clustered.** The registered pooled median decides. The token-clustered statistic is shown beside it and never decides. A sign disagreement between the two goes in the verdict line.
 7. **Survivorship.** gone_unseen rows carry no return, so medians are over the rows that have one. Imputed -100% and flat-exit sensitivity is reported for H-0003 only.
