@@ -25,3 +25,20 @@ Standard library only. The simulation is seeded (20261028, 5000 reps per cell), 
 
 - The migration clause (data/log must agree) cannot be simulated here. history.jsonl has one liq series per token, so there is nothing to disagree with.
 - Censoring is not random in this file. history.jsonl only lists a token while it is on the collector's lists, so a dying token tends to stop printing and lands in "censored". The death rates here are mostly survivors' rates, and the report says how many censored tokens show a death signal anyway.
+
+## Option B: one pooled base rate (`pooled_rate.py`)
+
+Report-only. The result is in `pooled_rate.md`. It prints pooled totals only: no outcome is split, grouped or sorted by entry liquidity, tier or anything else, and no per-token row appears. The only per-arm figures are arm sizes. This keeps a future liquidity-split hypothesis blind.
+
+Reads `data/followup/enrolled.json`, `data/followup/watch/`, and only ts, ca, liq and price from `data/log` for enrolled tokens. Never data/holders.
+
+    python analysis/hs91/pooled_rate.py analysis/hs91/pooled_rate.md
+
+The output depends on the run time (enrolled_at before now) and on the data at that commit.
+
+Choices made by the script, beyond the rule in its docstring:
+- Watch points are the token's watch rows for its frozen main_pool, deduplicated on ts. A run that did not return the pool leaves no row. An unknown row (reserve not numeric) cannot be dead and breaks a run of two.
+- A missing or non-numeric price cannot trigger (P).
+- Deaths by clause: "L only" = only an L-L pair exists, "P only" = only a P-P pair, "both" = both exist, "mixed" = the only dead pairs mix one L point and one P point.
+- Sizing puts the arms at p -/+ |gap|/2 around a centre p. The suggestion uses the conservative centre (pooled + 10 pp), because the pooled rate rests on few deaths.
+- Pace projection: per-day enrolments since 2026-10-24 x the share of those passing the entry, liq and 96 h rules x (1 - pooled censored share), counted up to read date - 72 h, split by the eligible arm-size share.
