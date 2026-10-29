@@ -47,6 +47,6 @@ Projection = evaluable today + per-day rate x pass share x (1 - censored share) 
 | 2026-12-14 (Mon) | 260 | 190 | 70 |
 | 2027-01-11 (Mon) | 411 | 301 | 111 |
 
-## 6. Suggestion for Pete (not a decision)
+## 6. Suggestion for the owner (not a decision)
 
-SUGGESTION (for Pete, not a decision): size for a -15 pp gap: min 92 evaluable tokens per arm, read on 2027-01-11; sized at the conservative centre 21.5% (pooled + 10 pp), where the one-sided 0.05 cutoff at that n is a gap <= -10.0 pp.
+SUGGESTION (for the owner, not a decision): size for a -15 pp gap: min 92 evaluable tokens per arm, read on 2027-01-11; sized at the conservative centre 21.5% (pooled + 10 pp), where the one-sided 0.05 cutoff at that n is a gap <= -10.0 pp.

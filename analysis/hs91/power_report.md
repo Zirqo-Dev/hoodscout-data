@@ -51,7 +51,7 @@ WARNING: the < 50k pool has 19 evaluable tokens and 0 deaths. Resampling it at n
 | 200 | -15 | 0.0% | 0.0% | +5.0 / +8.0 / +11.5 |
 | 200 | -20 | 0.0% | 0.0% | +5.0 / +8.0 / +11.5 |
 
-## 5. Suggestion for Pete (not a decision)
+## 5. Suggestion for the owner (not a decision)
 
 Rule used: smallest n with false alarm <= 5% and detection >= 80%; ties go to the stricter (more negative) threshold.
-SUGGESTION (for Pete, not a decision): do not set a threshold or min n from this data. The in-sample gap is +8.2 pp, above every tested threshold (the >= 50k arm dies MORE, not less), the < 50k arm has only 19 evaluable tokens, and most tokens are censored because history stops printing them. History alone cannot size this candidate.
+SUGGESTION (for the owner, not a decision): do not set a threshold or min n from this data. The in-sample gap is +8.2 pp, above every tested threshold (the >= 50k arm dies MORE, not less), the < 50k arm has only 19 evaluable tokens, and most tokens are censored because history stops printing them. History alone cannot size this candidate.

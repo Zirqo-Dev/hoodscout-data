@@ -282,23 +282,23 @@ def report(recs, src_desc):
 
     # 5. suggestion
     ok = [(n, t) for (n, t), (fa, det) in res.items() if fa <= FA_MAX and det >= DET_MIN]
-    w("## 5. Suggestion for Pete (not a decision)")
+    w("## 5. Suggestion for the owner (not a decision)")
     w("")
     w(f"Rule used: smallest n with false alarm <= {FA_MAX:.0%} and detection >= "
       f"{DET_MIN:.0%}; ties go to the stricter (more negative) threshold.")
     if obs_gap > max(THRESHOLDS):
-        line = (f"SUGGESTION (for Pete, not a decision): do not set a threshold or min n "
+        line = (f"SUGGESTION (for the owner, not a decision): do not set a threshold or min n "
                 f"from this data. The in-sample gap is {obs_gap:+.1f} pp, above every "
                 f"tested threshold (the >= 50k arm dies MORE, not less), the < 50k arm has "
                 f"only {len(bl)} evaluable tokens, and most tokens are censored because "
                 f"history stops printing them. History alone cannot size this candidate.")
     elif ok:
         n, t = min(ok, key=lambda x: (x[0], x[1]))
-        line = (f"SUGGESTION (for Pete, not a decision): threshold {t} pp, min {n} "
+        line = (f"SUGGESTION (for the owner, not a decision): threshold {t} pp, min {n} "
                 f"evaluable tokens per arm (false alarm {pct(res[(n, t)][0])}, "
                 f"detection {pct(res[(n, t)][1])} if the in-sample gap is real).")
     else:
-        line = (f"SUGGESTION (for Pete, not a decision): no tested threshold/n pair meets "
+        line = (f"SUGGESTION (for the owner, not a decision): no tested threshold/n pair meets "
                 f"false alarm <= {FA_MAX:.0%} and detection >= {DET_MIN:.0%}; the "
                 f"candidate as stated looks underpowered on this data.")
     w(line)

@@ -344,7 +344,7 @@ def report(now, c, reasons, clauses, arms, shape, latest):
         proj[d] = (total, h, total - h)
         w(f"| {d.date()} (Mon) | {total:.0f} | {h:.0f} | {total - h:.0f} |")
     w("")
-    w("## 6. Suggestion for Pete (not a decision)")
+    w("## 6. Suggestion for the owner (not a decision)")
     w("")
     w(line(p + .10 if p is not None else None, need, proj))
     return "\n".join(L) + "\n"
@@ -355,7 +355,7 @@ def line(p, need, proj):
     at one of READ_DATES, at the earliest such date. Called with the
     conservative centre (pooled + 10 pp) and its n, since the pooled rate
     rests on few deaths."""
-    head = "SUGGESTION (for Pete, not a decision): "
+    head = "SUGGESTION (for the owner, not a decision): "
     if p is None or not need:
         return head + "no evaluable tokens yet; no threshold, min n or read date can be sized."
     for g in sorted(GAPS, key=abs):
