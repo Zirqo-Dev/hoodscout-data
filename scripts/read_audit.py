@@ -57,7 +57,7 @@ PREP_DENY = {
     "render_reporting", "print_blind", "process_metrics",
 }
 PREP_STOPS = ("evaluate", "evaluate_full")
-# Pete, 2026-10-23: why 3c-bis runs by default.
+# The owner, 2026-10-23: why 3c-bis runs by default.
 PREP_JUSTIFICATION = (
     "Prep computes per-row baselines exactly as evaluate.py --blind does; "
     "nothing is printed, output goes to os.devnull, only counts and SHA-256 "
@@ -327,7 +327,7 @@ def prep_computes(src):
     same module, written 'helper -> call'. reached is False when main() calls
     no stop name at all, which no run can work around.
 
-    Pete's call, 2026-10-23: this listing is INFO. Prep computes per-row
+    The owner's call, 2026-10-23: this listing is INFO. Prep computes per-row
     baselines whichever version runs it, which is what makes the two
     comparable in the first place.
     """

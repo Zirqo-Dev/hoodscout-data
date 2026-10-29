@@ -9,4 +9,4 @@ This file is a pointer, not a task list.
   its gates and its append-only rules.
 
 Standing rule: no self-adapting algo. Learning happens only through
-pre-registered hypotheses that Pete approves.
+pre-registered hypotheses that the owner approves.

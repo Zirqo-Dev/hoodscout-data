@@ -646,7 +646,7 @@ say so explicitly when they do not.
 
 ### Layer 3d: reading a hypothesis
 
-This protocol governs H-0001, H-0002 and H-0003, read once on Monday 2026-11-09. It applies to every later hypothesis unless its registration says otherwise. Decided by Pete on 2026-10-20 and 2026-10-21, before any read.
+This protocol governs H-0001, H-0002 and H-0003, read once on Monday 2026-11-09. It applies to every later hypothesis unless its registration says otherwise. Decided by the owner on 2026-10-20 and 2026-10-21, before any read.
 
 #### 1. Blind until the read date
 
@@ -707,7 +707,7 @@ Stated in advance: the blind check on 2026-10-21 at 02:30Z had H-0002 at 54.1% a
 
 #### 5b. Stability counted on more than four weeks
 
-Decided by Pete on 2026-10-26, blind, before the read.
+Decided by the owner on 2026-10-26, blind, before the read.
 
 The registry says the sign must hold "in at least 3 of 4 weekly subperiods". evaluate.py instead counts at least 3 matching weeks among all usable weeks (30+ all-tier rows). The read will likely see 5 (a short W42 and a near-empty W46). The report's line "sign holds in 3 of 4" uses that count. The code stays frozen (step 8), so the registered wording is applied by hand:
 - If the report says the sign holds and more than 4 weeks are usable, take the 4 usable weeks with the most all-tier rows, from the report's Weeks table. On a tie, take the later week.

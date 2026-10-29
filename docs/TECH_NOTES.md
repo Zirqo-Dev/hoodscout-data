@@ -278,7 +278,7 @@ A "self-adapting algo" is **explicitly rejected** for this project. It is not
 a thing to get to later; it is the thing this design is built against.
 
 Learning happens one way: a hypothesis is written down before the data that
-tests it, Pete approves it, and it is registered in `data/hypotheses.jsonl`
+tests it, the owner approves it, and it is registered in `data/hypotheses.jsonl`
 with its own pass, fail and inconclusive conditions. Anything that changes a
 threshold without passing through that step is a bug, not a feature.
 
@@ -304,7 +304,7 @@ attached.
   boosts may be **logged as a separate raw annotation** — for example, to
   separate paid attention from organic attention in Layer 2 — and must **never
   feed tier logic or act as a signal** unless a pre-registered hypothesis that
-  Pete approved says so. The risk is using the flag as a predictor, not writing
+  the owner approved says so. The risk is using the flag as a predictor, not writing
   it down.
   Decided 2026-10-19 (HS-48): deferred, log-only.
 - **DexPaprika as a backup source** — deferred for the same reason as the
@@ -388,7 +388,7 @@ only; `scripts/followup.py` computes no return, gap or outcome, and reads
 `data/history.jsonl` for `ts`, `ca` and `main_pool` only.
 
 - Population: a token is enrolled once it has 4+ distinct snapshot `ts`
-  (decided by Pete 2026-10-23) and its first_seen is within the last 7
+  (decided by the owner 2026-10-23) and its first_seen is within the last 7
   days. `data/followup/enrolled.json` records ca, main_pool, first_seen and
   enrolled_at; entries are frozen once written. The first run enrolled
   tokens already mid-window, which their enrolled_at shows.

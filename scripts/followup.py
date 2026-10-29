@@ -37,7 +37,7 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 HISTORY = os.path.join(ROOT, "data", "history.jsonl")
 FOLLOWUP = os.path.join(ROOT, "data", "followup")
 
-MIN_SNAPSHOTS = 4                  # decided by Pete 2026-10-23
+MIN_SNAPSHOTS = 4                  # decided by the owner 2026-10-23
 WINDOW = timedelta(days=7)
 BACKFILL_DELAY = timedelta(hours=1)
 BATCH = 20
