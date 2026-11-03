@@ -729,6 +729,31 @@ The registry says the sign must hold "in at least 3 of 4 weekly subperiods". eva
 10. **Slippage** is modelled, not traded.
 11. **Gates beyond the clauses.** The evaluator also decides with two gates the registry clauses do not mention: the fee-sweep bound, and the known-fee-only re-run, which makes a verdict inconclusive if it flips it after meeting its own gates. Both were committed 2026-10-18 between 14:09Z and 15:05Z, after registration but before any post-watermark outcome existed, and are frozen with the rest of the decision path. The verdict line says which gate fired.
 
+#### 6b. Decision map, written before the read
+
+Written 2026-11-02 and approved by the owner the same day, blind: from the registered clauses only, with no outcome number seen by its author. It says what a trading desk does with each verdict. It never changes a verdict; steps 4, 5 and 5b decide those.
+
+Applies to every row:
+- No verdict is a trade. A pattern needs a confirmation hypothesis first (step 9).
+- All three compare a fixed 6h hold with a random pick, net of modelled costs. The scored pile's own median is about -4.2pp after costs (pre-log backtest, H-0003 registry notes), so beating the pile is not profit.
+- Inconclusive means change nothing.
+
+H-0001 (BEST, displayed PERSISTENT, vs the scored pile):
+- Pass: BEST is not used as an entry signal for 6h holds. It stays a display label. The verdict says nothing about longer holds or exit rules.
+- Fail: register the confirmation. At most, BEST becomes a candidate pile for an exit-rule hypothesis, never a buy list.
+- Inconclusive: no change.
+
+H-0002 (recent_move_score +4 or more vs -4 or less):
+- Inconclusive (censoring, step 5; expected): no information on 6h reversion or momentum. Momentum questions move to data/followup, which keeps tracking tokens after they leave the lists.
+- Pass: do not chase high-score movers for 6h holds. Confirmation first.
+- Fail: chasing movers is neither ruled out nor supported. The heat word stays display-only, never a buy cue.
+
+H-0003 (EMERGING lottery shape):
+- Pass: never hold EMERGING to a fixed 6h. The only possible desk use is a take-profit exit that harvests the tail, as a new hypothesis plus its confirmation.
+- Fail on clause (c): no tail to harvest; EMERGING is dropped as a candidate pile.
+- Fail on (a) or (b) only: weak, because the level leans on the 1% fee fallback (caveat 3).
+- Inconclusive: no change.
+
 #### 7. If H-0003 is not ready at the pinned commit
 
 evaluate.py computes a hypothesis's metric before it checks the gates, so an unblinded run prints H-0003's numbers even while it is waiting.
