@@ -1158,3 +1158,28 @@ The natural second commit is the labeler, because the log is worth nothing
 unlabeled. The natural third is the hypotheses file, before anyone looks at the
 labels. Layer 2 comes after all three, and only once someone has read xAI's real
 documentation.
+
+## Results
+
+### Read of 2026-11-09 (Layer 3d)
+
+Pin a782e6e5 (data/latest.json generated_at 2026-11-09T07:00:31Z). Audit: reports/2026-11-09-audit.md, commit 8cba7b41, TOTAL PASS. One unblinded run: reports/eval-2026-11-09-76a3c450.md and reports/2026-11-09-evaluate-stdout.txt, commit c10eb6ec. Evaluator 76a3c450d426; labeler 3ba1b3524df9 against registered 17e925eec190, a mismatch covered by HS-40 and by label_equiv (0 differences in 291,428 rows at the pin). Statuses set by a person under steps 4, 5 and 5b, approved by the owner on 2026-11-09. The registry is unchanged.
+
+| id | read date | status | report | commit |
+|---|---|---|---|---|
+| H-0001 | 2026-11-09 | inconclusive (fee) | reports/eval-2026-11-09-76a3c450.md | c10eb6ec |
+| H-0002 | 2026-11-09 | inconclusive (censoring) | reports/eval-2026-11-09-76a3c450.md | c10eb6ec |
+| H-0003 | 2026-11-09 | pass | reports/eval-2026-11-09-76a3c450.md | c10eb6ec |
+
+Every verdict below is an out-of-sample check of a backtest-tuned specification (caveats 1 and 2; see the thresholds-not-blind disclosure).
+
+- H-0001, inconclusive (fee). No registered clause decided it: the evaluator's two fee gates fired (caveat 11). The headline gap of +0.66pp is under the +1.0pp pass bar, but the known-fee-only re-run gives +1.84pp, a fail with its own gate met (eff_n 917 of 300), and the fee sweep turns to fail at an assumed 1.9%. eff_n 1966/300, tokens 97/25. Censoring 4.7% against a cap of 20. Fee known 47.9%. Usable weeks 5 all-tier, 4 arm-own. Pooled +0.66pp and token-weighted -1.47pp disagree in sign. Step 5b does not apply (not a fail). Reporting only: the gross gap is +0.01pp, so the net gap comes almost entirely from lower modelled costs.
+- H-0002, inconclusive (censoring). The evaluator's status was pass: "the gap is at or below -1.0pp AND holds that sign in at least 3 of 4 weekly subperiods", at -4.42pp, unchanged at every assumed fee and in the known-fee-only re-run. Step 5: the gone_unseen share over both arms is 50.9% (18,414 rows at 52.4% and 12,223 at 48.7%), above the registered cap of 25, so the person records inconclusive (censoring) whatever clause fired. eff_n 2204/150 on the smaller arm, tokens 217/25. Fee known 59.0% and 20.0% by arm. Usable weeks 5 all-tier, 5 arm-own. Pooled and token-weighted agree in sign. Step 5b was not reached; for the record, the 4 weeks with the most all-tier rows (W42 to W45) all share the pooled sign.
+- H-0003, pass. All three registered clauses hold: (a) median -13.12pp, at or below -5.0pp; (b) -10.59pp against the scored baseline, at least 3.0pp below; (c) mean above median by +3294.38pp, at least +5.0pp. eff_n 142/100, tokens 69/20. Censoring 32.3% against a cap of 50. Fee known 14.7%, so clause (a)'s level leans on the 1% fallback (caveat 3); the fee sweep gives pass at every assumed fee. Usable weeks 5 all-tier, 3 arm-own; its clauses do not use stability. Pooled -10.59pp and token-weighted -11.51pp agree in sign. The known-fee-only re-run (inconclusive) is below its own gate (eff_n 13 of 100), so it is reported, not gated on. Reporting only: the gross gap is -4.17pp, and the size of clause (c) points to a few extreme rows, not examined at the read.
+
+Decision map (step 6b):
+- H-0001: no change. BEST stays a display label.
+- H-0002: no information on 6h reversion or momentum. Momentum questions move to data/followup.
+- H-0003: never hold EMERGING to a fixed 6h. The only possible desk use is a take-profit exit that harvests the tail, as a new hypothesis plus its confirmation.
+
+Replication (step 9): the H-0003 pass gets a confirmation hypothesis (same population, metric, thresholds and clauses, a new watermark, its own read date fixed at registration). Nothing trades.
