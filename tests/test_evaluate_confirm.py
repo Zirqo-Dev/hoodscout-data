@@ -3,8 +3,9 @@
 The decision tests use the seeded synthetic labels in tests/synth_labels.py and
 never read data/. The registry tests at the bottom are the one approved
 exception to conftest.py's rule: they read data/hypotheses.jsonl, whose lines
-are append-only, to pin H-0001..H-0008 byte for byte and to check that H-0009
-copies H-0003's frozen fields.
+are append-only, to pin H-0001..H-0009 byte for byte, to check that H-0009
+copies H-0003's frozen fields, and that H-0010 changes only the listed fields
+of H-0008, the line it supersedes.
 """
 import argparse
 import contextlib
@@ -231,3 +232,77 @@ def test_h0009_line():
     assert h["log_watermark"] < h["registered"]
     assert re.fullmatch(r"[0-9a-f]{40}", h["labeler_version"])
     C.as_confirmed(h, [json.loads(l) for l in _lines()])   # does not raise
+
+
+# sha256 of lines 1-9 and their newlines, as they stood before H-0010 was
+# appended (main 1025669d)
+LINES_1_9_SHA256 = ("c2e2469f04683520f57ba0ef9cd320f9ef9832b90154cd8c4b1e431c"
+                    "19b77bb4")
+H10_CHANGED = ("registered", "log_watermark", "labeler_version", "id",
+               "supersedes", "statement", "population", "notes")
+H10_PARA = (
+    "SUPERSEDES H-0008 before anything was evaluated (no evaluator exists, no "
+    "outcome seen). Clause (b) was unreachable with a 30-min entry window: "
+    "95/142 = 66.9% on 2026-11-10 (counts only, by an external review and by "
+    "Claude Code, independently; the pre-registration file had shown 77/153). "
+    "Enrolment runs every 3 h, so the window is set to 180 min to match that "
+    "cycle, not fitted to the 120-min minimum. The population start stays at "
+    "H-0008's watermark because nobody has seen an H-0008 outcome; this is "
+    "disclosed as a predictor-side change after registration. Trade-off: the "
+    "entry row can be up to 3 h older than enrolment. Coverage counts at "
+    "30/60/90/120/180 min (66.9/70.4/75.4/82.4/100%) were seen before this "
+    "line; no death rate, gap or watch outcome was.")
+
+
+def _h8_name(h8):
+    """The name line 8 uses, read from line 8 itself so this file never
+    carries it."""
+    return re.search(r"at (\w+)'s holding horizon", h8["statement"]).group(1)
+
+
+def test_lines_1_to_9_are_byte_identical():
+    assert hashlib.sha256(b"".join(_lines()[:9])).hexdigest() == \
+        LINES_1_9_SHA256
+
+
+def test_h0010_line():
+    raw = _lines()[9]
+    h = json.loads(raw)
+    h8 = json.loads(_lines()[7])
+    assert h["id"] == "H-0010" and h8["id"] == "H-0008"
+    assert raw == (json.dumps(h, separators=(",", ":")) + "\n").encode()
+    order = list(h8)
+    i = order.index("id") + 1
+    assert list(h) == order[:i] + ["supersedes"] + order[i:]
+    h7 = json.loads(_lines()[6])
+    assert list(h7).index("supersedes") == list(h7).index("id") + 1
+    for k in h8:
+        if k not in H10_CHANGED:
+            assert h[k] == h8[k], k
+    assert h["supersedes"] == "H-0008"
+    assert h["log_watermark"] < h["registered"]
+    assert h["registered"] > h8["registered"]
+    assert h["labeler_version"] == "3ba1b3524df9d1412ad530e5c35768a9ee92c0ef"
+    name = _h8_name(h8)
+    assert h["statement"] == h8["statement"].replace(
+        f"at {name}'s holding horizon of days",
+        "at the owner's holding horizon of days")
+    assert h["population"] == h8["population"].replace(
+        "with enrolled_at > log_watermark and",
+        "with enrolled_at > 2026-10-28T17:30:26.797920+00:00 (H-0008's "
+        "watermark, kept on purpose; see notes) and").replace(
+        "enrolled_at - 30 min <= ts <= enrolled_at",
+        "enrolled_at - 180 min <= ts <= enrolled_at")
+    assert h8["log_watermark"] in h["population"]
+    assert h["notes"] == H10_PARA + " " + h8["notes"].replace(name,
+                                                              "the owner")
+
+
+def test_h0010_has_no_owner_name():
+    name = _h8_name(json.loads(_lines()[7]))
+    assert name.lower() not in _lines()[9].decode().lower()
+
+
+def test_h0010_supersedes_h0008_in_the_registry():
+    hyps = [json.loads(l) for l in _lines()]
+    assert E.superseded_map(hyps).get("H-0008") == "H-0010"
