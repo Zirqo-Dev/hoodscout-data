@@ -782,6 +782,8 @@ A result that supports a usable pattern is not a signal. "Supports a pattern" me
 - **Failed confirmation.** It retires the pattern. No third try with tweaks; a changed rule is a new hypothesis.
 - **Inconclusive confirmation.** It keeps the pattern out of Layer 4 but does not retire it. The confirmation hypothesis keeps waiting until its own stop_by.
 
+H-0009 reading rule (pre-declared 2026-11-10, before any H-0009 outcome exists): at the H-0009 read, the report lists every population row whose exit log row comes from a different pool than its entry row, and every row above +900% net, and recomputes each clause without the pool-switch rows. If H-0009 passes but the pass does not survive removing the pool-switch rows, the person records INCONCLUSIVE (data quality: exit print from another pool). This can only move a pass to inconclusive; it never creates a pass or a fail.
+
 #### 10. Recording the verdict
 
 The evaluator never writes the registry. A verdict is recorded in three places:
@@ -1183,3 +1185,7 @@ Decision map (step 6b):
 - H-0003: never hold EMERGING to a fixed 6h. The only possible desk use is a take-profit exit that harvests the tail, as a new hypothesis plus its confirmation.
 
 Replication (step 9): the H-0003 pass gets a confirmation hypothesis (same population, metric, thresholds and clauses, a new watermark, its own read date fixed at registration). Nothing trades.
+
+### Post-read correction, 2026-11-10 (H-0003)
+
+An external review found that H-0003's clause (c) rests on one row: token 0x8fc98b871678f9749d17d968a476386f2da6f831 entered at 2026-10-27T20:00Z at 3.78e-05 in its main pool (liquidity about 16.7K USD); its 6h exit row (2026-10-28T02:30Z) came from a different pool with 0.24 USD liquidity and 1 transaction, at 0.538. Recomputed at the pin (analysis/h0003-poolswitch/; population rows removed, baseline peers unchanged): clause (c) is -2.04pp without that row and +2.31pp without all 23 pool-switch rows, against +3294.38pp as read; (a) and (b) become -13.17pp and -10.63pp without that row, and -11.57pp and -9.03pp without all 23. Counting priced exits (ok/thin) only, 16 of the 23 rows switch pool; without those 16, clause (c) is +0.79pp, (a) -12.24pp and (b) -9.69pp. The verdict stays as recorded under this protocol, because the clauses were applied as registered. But this read does NOT support the lottery shape: there is no evidence of a tradable tail, and the take-profit tail-harvest idea in step 6b is dropped. 'Never hold EMERGING to a fixed 6h' rests on clauses (a) and (b) only; the gross median is -4.65pp, so clause (a) is mostly modelled cost. Root cause: label.py prices an exit from whichever pool the collector logged. The labeler is frozen, so this is disclosed, not changed.

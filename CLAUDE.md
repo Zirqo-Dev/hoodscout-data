@@ -23,7 +23,7 @@ This repo is PUBLIC. Everything in it, including data/, is world-readable.
 
 ## Evidence layer
 - data/hypotheses.jsonl is append-only. Never edit or delete an existing line. A change is a new line that supersedes the old one, and only before anything has been evaluated against it.
-- Never register or change a hypothesis without the owner's explicit approval. After any registration, run scripts/evaluate.py --blind and confirm it does not crash. Never run --unblind or --report before the 2026-11-09 read.
+- Never register or change a hypothesis without the owner's explicit approval. After any registration, run scripts/evaluate.py --blind and confirm it does not crash. evaluate.py --unblind / --report and label.py --summary are forbidden on current data until 2026-12-07T07:00Z, because H-0003's population now includes H-0009's rows; unblinded H-0003 checks run only in a worktree at the read pin a782e6e5. evaluate_confirm.py and evaluate_holders.py enforce their own read locks.
 - No self-adapting logic. Thresholds change only through a new pre-registered hypothesis that the owner approves.
 - Before a hypothesis's read date, never run label.py --summary or any script that prints a return. Blind process metrics only.
 - Freeze rule: once an evaluator join exists for a hypothesis, never change its rule, exclusions, thresholds, population or deciding statistic. Any such change is a new hypothesis the owner must approve. Bug fixes must be shown verdict-neutral (AST-identical decision path or identical blind outputs).
