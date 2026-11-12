@@ -1,0 +1,71 @@
+HS-121 clause shares against registered floors and caps (counts and fractions only)
+
+H-0007 (from scripts/evaluate_holders.py):
+  join coverage: 31246/31254 = 1.000  | floor 0.60
+  top-arm tie-break entries: second key 0, third key 0, of 8921 top-arm rows  | cap 0.25 of the top arm
+  counted snapshots per selected week: 2026-W43 48, 2026-W44 56, 2026-W45 43, 2026-W46 25  | floor 3 per week
+  arm top eff_n: 1706  | min_eff_n 300
+  arm top tokens: 113  | min_n_tokens 25
+  arm rest eff_n: 4114  | min_eff_n 300
+  arm rest tokens: 339  | min_n_tokens 25
+  gone_unseen share, both arms: 0.082  | max_censored 0.20
+  gone_unseen share, each arm: not available  | max_censored 0.20
+
+H-0009 (from scripts/evaluate_confirm.py):
+  eff_n: 3  | min_eff_n 100
+  tokens: 3  | min_n_tokens 20
+  gone_unseen share: 0.741  | max_censored 0.50
+
+H-0010: evaluator not built (HS-91)
+
+generated: 2026-11-12T16:44:46Z
+HEAD: c985059f86755b8bce0f26e5923ee4f996d722bb
+
+===== python scripts/evaluate.py --blind
+exit code: 0
+stderr: 0 lines (not shown)
+----- stdout
+evaluator 76a3c450d426  labeler 3ba1b3524df9  log 343031 rows  pile scored
+blind run: counts and coverage only; --unblind prints the decision outputs
+  H-0001  rows 84745  eff_n 2260/300  tokens 103/25  weeks 5/4 all-tier, 5/4 on arm rows
+          population rows 11447  gone_unseen share 0.046  fee_source=name share 0.484
+          cumulative eff_n by day, last 7 UTC days: 2026-11-06 1784, 2026-11-07 1869, 2026-11-08 1952, 2026-11-09 2031, 2026-11-10 2120, 2026-11-11 2214, 2026-11-12 2260
+  H-0002  rows 84745  eff_n 2563/150  tokens 248/25  weeks 5/4 all-tier, 5/4 on arm rows
+          population rows 35589  gone_unseen share 0.506  fee_source=name share 0.440
+          cumulative eff_n by day, last 7 UTC days: 2026-11-06 4095, 2026-11-07 4336, 2026-11-08 4578, 2026-11-09 4825, 2026-11-10 5048, 2026-11-11 5224, 2026-11-12 5318
+  H-0003  rows 84745  eff_n 153/100  tokens 76/20  weeks 5/4 all-tier, 4/4 on arm rows
+          population rows 514  gone_unseen share 0.350  fee_source=name share 0.161
+          cumulative eff_n by day, last 7 UTC days: 2026-11-05 125, 2026-11-06 132, 2026-11-07 137, 2026-11-08 141, 2026-11-09 145, 2026-11-10 150, 2026-11-11 153
+  H-0004  rows 0
+  H-0005  rows 0
+  H-0006  rows 0
+  H-0007  rows 74513
+  H-0008  rows 0
+  H-0009  rows 6774
+  H-0010  rows 0
+
+===== python scripts/evaluate_confirm.py
+exit code: 0
+stderr: 0 lines (not shown)
+----- stdout
+evaluator 76a3c450d426  wrap 075658b1ff84  labeler 3ba1b3524df9  log 343031 rows  pile scored
+confirming: H-0009 -> H-0003 since 2026-11-10T12:30:29Z
+blind run: counts and coverage only; --unblind prints the decision outputs
+  H-0009  rows 6774  eff_n 3/100  tokens 3/20  weeks 1/4 all-tier, 0/4 on arm rows
+          population rows 27  gone_unseen share 0.741  fee_source=name share 0.444
+          cumulative eff_n by day, last 7 UTC days: 2026-11-11 3
+
+===== python scripts/evaluate_holders.py
+exit code: 0
+stderr: 0 lines (not shown)
+----- stdout
+evaluator 261bb98bb41e  labeler 3ba1b3524df9  log 343031 rows  pile scored
+blind run: counts and coverage only; --unblind prints the decision outputs
+  H-0007  label rows 74513  population 31254  joined 31246  join coverage 31246/31254 = 1.000
+          drops by reason: sanity 1, probe 7, balance 0, units 0  (duplicate ca rows ignored 0)
+          snapshots: counted 172, below floor 19, no sidecar 0, no completion time 0
+          arm top  rows 8921  eff_n 1706/300  tokens 113/25
+          arm rest rows 22325  eff_n 4114/300  tokens 339/25
+          top-arm rows entered on a tie-break: second key 0, third key 0, of 8921
+          usable weeks 4; selected: 2026-W43 (6660 rows, 48 counted snapshots), 2026-W44 (11155 rows, 56 counted snapshots), 2026-W45 (8942 rows, 43 counted snapshots), 2026-W46 (4489 rows, 25 counted snapshots)
+          gone_unseen share, both arms together 0.082
