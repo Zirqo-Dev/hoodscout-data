@@ -1,0 +1,62 @@
+name: blind-status
+# HS-107 + HS-121. Weekly blind counts, written to status/blind_latest.txt by
+# scripts/blind_status.py. That script runs the three evaluators in their
+# default blind mode and nothing else; see its docstring for the tripwire.
+#
+# The schedule is early on purpose: GitHub's cron fires run 2.5 to 6 hours
+# late, so Mon 03:20Z usually lands Monday morning UTC. A missed fire costs
+# one week of a status file, nothing more, so this one stays on GitHub's
+# scheduler rather than cron-job.org.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 3 * * 1"
+
+# It commits one file. No secrets anywhere in this file.
+permissions:
+  contents: write
+
+concurrency:
+  group: blind-status
+  cancel-in-progress: false
+
+jobs:
+  blind-status:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # main's tip at job start, as the collectors do
+          ref: main
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      # No install step: the evaluators and this script are standard library
+      # only.
+      - name: Blind status
+        id: run
+        run: |
+          rc=0
+          python scripts/blind_status.py || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add status/blind_latest.txt
+          git diff --staged --quiet && { echo "no change"; exit 0; }
+          git commit -q -m "status: blind counts $(date -u +%Y-%m-%dT%H:%MZ)"
+          git pull --rebase && git push && exit 0
+          echo "push rejected, one retry"
+          git rebase --abort 2>/dev/null || true
+          git pull --rebase && git push && exit 0
+          # fail soft: the next weekly run writes the file again
+          echo "::warning::push failed after one retry; status file not updated"
+      - name: Tripwire result
+        env:
+          RC: ${{ steps.run.outputs.rc }}
+        run: |
+          # 3 = a tripwire hit (file still written and committed above).
+          # Any other non-zero code is the script itself failing.
+          if [ "$RC" != "0" ]; then echo "blind_status.py exited $RC"; exit "$RC"; fi
