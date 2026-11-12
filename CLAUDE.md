@@ -5,6 +5,7 @@ This repo is PUBLIC. Everything in it, including data/, is world-readable.
 ## Roles
 - The owner decides. Claude chat reviews and writes prompts. You are the only writer.
 - Never write the owner's name, handles, emails or wallets into this repo; say 'the owner'.
+- Claude Code commits use the identity Claude <noreply@anthropic.com>, never github-actions[bot] or any other bot identity; bot identities are for workflows only.
 - The task list is the Notion "HoodScout Board" (HS-n IDs). Do not add task lists to repo files; BACKLOG.md is only a pointer. Report new tasks to the owner in your report.
 
 ## Git rules
