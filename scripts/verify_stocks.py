@@ -6,7 +6,10 @@ challenge that no scripted client can pass, so authenticity is established from
 the chain instead: the on-chain name must carry the Robinhood Token suffix, and
 the deployed bytecode must match the known-good reference contracts. A ticker
 squatter can copy a name and a logo; matching the deployed runtime bytecode of
-the real token is a considerably higher bar.
+the real token is a considerably higher bar. This is a structural match, not
+proof of official issuance.
+
+Exit code 2 means the reference control failed and no verdict is usable.
 
 Usage: python scripts/verify_stocks.py NVDA SPCX MSTR GME
 """
@@ -361,7 +364,7 @@ def main():
     tickers = [a for a in sys.argv[1:] if not a.startswith("-")]
     if not tickers:
         print("usage: verify_stocks.py TICKER [TICKER ...]")
-        return
+        return 0
 
     print("=== reference contracts ===")
     ref_codes = {}
@@ -372,10 +375,14 @@ def main():
               f"sha256 {hashlib.sha256(code.encode()).hexdigest()[:16]}  "
               f"name={decode_string(call(ca, SEL_NAME))!r}")
     syms = list(ref_codes)
+    control_ok = (all(ref_codes[s] for s in syms)
+                  and ref_codes[syms[0]] == ref_codes[syms[1]])
     print(f"  CONTROL {syms[0]} vs {syms[1]}: exact={ref_codes[syms[0]] == ref_codes[syms[1]]} "
           f"similarity={similarity(ref_codes[syms[0]], ref_codes[syms[1]])}%")
     print("  (if the two known-good contracts do not match each other, the")
     print("   bytecode test cannot distinguish anything and must be discarded)")
+    if not control_ok:
+        print("  REFERENCE CONTROL FAILED: bytecode test not usable")
 
     for ticker in tickers:
         print()
@@ -411,13 +418,18 @@ def main():
             for sym, b in d["bytecode"].items():
                 print(f"      vs {sym:<5}        : exact={b['exact']} "
                       f"similarity={b['similarity_pct']}% len_delta={b['len_delta']}")
-            print(f"      VERDICT          : {'PASS' if passes else 'REJECT'}")
-            # only the candidate that passed is worth spending a request on
-            if passes:
+            if not control_ok:
+                verdict = "INCONCLUSIVE (reference control failed)"
+            else:
+                verdict = "MATCH (name + code)" if passes else "NO MATCH"
+            print(f"      VERDICT          : {verdict}")
+            # only a candidate that matched is worth spending a request on
+            if control_ok and passes:
                 print(f"      pool depth       : {json.dumps(pool_depth(ca))[:500]}")
             time.sleep(2.5)
         time.sleep(2.5)
+    return 0 if control_ok else 2
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

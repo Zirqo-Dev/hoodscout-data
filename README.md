@@ -91,10 +91,12 @@ managed challenge (`Cf-Mitigated: challenge`, a "Just a moment..."
 interstitial) which requires executing JavaScript and returning client hints,
 so no scripted client can reach it, from a runner or anywhere else.
 
-Authenticity is established from the chain instead. `scripts/verify_stocks.py`
-searches GeckoTerminal for pools matching a ticker, then for each candidate
-contract reads `name()` and `symbol()` over JSON-RPC and compares
-`eth_getCode` against the known-good HIMS and AMC contracts. Robinhood stock
+The check is made from the chain instead, and it is a structural name +
+bytecode match against two known-good contracts, not proof of official
+issuance; official provenance would need a trusted address list or issuance
+record. `scripts/verify_stocks.py` searches GeckoTerminal for pools matching
+a ticker, then for each candidate contract reads `name()` and `symbol()` over
+JSON-RPC and compares `eth_getCode` against the known-good HIMS and AMC contracts. Robinhood stock
 tokens are clones of one implementation — 283 bytes, sha256 `caced2aa743efc36`
 — so a genuine token matches byte for byte while an impersonator does not. A
 squatter can copy a name, a logo and a website; matching deployed bytecode is
@@ -107,7 +109,7 @@ It is run on demand through the `verify_tickers` input on `stocks.yml`
 collection, writes no data and fires no alerts:
 
 - `NVDA MSTR GME` — verify tickers, printing every candidate and a
-  PASS/REJECT per contract
+  `MATCH (name + code)` / `NO MATCH` per contract
 - `--inspect <address> [...]` — name, symbol, supply, code hash and pool
   history for specific addresses, for checking a flagged contract before it
   goes into `avoid.json`
