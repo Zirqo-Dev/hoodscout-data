@@ -11,11 +11,13 @@ Each run:
   ENROLL    tokens with >= 4 distinct snapshot ts whose first_seen is within
             the last 7 days go into enrolled.json once. Entries are frozen.
   WATCH     enrolled tokens still inside first_seen + 7 d: one multi-pool
-            call per 20 pools, attributes stored verbatim.
+            call per 30 pools, attributes stored verbatim. Pools the previous
+            run's sidecar lists as not returned go first (sorted), then the
+            rest (sorted).
   BACKFILL  enrolled tokens past first_seen + 7 d + 1 h with no candle file:
             hourly OHLCV up to that point, oldest first, at most 8 per run.
 
-Rate: 6 s between calls, 30 calls per run including the retry. The first 429
+Rate: 8 s between calls, 30 calls per run including the retry. The first 429
 of a run waits 30 s and is retried once; any further 429 stops calling for
 the rest of the run. Errors are counted and the run moves on; a failed
 backfill is simply still due next run.
@@ -40,10 +42,10 @@ FOLLOWUP = os.path.join(ROOT, "data", "followup")
 MIN_SNAPSHOTS = 4                  # decided by the owner 2026-10-23
 WINDOW = timedelta(days=7)
 BACKFILL_DELAY = timedelta(hours=1)
-BATCH = 20
+BATCH = 30
 MAX_BACKFILLS = 8
 MAX_CALLS = 30
-SLEEP_BETWEEN = 6
+SLEEP_BETWEEN = 8
 RETRY_429_WAIT = 30
 
 
@@ -119,6 +121,34 @@ def due_backfills(enrolled, now):
         if not os.path.exists(candle_path(p)):
             due.append(e)
     return due
+
+
+def previous_not_returned(now):
+    """pools_not_returned from the newest watch sidecar older than this run.
+
+    Reads that one .meta.json only (never watch rows). Missing, unreadable or
+    malformed -> [], so the run falls back to plain sorted order."""
+    try:
+        stamp = now.strftime("%Y-%m-%d/%H%M%S")
+        root = os.path.join(FOLLOWUP, "watch")
+        metas = sorted(f"{d}/{f[:-len('.meta.json')]}"
+                       for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))
+                       for f in os.listdir(os.path.join(root, d)) if f.endswith(".meta.json"))
+        metas = [m for m in metas if m < stamp]
+        if not metas:
+            return []
+        with open(os.path.join(root, metas[-1] + ".meta.json"), encoding="utf-8") as f:
+            pools = json.load(f)["pools_not_returned"]
+        return [p for p in pools if isinstance(p, str)] if isinstance(pools, list) else []
+    except Exception:
+        return []
+
+
+def watch_order(pools, carry):
+    """Carried-over pools first (sorted), then the rest (sorted)."""
+    first = sorted(set(pools) & set(carry))
+    taken = set(first)
+    return first, first + [p for p in sorted(pools) if p not in taken]
 
 
 def batches(pools, n=BATCH):
@@ -203,13 +233,15 @@ def save_enrolled(enrolled):
     atomic_write(os.path.join(FOLLOWUP, "enrolled.json"), json_bytes(enrolled, indent=1))
 
 
-def watch(client, act, run_ts, lines, meta):
-    """Multi-pool calls for active pools; appends verbatim rows to lines."""
+def watch(client, act, run_ts, lines, meta, carry=()):
+    """Multi-pool calls for active pools; appends verbatim rows to lines.
+    carry: pools to request first (the previous run's not-returned)."""
     by_pool = {}
     for e in act:
         by_pool.setdefault(e["main_pool"], []).append(e["ca"])
-    pools = sorted(by_pool)
+    first, pools = watch_order(by_pool, carry)
     meta["pools_requested"] = len(pools)
+    meta["carried_over"] = len(first)
     returned = set()
     try:
         for chunk in batches(pools):
@@ -287,6 +319,7 @@ def run(now=None, client=None):
     meta = {"run_ts": iso(now), "enrolled_total": 0, "active_in_window": 0,
             "newly_enrolled": 0, "calls": 0, "http_429": 0, "errors": 0,
             "pools_requested": 0, "pools_returned": 0, "pools_not_returned": [],
+            "carried_over": 0,
             "backfills_done": 0, "backfills_failed": 0, "backfills_pending": 0,
             "stopped_early": False, "crashed": None, "runtime_s": None}
     code = 0
@@ -300,7 +333,7 @@ def run(now=None, client=None):
                     active_in_window=len(act))
         due = due_backfills(enrolled, now)
         try:
-            watch(client, act, iso(now), lines, meta)
+            watch(client, act, iso(now), lines, meta, previous_not_returned(now))
         except Stop:
             pass
         backfill(client, due, now, meta)

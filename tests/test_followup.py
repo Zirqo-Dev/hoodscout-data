@@ -135,13 +135,13 @@ def test_window_expiry():
     assert F.active(e, NOW) == []
 
 
-def test_batches_of_twenty(env):
+def test_batches_of_thirty(env):
     hist, out = env
     write_history(hist, {i: (NOW - timedelta(days=1), 4) for i in range(45)})
     c = FakeClient(multi_ok)
     F.run(now=NOW, client=c)
     multi = [p for p in c.paths if "/multi/" in p]
-    assert [len(p.split("/multi/")[1].split(",")) for p in multi] == [20, 20, 5]
+    assert [len(p.split("/multi/")[1].split(",")) for p in multi] == [30, 15]
     meta = json.loads(meta_files(out)[0].read_text())
     assert meta["pools_requested"] == 45 and meta["pools_returned"] == 45
     with gzip.open(next(Path(out).glob("watch/*/*.jsonl.gz")), "rt") as f:
@@ -210,8 +210,8 @@ def test_spacing_between_calls(monkeypatch):
 
 def test_watch_first_then_backfill_with_what_is_left(env):
     hist, out = env
-    # 45 active pools -> 3 watch calls; 10 due backfills; cap of 5 leaves 2.
-    tokens = {i: (NOW - timedelta(days=1), 4) for i in range(45)}
+    # 61 active pools -> 3 watch calls; 10 due backfills; cap of 5 leaves 2.
+    tokens = {i: (NOW - timedelta(days=1), 4) for i in range(61)}
     tokens.update({100 + i: (NOW - timedelta(days=8, hours=i), 4) for i in range(10)})
     write_history(hist, tokens)
     enrolled = []
@@ -292,7 +292,7 @@ def test_existing_candle_file_not_refetched(env):
 
 def test_crash_writes_fetched_rows_and_meta_then_exits_nonzero(env):
     hist, out = env
-    write_history(hist, {i: (NOW - timedelta(days=1), 4) for i in range(25)})
+    write_history(hist, {i: (NOW - timedelta(days=1), 4) for i in range(35)})
 
     class Crashy(FakeClient):
         def get(self, path):
@@ -303,17 +303,17 @@ def test_crash_writes_fetched_rows_and_meta_then_exits_nonzero(env):
     assert F.run(now=NOW, client=Crashy(multi_ok)) == 1
     meta = json.loads(meta_files(out)[0].read_text())
     assert meta["crashed"] == "RuntimeError: boom"
-    assert meta["pools_returned"] == 20 and meta["calls"] == 1
+    assert meta["pools_returned"] == 30 and meta["calls"] == 1
     with gzip.open(next(Path(out).glob("watch/*/*.jsonl.gz")), "rt") as f:
-        assert sum(1 for _ in f) == 20
+        assert sum(1 for _ in f) == 30
 
 
 def test_dry_run_plan_makes_no_writes(env, monkeypatch):
     hist, out = env
-    write_history(hist, {i: (NOW - timedelta(days=1), 4) for i in range(21)})
+    write_history(hist, {i: (NOW - timedelta(days=1), 4) for i in range(31)})
     monkeypatch.setattr(F.Client, "_open", lambda *a: pytest.fail("network"))
     p = F.plan(now=NOW)
-    assert p["newly_enrolled"] == 21 and p["planned_calls"] == 2
+    assert p["newly_enrolled"] == 31 and p["planned_calls"] == 2
     assert not out.exists()
 
 
@@ -343,3 +343,131 @@ def test_crash_mid_write_keeps_previous_enrolled(env, monkeypatch):
     monkeypatch.setattr("builtins.open", real_open)
     assert (out / "enrolled.json").read_bytes() == before
     assert not (out / "enrolled.json.tmp").exists()
+
+
+# ------------------------------------------------------------------ HS-95 call budget
+
+def enrolment_fixture_bytes(hist, out):
+    """enrolled.json bytes after two runs over a mixed fixture: qualifying,
+    too few snapshots, too old, no pool, duplicate ts, and a later arrival."""
+    first = NOW - timedelta(days=2)
+    write_history(hist, {1: (first, 4), 2: (first, 3), 3: (NOW - timedelta(days=8), 6),
+                         4: (first + timedelta(hours=5), 9), 5: (first, 4)})
+    rows = hist.read_text().splitlines()
+    rows += [json.dumps({"ts": first.isoformat(), "ca": ca(6), "main_pool": None})] * 5
+    rows += [json.dumps({"ts": first.isoformat(), "ca": ca(7), "main_pool": pool(7)})] * 4
+    hist.write_text("".join(r + "\n" for r in rows))
+    F.run(now=NOW, client=FakeClient(multi_ok))
+    with open(hist, "a") as f:
+        for k in range(4):
+            f.write(json.dumps({"ts": (NOW + timedelta(minutes=15 * k)).isoformat(),
+                                "ca": ca(8), "main_pool": pool(8)}) + "\n")
+    F.run(now=NOW + timedelta(hours=3), client=FakeClient(multi_ok))
+    return (Path(out) / "enrolled.json").read_bytes()
+
+
+ENROLMENT_SHA256 = "891e42aff3ea5e861dc768736b3412d742ed25fa750aed11519a788e23db7abe"  # pre-HS-95-budget code
+
+
+def test_enrolment_output_byte_identical(env):
+    import hashlib
+    hist, out = env
+    data = enrolment_fixture_bytes(hist, out)
+    assert hashlib.sha256(data).hexdigest() == ENROLMENT_SHA256
+
+
+def multi_pools(c):
+    return [p.split("/multi/")[1].split(",") for p in c.paths if "/multi/" in p]
+
+
+def write_prev_meta(out, when, not_returned=None, raw=None):
+    d = Path(out) / "watch" / when.strftime("%Y-%m-%d")
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / (when.strftime("%H%M%S") + ".meta.json")
+    f.write_text(raw if raw is not None else json.dumps({"pools_not_returned": not_returned}))
+
+
+def test_437_pools_make_15_calls_of_at_most_30(env):
+    hist, out = env
+    write_history(hist, {i: (NOW - timedelta(days=1), 4) for i in range(437)})
+    c = FakeClient(multi_ok)
+    F.run(now=NOW, client=c)
+    sizes = [len(b) for b in multi_pools(c)]
+    assert len(sizes) == 15 and max(sizes) <= 30 and sum(sizes) == 437
+    assert F.plan(now=NOW)["planned_calls"] == 15
+
+
+def test_spacing_is_eight_seconds(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(F.time, "sleep", sleeps.append)
+    c = FakeClient(lambda p: {})
+    c.get("/a"); c.get("/b")
+    assert F.SLEEP_BETWEEN == 8 and sleeps == [8]
+    assert F.MAX_CALLS == 30 and F.MAX_BACKFILLS == 8 and F.RETRY_429_WAIT == 30
+
+
+def test_previous_not_returned_pools_come_first(env):
+    hist, out = env
+    write_history(hist, {i: (NOW - timedelta(days=1), 4) for i in range(70)})
+    write_prev_meta(out, NOW - timedelta(hours=6), [pool(1)])            # older: ignored
+    write_prev_meta(out, NOW - timedelta(hours=3), [pool(65), pool(40), "0xgone", pool(69)])
+    c = FakeClient(multi_ok)
+    F.run(now=NOW, client=c)
+    order = [p for b in multi_pools(c) for p in b]
+    assert order[:3] == [pool(40), pool(65), pool(69)]
+    assert order[3:] == [pool(i) for i in range(70) if i not in (40, 65, 69)]
+    meta = json.loads(meta_files(out)[-1].read_text())
+    assert meta["carried_over"] == 3 and meta["pools_requested"] == 70
+
+
+@pytest.mark.parametrize("raw", [None, "{not json", '{"pools_not_returned": 7}', "[]", ""])
+def test_missing_or_corrupt_previous_sidecar_falls_back(env, raw):
+    hist, out = env
+    write_history(hist, {i: (NOW - timedelta(days=1), 4) for i in range(35)})
+    if raw is not None:
+        write_prev_meta(out, NOW - timedelta(hours=3), raw=raw)
+    c = FakeClient(multi_ok)
+    assert F.run(now=NOW, client=c) == 0
+    assert [p for b in multi_pools(c) for p in b] == [pool(i) for i in range(35)]
+    meta = json.loads(meta_files(out)[-1].read_text())
+    assert meta["carried_over"] == 0 and meta["crashed"] is None
+
+
+def test_second_429_still_stops_the_watch(env):
+    hist, out = env
+    write_history(hist, {i: (NOW - timedelta(days=1), 4) for i in range(90)})
+    write_prev_meta(out, NOW - timedelta(hours=3), [pool(89)])
+    answers = iter([None, http(429), http(429)])
+
+    def respond(p):
+        a = next(answers)
+        if isinstance(a, Exception):
+            raise a
+        return multi_ok(p)
+    c = FakeClient(respond)
+    F.run(now=NOW, client=c)
+    meta = json.loads(meta_files(out)[-1].read_text())
+    assert c.calls == 3 and meta["http_429"] == 2 and meta["stopped_early"] is True
+    assert meta["pools_returned"] == 30 and multi_pools(c)[0][0] == pool(89)
+    assert len(meta["pools_not_returned"]) == 60
+
+
+def test_backfills_get_the_leftover_calls(env):
+    hist, out = env
+    tokens = {i: (NOW - timedelta(days=1), 4) for i in range(437)}
+    write_history(hist, tokens)
+    enrolled = []
+    F.enroll(enrolled, F.scan_history(str(hist)), NOW)
+    enrolled += [{"ca": ca(1000 + i), "main_pool": pool(1000 + i),
+                  "first_seen": (NOW - timedelta(days=8, hours=i)).isoformat(),
+                  "enrolled_at": "earlier"} for i in range(31)]
+    F.save_enrolled(enrolled)
+    c = FakeClient(multi_ok)
+    F.run(now=NOW, client=c)
+    assert sum("/multi/" in p for p in c.paths) == 15
+    assert sum("/ohlcv/" in p for p in c.paths) == 8          # min(31, 8, 30 - 15)
+    meta = json.loads(meta_files(out)[-1].read_text())
+    assert meta["backfills_done"] == 8 and meta["backfills_pending"] == 23
+    c2 = FakeClient(multi_ok, max_calls=19)                  # 15 watch + 4 left
+    F.run(now=NOW + timedelta(hours=3), client=c2)
+    assert sum("/ohlcv/" in p for p in c2.paths) == 4

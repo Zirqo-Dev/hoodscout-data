@@ -398,9 +398,17 @@ only; `scripts/followup.py` computes no return, gap or outcome, and reads
   plus ca, pool, run ts, one line per token), `watch/.../HHMMSS.meta.json`
   (process counts and pools not returned), `candles/<pool>.json` (hourly
   OHLCV up to first_seen + 7 d + 1 h, verbatim, fetched once per pool).
-- Rate: 6 s between calls, 30 calls per run including the retry, watch
-  first and backfill (at most 8, oldest first) with what is left. The first
-  429 of a run waits 30 s and retries once; another 429 stops the run's calls.
-  A failed backfill is due again next run, never retried in a loop.
+- Rate: 30 pools per multi-pool call, 8 s between calls, 30 calls per run
+  including the retry, watch first and backfill (at most 8, oldest first)
+  with what is left. The first 429 of a run waits 30 s and retries once;
+  another 429 stops the run's calls. A failed backfill is due again next
+  run, never retried in a loop. Pools the previous run's sidecar lists in
+  pools_not_returned are requested first (sorted), then the rest (sorted).
+- 2026-11-16: batch 20 -> 30 pools, spacing 6 s -> 8 s, carry-over of the
+  previous sidecar's pools_not_returned to the front, new sidecar field
+  carried_over. Why: from 2026-11-13 12:05Z on, every run hit two 429s and
+  stopped early, always dropping the same high-address tail (437 active
+  pools, about 200 returned, backfills stalled). Enrolment and population
+  rules are unchanged. H-0010's read report must disclose this change.
 
 data/followup is exploratory until a hypothesis that uses it is registered; nothing reads it into a report before then.
