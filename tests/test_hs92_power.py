@@ -11,6 +11,10 @@ import pytest
 
 from conftest import ROOT
 
+if not hasattr(random.Random, "binomialvariate"):
+    pytest.skip("needs Python 3.12+ (random.binomialvariate); CI and the "
+                "pipeline pin 3.11 (HS-127)", allow_module_level=True)
+
 _spec = importlib.util.spec_from_file_location(
     "hs92_power", ROOT / "analysis" / "hs92" / "power.py")
 P = importlib.util.module_from_spec(_spec)

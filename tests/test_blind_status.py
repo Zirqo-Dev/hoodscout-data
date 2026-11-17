@@ -50,7 +50,9 @@ REG = {
                "fail_if": "synthetic: the gap is above -10.0pp",
                "inconclusive_if": "synthetic: more than max_censored_pct of "
                                   "either arm is censored, or the shares "
-                                  "differ by more than 10.0pp"},
+                                  "differ by more than 10.0pp; or (b) fewer "
+                                  "than 70% of the population tokens that "
+                                  "pass the lag rule find an entry row"},
 }
 
 OUT = {
@@ -73,7 +75,33 @@ OUT = {
                "          usable weeks 2; selected: 2026-W43 (6 rows, 48 "
                "counted snapshots), 2026-W44 (11 rows, 5 counted snapshots)\n"
                "          gone_unseen share, both arms together 0.082\n",
+    B.FOLLOWUP: "evaluator dddd  log 10 rows  watch rows 40  watch sidecars 4\n"
+                "blind run: counts and coverage only\n"
+                "  H-0010  enrolled 52  duplicate ca 1  bad timestamps 0  "
+                "before start 2  lag over 96 h 3  population 46\n"
+                "          entry row found 41/46 = 0.891  (clause b share)\n"
+                "          drops by reason: no_entry 5, bad_liq 2, bad_price 1"
+                "  kept 38\n"
+                "          last watch run 2026-11-17T15:00:00+00:00\n"
+                "          arm ABOVE kept 19  mature 12  immature 7  "
+                "evaluable 11/60  censored 1  censored share 1/12 = 0.083\n"
+                "          arm BELOW kept 19  mature 0  immature 19  "
+                "evaluable 0/60  censored 0  censored share 0/0 = -\n"
+                "          watch points: duplicate ts 0, unparseable ts 0, "
+                "known with negative reserve_in_usd 0 (all arms, mature or "
+                "not)\n",
 }
+
+H0010_LINES = (
+    "H-0010 (from scripts/evaluate_followup.py):",
+    "  entry row found: 41/46 = 0.891  | floor 0.70",
+    "  arm ABOVE: kept 19, mature 12, immature 7, evaluable 11/60  | "
+    "min_eff_n 60",
+    "  arm ABOVE censored share: 1/12 = 0.083  | max_censored 0.20",
+    "  arm BELOW: kept 19, mature 0, immature 19, evaluable 0/60  | "
+    "min_eff_n 60",
+    "  arm BELOW censored share: 0/0 = -  | max_censored 0.20",
+)
 
 
 def runner_for(outs, codes=None):
@@ -96,10 +124,11 @@ def test_no_forbidden_flag_or_mode(path):
     assert not re.search(r"\bpin", text, re.I), path.name
 
 
-def test_commands_are_exactly_the_three_blind_ones():
+def test_commands_are_exactly_the_four_blind_ones():
     assert B.COMMANDS == (("scripts/evaluate.py", ("--blind",)),
                           ("scripts/evaluate_confirm.py", ()),
-                          ("scripts/evaluate_holders.py", ()))
+                          ("scripts/evaluate_holders.py", ()),
+                          ("scripts/evaluate_followup.py", ("--blind",)))
 
 
 def test_script_has_one_subprocess_call_and_no_other_exec():
@@ -163,7 +192,7 @@ def test_substitution_does_not_save_a_figure(bad):
     assert "  eff_n: not available" in text
 
 
-@pytest.mark.parametrize("script", [B.EV, B.HOLDERS])
+@pytest.mark.parametrize("script", [B.EV, B.HOLDERS, B.FOLLOWUP])
 def test_other_evaluators_trip_on_their_own_wrapper_word(script):
     out = dict(OUT)
     out[script] = OUT[script] + "wrapper\n"
@@ -201,11 +230,13 @@ def test_whole_file_tripwire(monkeypatch):
 def test_nonzero_evaluator_exit_is_recorded_not_fatal(tmp_path):
     p = tmp_path / "blind_latest.txt"
     rc = B.main(out_path=str(p), hyps=REG, sha="0" * 40,
-                runner=runner_for({B.EV: "", B.CONFIRM: "", B.HOLDERS: "x\n"},
-                                  {B.EV: "1", B.HOLDERS: "4"}))
+                runner=runner_for({B.EV: "", B.CONFIRM: "", B.HOLDERS: "x\n",
+                                   B.FOLLOWUP: ""},
+                                  {B.EV: "1", B.HOLDERS: "4", B.FOLLOWUP: "2"}))
     assert rc == 0
     text = p.read_text()
     assert "exit code: 1" in text and "exit code: 4" in text
+    assert "exit code: 2" in text
 
 
 # ---------------------------------------------------------------- HS-121
@@ -226,8 +257,9 @@ def test_hs121_values_and_floors():
                  "  eff_n: 3  | min_eff_n 100",
                  "  tokens: 3  | min_n_tokens 20",
                  "  gone_unseen share: 0.731  | max_censored 0.50",
-                 "H-0010: evaluator not built (HS-91)"):
+                 *H0010_LINES):
         assert line in text, line
+    assert "not built" not in text
     assert text.index("HS-121") < text.index("generated: ")
 
 
@@ -239,6 +271,46 @@ def test_missing_clause_prints_not_available():
     assert ("  top-arm tie-break entries: not available  | cap 0.25"
             in text)
     assert "  join coverage: 30/31 = 0.968" in text
+
+
+def test_h0010_lines_from_synthetic_followup_stdout():
+    text, trip = build()
+    assert not trip
+    block = text[:text.index("generated: ")]
+    i = block.index(H0010_LINES[0])
+    assert block[i:].rstrip("\n").splitlines() == list(H0010_LINES)
+
+
+def test_h0010_missing_output_prints_not_available():
+    out = dict(OUT)
+    out[B.FOLLOWUP] = ""
+    text, _ = build(out)
+    for line in ("  entry row found: not available  | floor 0.70",
+                 "  arm ABOVE: not available  | min_eff_n 60",
+                 "  arm ABOVE censored share: not available  | "
+                 "max_censored 0.20",
+                 "  arm BELOW: not available  | min_eff_n 60",
+                 "  arm BELOW censored share: not available  | "
+                 "max_censored 0.20"):
+        assert line in text, line
+
+
+def test_h0010_tripped_output_prints_not_available():
+    out = dict(OUT)
+    out[B.FOLLOWUP] = OUT[B.FOLLOWUP] + "gap 3.0pp\n"
+    text, trip = build(out)
+    assert trip and "withheld: tripwire (scripts/evaluate_followup.py)" in text
+    assert "  entry row found: not available" in text
+
+
+def test_h0010_floor_not_parsed_prints_not_available():
+    reg = {k: dict(v) for k, v in REG.items()}
+    reg["H-0010"]["inconclusive_if"] = "reworded"
+    text, _ = build(hyps=reg)
+    assert "  entry row found: 41/46 = 0.891  | floor not available" in text
+    # the numeric registry fields still print
+    assert "  arm ABOVE censored share: 1/12 = 0.083  | max_censored 0.20" \
+        in text
 
 
 def test_missing_registry_floor_prints_not_available():
@@ -259,8 +331,23 @@ def test_no_registry_clause_text_reaches_the_file():
 
 
 @pytest.mark.parametrize("word", ["return", "median", "gap", "rate", "sign",
-                                  "status", "pass", "fail", "inconclusive"])
+                                  "status", "pass", "fail", "inconclusive",
+                                  "dead", "differ", "decision", "outcome"])
 def test_hs121_block_has_no_outcome_or_decision_word(word):
     text, _ = build()
     block = text[:text.index("generated: ")]
+    assert H0010_LINES[0] in block
     assert word not in block.lower(), word
+    h0010 = block[block.index(H0010_LINES[0]):]
+    assert word not in h0010.lower(), word
+
+
+def test_h0010_block_ignores_outcome_lines_in_followup_stdout():
+    out = dict(OUT)
+    out[B.FOLLOWUP] = OUT[B.FOLLOWUP] + ("          ABOVE DEAD_72H 3/11\n"
+                                         "          BELOW DEAD_72H 0/0\n")
+    text, _ = build(out)
+    block = text[:text.index("generated: ")]
+    assert "DEAD" not in block
+    assert block[block.index(H0010_LINES[0]):].rstrip("\n").splitlines() \
+        == list(H0010_LINES)

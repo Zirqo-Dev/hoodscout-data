@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Weekly blind status: run the three blind evaluators, write their counts.
+"""Weekly blind status: run the four blind evaluators, write their counts.
 
-HS-107 + HS-121. Run by .github/workflows/blind-status.yml. Writes
+HS-107 + HS-121 + HS-127. Run by .github/workflows/blind-status.yml. Writes
 status/blind_latest.txt (overwritten each run):
 
   1. an HS-121 block: for each running hypothesis, every predictor-side clause
@@ -38,10 +38,12 @@ REGISTRY = os.path.join(ROOT, "data", "hypotheses.jsonl")
 OUT = os.path.join(ROOT, "status", "blind_latest.txt")
 TIMEOUT_S = 1500
 
-EV, CONFIRM, HOLDERS = ("scripts/evaluate.py", "scripts/evaluate_confirm.py",
-                        "scripts/evaluate_holders.py")
+EV, CONFIRM, HOLDERS, FOLLOWUP = (
+    "scripts/evaluate.py", "scripts/evaluate_confirm.py",
+    "scripts/evaluate_holders.py", "scripts/evaluate_followup.py")
 # (script, arguments). The only commands this script ever runs.
-COMMANDS = ((EV, ("--blind",)), (CONFIRM, ()), (HOLDERS, ()))
+COMMANDS = ((EV, ("--blind",)), (CONFIRM, ()), (HOLDERS, ()),
+            (FOLLOWUP, ("--blind",)))
 
 NA = "not available"
 EXIT_TRIPPED = 3
@@ -115,7 +117,8 @@ def _num(pattern, text):
 
 
 def floors(hyps):
-    """Numbers only. Text-derived ones come from H-0007's inconclusive_if."""
+    """Numbers only. Text-derived ones come from the inconclusive_if text of
+    H-0007 and H-0010."""
     out = {}
     for hid in ("H-0007", "H-0009", "H-0010"):
         h = hyps.get(hid, {})
@@ -128,6 +131,10 @@ def floors(hyps):
             f["tie_pct"] = _num(r"more than (\d+)% of the top arm entered", t)
             f["snaps_week"] = _num(r"fewer than (\d+) counted snapshots fall",
                                    t)
+        if hid == "H-0010":
+            t = h.get("inconclusive_if", "")
+            f["entry_cov_pct"] = _num(r"fewer than (\d+)% of the population "
+                                      r"tokens that pass", t)
         out[hid] = f
     return out
 
@@ -190,12 +197,34 @@ def block_h0009(out, f):
     return L
 
 
+def block_h0010(out, f):
+    L = ["H-0010 (from scripts/evaluate_followup.py):"]
+    m = _m(r"entry row found (\d+)/(\d+) = ([\d.]+)", out)
+    L.append("  entry row found: " + (f"{m.group(1)}/{m.group(2)} = "
+                                      f"{m.group(3)}" if m else NA)
+             + f"  | floor {share(f['entry_cov_pct'])}")
+    for arm in ("ABOVE", "BELOW"):
+        m = _m(rf"arm {arm}\s+kept (\d+)\s+mature (\d+)\s+immature (\d+)\s+"
+               r"evaluable (\d+)/(\d+)", out)
+        L.append(f"  arm {arm}: " + (f"kept {m.group(1)}, mature {m.group(2)}, "
+                                     f"immature {m.group(3)}, evaluable "
+                                     f"{m.group(4)}/{m.group(5)}" if m else NA)
+                 + f"  | min_eff_n {val(f['min_eff_n'])}")
+        # "-" is the evaluator's own text for a share with no mature tokens
+        m = _m(rf"arm {arm}\s+kept[^\n]*censored share (\d+)/(\d+) = "
+               r"([\d.]+|-)", out)
+        L.append(f"  arm {arm} censored share: "
+                 + (f"{m.group(1)}/{m.group(2)} = {m.group(3)}" if m else NA)
+                 + f"  | max_censored {share(f['max_censored_pct'])}")
+    return L
+
+
 def hs121_block(outs, fl):
     return (["HS-121 clause shares against registered floors and caps "
              "(counts and fractions only)", ""]
             + block_h0007(outs.get(HOLDERS), fl["H-0007"]) + [""]
             + block_h0009(outs.get(CONFIRM), fl["H-0009"]) + [""]
-            + ["H-0010: evaluator not built (HS-91)"])
+            + block_h0010(outs.get(FOLLOWUP), fl["H-0010"]))
 
 
 # ------------------------------------------------------------ main
