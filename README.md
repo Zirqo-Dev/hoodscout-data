@@ -4,6 +4,8 @@ Scheduled collection and scoring of Robinhood Chain market data. Three
 independent pipelines run on GitHub Actions and commit their output back to
 this repo, so every snapshot is a plain file with a git history behind it.
 
+Powered by [CoinGecko](https://www.coingecko.com) · on-chain data from [GeckoTerminal](https://www.geckoterminal.com).
+
 | Pipeline | Script | Schedule | Source |
 |---|---|---|---|
 | Liquidity pools | `scripts/collect.py` | `:00 :15 :30 :45`, externally driven | GeckoTerminal |
