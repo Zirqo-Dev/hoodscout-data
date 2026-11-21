@@ -412,3 +412,57 @@ only; `scripts/followup.py` computes no return, gap or outcome, and reads
   rules are unchanged. H-0010's read report must disclose this change.
 
 data/followup is exploratory until a hypothesis that uses it is registered; nothing reads it into a report before then.
+
+## NFT snapshot slots (HS-130)
+
+Written 2026-11-20. Prospective: it describes how runs are recorded from the
+change that lands it onward, and changes nothing about data already written.
+
+- Why: `nft.yml` had one cron line, `17 13,21 * * *`. GitHub drops and delays
+  scheduled runs; since 2026-11-16 only one snapshot a day has landed, and
+  late 21:17Z runs land after 00:00 UTC. A run could not tell which slot fired
+  it, the `nft` concurrency group queues runs but does not dedupe them, and
+  nothing recorded the intended slot.
+- Trigger change: two cron entries at the same times, `17 13 * * *` and
+  `17 21 * * *`, plus an optional `workflow_dispatch` input `slot`
+  (`YYYY-MM-DDTHH:17Z`, HH 13 or 21). It takes effect from the commit that
+  lands it; earlier runs are not reinterpreted.
+- Slot vs observation time: the slot is resolved, in order, from a valid
+  explicit `slot` input (not in the future; an invalid or impossible one exits
+  2 and writes nothing), else from `github.event.schedule` (the latest 13:17Z
+  or 21:17Z at or before the run start, so a 21:17Z run starting at 01:00Z
+  belongs to the previous UTC day), else the latest of the two slots. `ts`
+  stays the observation time, exactly as before. New `data/nft.jsonl` rows
+  and the top level of `nft_latest.json` and `nft_discover.json` carry
+  `slot` and `slot_day` (the UTC date of the slot) in addition to every
+  existing field.
+- Ledger: `data/nft_slots.jsonl`, append-only, one line per event: slot,
+  slot_day, trigger, schedule, started_at (run start, equal to that run's
+  `ts`), observed_at (when the line was written), status, tracked_rows,
+  discover. Status is `ok`, `partial` (at least one WATCHLIST slug raised; a
+  slug that returns no row without an error, such as one off the chain, does
+  not make a run partial, and tracked_rows shows the gap), `failed` (no
+  tracked rows, or the key mint failed; exits non-zero), `skipped_duplicate`
+  or `missed`. A slot that already has `ok` or `partial` is skipped without
+  touching `nft.jsonl`, `nft_latest.json` or `nft_discover.json`; a `failed`
+  slot may be retried.
+- Missed slots: before handling a slot, a run appends `missed` for each
+  earlier slot in the previous 48 h that has no ledger line, and never for
+  slots at or before the ledger's first line. The newest line per slot is
+  authoritative: a slot can show `missed` and later `ok` when a late run
+  arrives. Lines are never edited or removed.
+- The ledger records the raw `github.event.schedule` string, so the first
+  live scheduled run confirms what GitHub actually sends. UNVERIFIED until
+  then; an unrecognised string falls back to the latest-of-two-slots rule.
+- Field fixes in the same change: `listed_pct` is 0.0 when OpenSea reports 0
+  listed (it was null), and null when the count is absent or supply is not a
+  positive number. Discovery in `--with-discover` now compares floors against
+  the history read before the run wrote its own rows, so a tracked collection
+  that also appears in discovery no longer gets `floor_chg_pct` 0.0 from
+  comparing with itself; with no prior row it stays null.
+- Unchanged: existing report cutoffs and UTC-day definitions. There is no
+  retroactive rescoring or relabeling of history, and existing lines in
+  `nft.jsonl` gain no slot fields. Any eligibility or cutoff change based on
+  slots is a separate amendment the owner must approve.
+- Not set up: the cron-job.org primary trigger for nft (HS-17). GitHub's
+  scheduler remains the only automatic trigger for this workflow.

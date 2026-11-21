@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Track Robinhood Chain NFT collection floors, volume, and thin-volume floor moves."""
-import json, os, sys, time, urllib.error, urllib.request
+import json, os, re, sys, time, urllib.error, urllib.request
 from datetime import datetime, timezone, timedelta
 
 BASE = "https://api.opensea.io/api/v2"
@@ -38,6 +38,24 @@ WATCHLIST = {
     "chain-mancers": "Chain Mancers",           # 5000 supply
     "itsriggles": "Riggles",                    # 2222 supply, thinnest of the four
 }
+
+# Snapshot slots (HS-130). nft.yml fires at 13:17Z and 21:17Z, as two cron
+# entries so github.event.schedule names the one that fired. GitHub drops and
+# delays scheduled runs, so the slot a run belongs to is resolved from that
+# string (or an explicit dispatch input), never from the wall clock alone: a
+# 21:17Z run that starts at 01:00Z still belongs to the previous UTC day.
+SLOTS_PATH      = "data/nft_slots.jsonl"   # append-only ledger, one line per event
+SLOT_HOURS      = (13, 21)
+SLOT_MINUTE     = 17
+SLOT_FMT        = "%Y-%m-%dT%H:%MZ"
+SLOT_RE         = re.compile(r"^\d{4}-\d{2}-\d{2}T(13|21):17Z$")
+SCHEDULE_HOUR   = {"17 13 * * *": 13, "17 21 * * *": 21}
+MISSED_WINDOW_H = 48
+DONE_STATUSES   = ("ok", "partial")    # a slot with one of these is not collected again
+
+
+def utcnow():
+    return datetime.now(timezone.utc)
 
 
 def post(path, tries=4):
@@ -165,7 +183,19 @@ def measure(slug, key):
             "num_owners": total.get("num_owners"),
             # OpenSea does not always return a listed count; counting listings
             # directly would mean paginating every open order
-            "listed_pct": round(100 * listed / supply, 2) if listed and supply else None}
+            "listed_pct": listed_pct(listed, supply)}
+
+
+def is_number(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def listed_pct(listed, supply):
+    # 0 listed is a real reading (0.0), not a missing one; only an absent or
+    # non-numeric count, or a supply that is not a positive number, is null
+    if not is_number(listed) or not is_number(supply) or supply <= 0:
+        return None
+    return round(100 * listed / supply, 2)
 
 
 def history(path="data/nft.jsonl"):
@@ -200,7 +230,7 @@ def enrich(rows, hist):
     return rows
 
 
-def write_history(rows, now, path="data/nft.jsonl"):
+def write_history(rows, now, path="data/nft.jsonl", slot=None):
     cutoff, kept = now - timedelta(days=HISTORY_DAYS), []
     if os.path.exists(path):
         for line in open(path):
@@ -214,11 +244,14 @@ def write_history(rows, now, path="data/nft.jsonl"):
                 continue
     ts = now.isoformat()
     for r in rows:
-        kept.append(json.dumps({"ts": ts, "slug": r["slug"],
-                                "floor_price": r["floor_price"],
-                                "volume_24h": r["volume_24h"],
-                                "sales_24h": r["sales_24h"],
-                                "num_owners": r["num_owners"]}))
+        row = {"ts": ts, "slug": r["slug"],
+               "floor_price": r["floor_price"],
+               "volume_24h": r["volume_24h"],
+               "sales_24h": r["sales_24h"],
+               "num_owners": r["num_owners"]}
+        if slot is not None:
+            row.update(slot_fields(slot))
+        kept.append(json.dumps(row))
     with open(path, "w") as f:
         f.write("\n".join(kept) + "\n")
 
@@ -276,7 +309,7 @@ def discover_row(item, key, now):
     return r
 
 
-def discover(key, order, now):
+def discover(key, order, now, hist=None):
     listed = get(f"/collections?chain={CHAIN}&order_by={order}"
                  f"&limit={DISCOVER_LIMIT}", key).get("collections") or []
     rows = []
@@ -289,8 +322,10 @@ def discover(key, order, now):
             print(f"WARN {item.get('collection')}: {err(e)}")
         time.sleep(1)
     # same thin-floor rule as tracked collections; a collection with no row in
-    # nft.jsonl yet simply has no prior floor to compare against
-    return enrich(rows, history())
+    # nft.jsonl yet simply has no prior floor to compare against. --with-discover
+    # passes the history read before this run's write_history, so a tracked
+    # collection is compared with the previous run rather than with itself.
+    return enrich(rows, history() if hist is None else hist)
 
 
 def err(e):
@@ -350,16 +385,18 @@ def probe():
         print(f"    {f:18} present={present} value={val}")
 
 
-def run_discover(key):
-    now = datetime.now(timezone.utc)
+def run_discover(key, hist=None, slot=None):
+    now = utcnow()
     order = os.environ.get("DISCOVER_ORDER") or DISCOVER_ORDER
-    rows = discover(key, order, now)
+    rows = discover(key, order, now, hist)
     os.makedirs("data", exist_ok=True)
     # surfacing only: never feeds WATCHLIST, which stays hand-verified
-    json.dump({"generated_at": now.isoformat(), "chain": CHAIN,
-               "order_by": order, "social_fields": META_FIELDS,
-               "collections": rows},
-              open("data/nft_discover.json", "w"), indent=2)
+    out = {"generated_at": now.isoformat(), "chain": CHAIN}
+    if slot is not None:
+        out.update(slot_fields(slot))
+    out.update({"order_by": order, "social_fields": META_FIELDS,
+                "collections": rows})
+    json.dump(out, open("data/nft_discover.json", "w"), indent=2)
     for r in rows:
         print(f"{r['slug']}: floor {r['floor_price']} owners/supply "
               f"{r['owner_supply_ratio']} age {r['age_days']}d "
@@ -367,13 +404,15 @@ def run_discover(key):
               f"dressed_but_thin={r['flag_dressed_but_thin']}")
 
 
-def run_tracked(key):
+def run_tracked(key, now=None, slot=None):
+    """Returns (rows, errored, prior): the rows written, how many WATCHLIST
+    slugs raised, and the nft.jsonl history as read before this run wrote."""
     if not WATCHLIST:
         print("WATCHLIST empty; verify slugs with --verify before tracking")
-        return
+        return [], 0, history()
 
-    now = datetime.now(timezone.utc)
-    rows = []
+    now = now or utcnow()
+    rows, errored = [], 0
     for slug in WATCHLIST:
         try:
             m = measure(slug, key)
@@ -382,28 +421,209 @@ def run_tracked(key):
                 rows.append(m)
         except Exception as e:
             print(f"WARN {slug}: {e}")
+            errored += 1
         time.sleep(1)
 
+    prior = history()
     if not rows:
         print("no data")
-        return
+        return rows, errored, prior
 
-    enrich(rows, history())
+    enrich(rows, prior)
     os.makedirs("data", exist_ok=True)
-    write_history(rows, now)
-    json.dump({"generated_at": now.isoformat(), "chain": CHAIN, "collections": rows},
-              open("data/nft_latest.json", "w"), indent=2)
+    write_history(rows, now, slot=slot)
+    out = {"generated_at": now.isoformat(), "chain": CHAIN}
+    if slot is not None:
+        out.update(slot_fields(slot))
+    out["collections"] = rows
+    json.dump(out, open("data/nft_latest.json", "w"), indent=2)
 
     for r in rows:
         print(f"{r['slug']}: floor {r['floor_price']} {r['floor_symbol'] or ''} "
               f"chg {r['floor_chg_pct']}% sales24 {r['sales_24h']} "
               f"thin={r['flag_thin_floor_move']}")
+    return rows, errored, prior
+
+
+# --- snapshot slots (HS-130) -------------------------------------------------
+
+class SlotError(ValueError):
+    pass
+
+
+def slot_str(dt):
+    return dt.strftime(SLOT_FMT)
+
+
+def slot_fields(slot):
+    return {"slot": slot_str(slot), "slot_day": slot.date().isoformat()}
+
+
+def parse_slot(value):
+    """A slot string, regex first and then a real calendar parse, so an
+    impossible date such as 2026-02-30T13:17Z is refused like a bad format."""
+    if not isinstance(value, str) or not SLOT_RE.match(value):
+        raise SlotError(f"not YYYY-MM-DDT13:17Z or YYYY-MM-DDT21:17Z: {value!r}")
+    try:
+        dt = datetime.strptime(value, SLOT_FMT)
+    except ValueError as e:
+        raise SlotError(f"not a real date: {value!r} ({e})")
+    return dt.replace(tzinfo=timezone.utc)
+
+
+def latest_slot(now, hours=SLOT_HOURS):
+    """The latest slot at one of `hours` at or before now."""
+    best = None
+    for h in hours:
+        s = now.replace(hour=h, minute=SLOT_MINUTE, second=0, microsecond=0)
+        if s > now:
+            s -= timedelta(days=1)
+        if best is None or s > best:
+            best = s
+    return best
+
+
+def resolve_slot(now, schedule, slot_input):
+    """Explicit input wins (and must be valid and not in the future); else the
+    cron string that fired picks the hour; else the latest of the two slots."""
+    slot_input = (slot_input or "").strip()
+    if slot_input:
+        dt = parse_slot(slot_input)
+        if dt > now:
+            raise SlotError(f"slot is in the future: {slot_input}")
+        return dt
+    hour = SCHEDULE_HOUR.get((schedule or "").strip())
+    if hour is not None:
+        return latest_slot(now, (hour,))
+    return latest_slot(now)
+
+
+def slots_between(start, end):
+    """Every slot s with start <= s < end, oldest first."""
+    out = []
+    day = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    while day <= end:
+        for h in SLOT_HOURS:
+            s = day.replace(hour=h, minute=SLOT_MINUTE)
+            if start <= s < end:
+                out.append(s)
+        day += timedelta(days=1)
+    return out
+
+
+def read_ledger(path=SLOTS_PATH):
+    out = []
+    if not os.path.exists(path):
+        return out
+    for line in open(path):
+        line = line.strip()
+        if line:
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                pass
+    return out
+
+
+def ledger_line(slot, status, trigger=None, schedule=None, started_at=None,
+                tracked_rows=None, discover=None):
+    e = slot_fields(slot)
+    e.update({"trigger": trigger, "schedule": schedule,
+              "started_at": started_at.isoformat() if started_at else None,
+              "observed_at": utcnow().isoformat(), "status": status,
+              "tracked_rows": tracked_rows, "discover": discover})
+    return e
+
+
+def append_ledger(entry, ledger, path=SLOTS_PATH):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+    ledger.append(entry)
+
+
+def missed_slots(ledger, slot, now):
+    """Slots in the MISSED_WINDOW_H before now, earlier than `slot`, after the
+    ledger's first line, with no ledger line at all. An empty ledger (or an
+    unreadable first line) yields none: nothing before the ledger is judged."""
+    if not ledger:
+        return []
+    try:
+        first = parse_slot(ledger[0].get("slot"))
+    except SlotError:
+        return []
+    seen = {e.get("slot") for e in ledger}
+    start = now - timedelta(hours=MISSED_WINDOW_H)
+    return [s for s in slots_between(start, slot)
+            if s > first and slot_str(s) not in seen]
+
+
+def run_slotted():
+    """The scheduled --with-discover path: resolve the slot, log missed slots,
+    skip a slot already collected, else collect and record the outcome. The
+    ledger line is written on every branch except an invalid slot input."""
+    started = utcnow()
+    trigger = os.environ.get("NFT_TRIGGER") or None
+    schedule = os.environ.get("NFT_SCHEDULE") or None
+    try:
+        slot = resolve_slot(started, schedule, os.environ.get("NFT_SLOT", ""))
+    except SlotError as e:
+        print(f"::error::invalid slot input: {e}")
+        return 2
+    print(f"slot {slot_str(slot)} (trigger={trigger} schedule={schedule!r})")
+
+    ledger = read_ledger()
+    for s in missed_slots(ledger, slot, started):
+        print(f"missed slot {slot_str(s)}")
+        append_ledger(ledger_line(s, "missed"), ledger)
+
+    meta = {"trigger": trigger, "schedule": schedule, "started_at": started}
+    if any(e.get("slot") == slot_str(slot) and e.get("status") in DONE_STATUSES
+           for e in ledger):
+        print(f"slot {slot_str(slot)} already collected; skipping")
+        append_ledger(ledger_line(slot, "skipped_duplicate", **meta), ledger)
+        return 0
+
+    status, tracked_rows, disc, code = "failed", 0, None, 1
+    try:
+        key = mint_key()
+        rows, errored, prior = run_tracked(key, now=started, slot=slot)
+        tracked_rows = len(rows)
+        if rows:
+            status = "partial" if errored else "ok"
+        # Both jobs share the one minted key: running the script twice minted
+        # two, and /auth/keys is rate-limited hard enough that the second mint
+        # 429'd. Tracked data is already written by this point, so a discovery
+        # failure is reported and exits non-zero without costing it -- the
+        # workflow commits regardless.
+        try:
+            run_discover(key, hist=prior, slot=slot)
+            disc = "ok"
+        except Exception as e:
+            print(f"::error::discovery failed: {type(e).__name__}: {e}")
+            disc = "failed"
+        if not rows:
+            print("::error::no tracked rows collected")
+        code = 0 if rows and disc == "ok" else 1
+    except Exception as e:
+        print(f"::error::collection failed: {type(e).__name__}: {e}")
+        code = 1
+    finally:
+        append_ledger(ledger_line(slot, status, tracked_rows=tracked_rows,
+                                  discover=disc, **meta), ledger)
+    return code
 
 
 def main():
     if "--probe" in sys.argv:
         probe()
         return
+
+    # The scheduled path (HS-130): slot-aware, mints its own key only when the
+    # slot still needs collecting.
+    if ("--with-discover" in sys.argv and "--discover" not in sys.argv
+            and "--verify" not in sys.argv):
+        sys.exit(run_slotted())
 
     key = mint_key()
 
@@ -420,20 +640,8 @@ def main():
             time.sleep(1)
         return
 
+    # bare invocation: tracked pass only, no slot and no ledger line
     run_tracked(key)
-
-    # The scheduled path. Both jobs share the one minted key: running the
-    # script twice minted two, and /auth/keys is rate-limited hard enough that
-    # the second mint 429'd and, when it was the first, took the tracked run
-    # down with it. Tracked data is already written by this point, so a
-    # discovery failure is reported and exits non-zero without costing it --
-    # the workflow commits regardless.
-    if "--with-discover" in sys.argv:
-        try:
-            run_discover(key)
-        except Exception as e:
-            print(f"::error::discovery failed: {type(e).__name__}: {e}")
-            sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,17 @@
 name: nft
 on:
   schedule:
-    - cron: "17 13,21 * * *"
+    # Two entries, not one "17 13,21" line: github.event.schedule then names
+    # the slot that fired, and nft.py records it (HS-130). A delayed run keeps
+    # its slot; a second run for a slot already collected is skipped.
+    - cron: "17 13 * * *"
+    - cron: "17 21 * * *"
   workflow_dispatch:
     inputs:
+      slot:
+        description: "Slot to record a manual collect against, YYYY-MM-DDTHH:17Z with HH 13 or 21 (empty = latest slot)"
+        required: false
+        default: ""
       verify_slugs:
         description: "Space-separated slugs to verify instead of collecting"
         required: false
@@ -61,6 +69,10 @@ jobs:
           PROBE: ${{ inputs.probe }}
           DISCOVER: ${{ inputs.discover }}
           DISCOVER_ORDER: ${{ inputs.discover_order }}
+          # slot resolution for the --with-discover path (HS-130)
+          NFT_TRIGGER: ${{ github.event_name }}
+          NFT_SCHEDULE: ${{ github.event.schedule }}
+          NFT_SLOT: ${{ inputs.slot }}
         run: |
           if [ "$PROBE" = "true" ]; then
             python scripts/nft.py --probe
@@ -70,6 +82,8 @@ jobs:
             python scripts/nft.py --verify $VERIFY_SLUGS
           else
             # Scheduled run: one process, one minted key, both outputs.
+            # nft.py resolves the slot from NFT_* and skips a slot already
+            # collected, appending to data/nft_slots.jsonl either way.
             # Invoking the script twice minted two keys, and /auth/keys is
             # rate-limited hard enough that the extra mint 429'd -- killing
             # the run outright when it hit the tracked pass first.
