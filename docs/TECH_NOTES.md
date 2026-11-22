@@ -466,3 +466,20 @@ change that lands it onward, and changes nothing about data already written.
   slots is a separate amendment the owner must approve.
 - Not set up: the cron-job.org primary trigger for nft (HS-17). GitHub's
   scheduler remains the only automatic trigger for this workflow.
+
+### 2026-11-22: itsriggles removed (HS-138)
+
+- `itsriggles` ("Riggles") is dropped from `WATCHLIST` in `scripts/nft.py`.
+  On 2026-11-22 its OpenSea collection page returned the generic homepage
+  while the control slug cashcatss resolved (a page check made outside this
+  change). Its last data/nft.jsonl row is 2026-09-15 21:14Z, and no row has
+  landed since.
+- No row for it has landed since 2026-09-15; since HS-130 its failure has marked every slot `partial` (3 of 4 tracked).
+- The --verify re-check on 2026-11-22 could not run here: the agent proxy
+  refused the OpenSea host (403) at key mint, so no API error line was
+  captured (UNVERIFIED).
+- `WATCHLIST` now has 3 collections, so a healthy run is `ok` with
+  `tracked_rows` 3.
+- Past ledger lines in `data/nft_slots.jsonl` stay as recorded (`partial`).
+  No history rewrite; old rows age out under the 30-day window.
+- Downstream readers of the nft fields lose Riggles from this date.

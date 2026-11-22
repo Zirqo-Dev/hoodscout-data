@@ -36,7 +36,6 @@ WATCHLIST = {
     "stonkbrokers-434284142": "StonkBrokers",   # 4444 supply, verified 2026-09-05
     "cashcatss": "Cash Cats",                   # 9995 supply; note the double s
     "chain-mancers": "Chain Mancers",           # 5000 supply
-    "itsriggles": "Riggles",                    # 2222 supply, thinnest of the four
 }
 
 # Snapshot slots (HS-130). nft.yml fires at 13:17Z and 21:17Z, as two cron
