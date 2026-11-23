@@ -1,71 +1,92 @@
 HS-121 clause shares against registered floors and caps (counts and fractions only)
 
 H-0007 (from scripts/evaluate_holders.py):
-  join coverage: 36872/36910 = 0.999  | floor 0.60
-  top-arm tie-break entries: second key 0, third key 0, of 10585 top-arm rows  | cap 0.25 of the top arm
-  counted snapshots per selected week: 2026-W43 48, 2026-W44 56, 2026-W45 43, 2026-W46 52  | floor 3 per week
-  arm top eff_n: 2007  | min_eff_n 300
-  arm top tokens: 135  | min_n_tokens 25
-  arm rest eff_n: 4788  | min_eff_n 300
-  arm rest tokens: 384  | min_n_tokens 25
-  gone_unseen share, both arms: 0.086  | max_censored 0.20
+  join coverage: 46967/47070 = 0.998  | floor 0.60
+  top-arm tie-break entries: second key 0, third key 0, of 13657 top-arm rows  | cap 0.25 of the top arm
+  counted snapshots per selected week: 2026-W44 56, 2026-W45 43, 2026-W46 52, 2026-W47 56  | floor 3 per week
+  arm top eff_n: 2566  | min_eff_n 300
+  arm top tokens: 154  | min_n_tokens 25
+  arm rest eff_n: 6000  | min_eff_n 300
+  arm rest tokens: 447  | min_n_tokens 25
+  gone_unseen share, both arms: 0.089  | max_censored 0.20
   gone_unseen share, each arm: not available  | max_censored 0.20
 
 H-0009 (from scripts/evaluate_confirm.py):
-  eff_n: 12  | min_eff_n 100
-  tokens: 10  | min_n_tokens 20
-  gone_unseen share: 0.790  | max_censored 0.50
+  eff_n: 41  | min_eff_n 100
+  tokens: 32  | min_n_tokens 20
+  gone_unseen share: 0.727  | max_censored 0.50
 
-H-0010: evaluator not built (HS-91)
+H-0010 (from scripts/evaluate_followup.py):
+  entry row found: 1171/1177 = 0.995  | floor 0.80
+  arm ABOVE: kept 158, mature 114, immature 44, evaluable 101/60  | min_eff_n 60
+  arm ABOVE censored share: 13/114 = 0.114  | max_censored 0.20
+  arm BELOW: kept 249, mature 185, immature 64, evaluable 173/60  | min_eff_n 60
+  arm BELOW censored share: 12/185 = 0.065  | max_censored 0.20
 
-generated: 2026-11-16T11:30:35Z
-HEAD: a0e248508962d4f7d91bcf0d5054f207c0fe622b
+generated: 2026-11-23T12:58:29Z
+HEAD: e957741dd3e9491cb428de734de69fd4bd3c1c8b
 
 ===== python scripts/evaluate.py --blind
 exit code: 0
 stderr: 0 lines (not shown)
 ----- stdout
-evaluator 76a3c450d426  labeler 3ba1b3524df9  log 395764 rows  pile scored
+evaluator 76a3c450d426  labeler 3ba1b3524df9  log 495286 rows  pile scored
 blind run: counts and coverage only; --unblind prints the decision outputs
-  H-0001  rows 97859  eff_n 2572/300  tokens 111/25  weeks 6/4 all-tier, 6/4 on arm rows
-          population rows 12996  gone_unseen share 0.047  fee_source=name share 0.491
-          cumulative eff_n by day, last 7 UTC days: 2026-11-10 2120, 2026-11-11 2214, 2026-11-12 2306, 2026-11-13 2394, 2026-11-14 2474, 2026-11-15 2554, 2026-11-16 2572
-  H-0002  rows 97859  eff_n 2978/150  tokens 272/25  weeks 6/4 all-tier, 6/4 on arm rows
-          population rows 41192  gone_unseen share 0.496  fee_source=name share 0.453
-          cumulative eff_n by day, last 7 UTC days: 2026-11-10 5048, 2026-11-11 5224, 2026-11-12 5419, 2026-11-13 5640, 2026-11-14 5858, 2026-11-15 6086, 2026-11-16 6139
-  H-0003  rows 97859  eff_n 162/100  tokens 83/20  weeks 5/4 all-tier, 4/4 on arm rows
-          population rows 606  gone_unseen share 0.419  fee_source=name share 0.198
-          cumulative eff_n by day, last 7 UTC days: 2026-11-07 137, 2026-11-08 141, 2026-11-09 145, 2026-11-10 150, 2026-11-11 153, 2026-11-13 156, 2026-11-14 162
+  H-0001  rows 122771  eff_n 3114/300  tokens 122/25  weeks 7/4 all-tier, 7/4 on arm rows
+          population rows 15707  gone_unseen share 0.049  fee_source=name share 0.497
+          cumulative eff_n by day, last 7 UTC days: 2026-11-17 2700, 2026-11-18 2770, 2026-11-19 2848, 2026-11-20 2916, 2026-11-21 2997, 2026-11-22 3072, 2026-11-23 3114
+  H-0002  rows 122771  eff_n 3665/150  tokens 321/25  weeks 7/4 all-tier, 7/4 on arm rows
+          population rows 50409  gone_unseen share 0.489  fee_source=name share 0.462
+          cumulative eff_n by day, last 7 UTC days: 2026-11-17 6505, 2026-11-18 6718, 2026-11-19 6892, 2026-11-20 7103, 2026-11-21 7304, 2026-11-22 7455, 2026-11-23 7524
+  H-0003  rows 122771  eff_n 191/100  tokens 105/20  weeks 7/4 all-tier, 5/4 on arm rows
+          population rows 828  gone_unseen share 0.493  fee_source=name share 0.293
+          cumulative eff_n by day, last 7 UTC days: 2026-11-17 169, 2026-11-18 170, 2026-11-19 174, 2026-11-20 180, 2026-11-21 188, 2026-11-22 189, 2026-11-23 191
   H-0004  rows 0
   H-0005  rows 0
   H-0006  rows 0
-  H-0007  rows 87627
+  H-0007  rows 112539
   H-0008  rows 0
-  H-0009  rows 19888
+  H-0009  rows 44800
   H-0010  rows 0
 
 ===== python scripts/evaluate_confirm.py
 exit code: 0
 stderr: 0 lines (not shown)
 ----- stdout
-evaluator 76a3c450d426  wrap 075658b1ff84  labeler 3ba1b3524df9  log 395764 rows  pile scored
+evaluator 76a3c450d426  wrap 075658b1ff84  labeler 3ba1b3524df9  log 495286 rows  pile scored
 confirming: H-0009 -> H-0003 since 2026-11-10T12:30:29Z
 blind run: counts and coverage only; --unblind prints the decision outputs
-  H-0009  rows 19888  eff_n 12/100  tokens 10/20  weeks 1/4 all-tier, 1/4 on arm rows
-          population rows 119  gone_unseen share 0.790  fee_source=name share 0.412
-          cumulative eff_n by day, last 7 UTC days: 2026-11-11 3, 2026-11-13 6, 2026-11-14 12
+  H-0009  rows 44800  eff_n 41/100  tokens 32/20  weeks 3/4 all-tier, 2/4 on arm rows
+          population rows 341  gone_unseen share 0.727  fee_source=name share 0.504
+          cumulative eff_n by day, last 7 UTC days: 2026-11-17 19, 2026-11-18 20, 2026-11-19 24, 2026-11-20 30, 2026-11-21 38, 2026-11-22 39, 2026-11-23 41
 
 ===== python scripts/evaluate_holders.py
 exit code: 0
 stderr: 0 lines (not shown)
 ----- stdout
-evaluator 261bb98bb41e  labeler 3ba1b3524df9  log 395764 rows  pile scored
+evaluator 261bb98bb41e  labeler 3ba1b3524df9  log 495286 rows  pile scored
 blind run: counts and coverage only; --unblind prints the decision outputs
-  H-0007  label rows 87627  population 36910  joined 36872  join coverage 36872/36910 = 0.999
-          drops by reason: sanity 1, probe 7, balance 0, units 30  (duplicate ca rows ignored 0)
-          snapshots: counted 203, below floor 19, no sidecar 0, no completion time 0
-          arm top  rows 10585  eff_n 2007/300  tokens 135/25
-          arm rest rows 26287  eff_n 4788/300  tokens 384/25
-          top-arm rows entered on a tie-break: second key 0, third key 0, of 10585
-          usable weeks 5; selected: 2026-W43 (6660 rows, 48 counted snapshots), 2026-W44 (11155 rows, 56 counted snapshots), 2026-W45 (8942 rows, 43 counted snapshots), 2026-W46 (9708 rows, 52 counted snapshots)
-          gone_unseen share, both arms together 0.086
+  H-0007  label rows 112539  population 47070  joined 46967  join coverage 46967/47070 = 0.998
+          drops by reason: sanity 2, probe 7, balance 0, units 94  (duplicate ca rows ignored 0)
+          snapshots: counted 259, below floor 19, no sidecar 0, no completion time 0
+          arm top  rows 13657  eff_n 2566/300  tokens 154/25
+          arm rest rows 33310  eff_n 6000/300  tokens 447/25
+          top-arm rows entered on a tie-break: second key 0, third key 0, of 13657
+          usable weeks 6; selected: 2026-W44 (11155 rows, 56 counted snapshots), 2026-W45 (8942 rows, 43 counted snapshots), 2026-W46 (9708 rows, 52 counted snapshots), 2026-W47 (10053 rows, 56 counted snapshots)
+          gone_unseen share, both arms together 0.089
+
+===== python scripts/evaluate_followup.py --blind
+exit code: 0
+stderr: 0 lines (not shown)
+----- stdout
+evaluator bc4b7503a547  log 495286 rows  watch rows 38647  watch sidecars 247
+blind run: counts and coverage only; --unblind prints the decision outputs
+  H-0010  enrolled 1334  duplicate ca 0  bad timestamps 0  before start 153  lag over 96 h 4  population 1177
+          entry row found 1171/1177 = 0.995  (clause b share)
+          drops by reason: no_entry 6, bad_liq 764, bad_price 0  kept 407
+          last watch run 2026-11-23T12:05:37.577871+00:00
+          arm ABOVE kept 158  mature 114  immature 44  evaluable 101/60  censored 13  censored share 13/114 = 0.114
+          arm BELOW kept 249  mature 185  immature 64  evaluable 173/60  censored 12  censored share 12/185 = 0.065
+          bad_liq by main pool id length: 66 chars 757, 42 chars 7, other 0
+          kept by main pool id length: ABOVE 66 chars 128, 42 chars 30, other 0; BELOW 66 chars 118, 42 chars 131, other 0
+          watch points: duplicate ts 0, unparseable ts 0, known with negative reserve_in_usd 0 (all arms, mature or not)
