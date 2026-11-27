@@ -83,6 +83,216 @@ def _now():
     return datetime.now(timezone.utc)
 
 
+# ------------------------------------------- read-day checks, report only
+#
+# Layer 3d step 9, H-0009 reading rule. Everything below is written only into
+# the --unblind --report markdown, after the existing report text. None of it
+# is read by the verdict path above: it sets no status, gate or exit code.
+#
+# Pool-switch definition, the same as analysis/h0003-poolswitch/poolswitch.py
+# (re-implemented here; nothing is imported from analysis/): the exit row is
+# the log row at (t_actual, ca); a row is a switch when that row's `pool`
+# differs from the entry row's `pool`. No exit row (t_actual null, as for
+# gone_unseen) is "no_exit"; a null pool on either side is "unknown" -- kept
+# in every recompute, never removed.
+
+TAIL_NET = 9.0           # +900% on ret_net_500, the field the clauses use
+PRICED = ("ok", "thin")
+READ_DAY_FOR = "H-0003"  # the confirmed rule this check is defined for
+STEP9 = ("Layer 3d step 9 (H-0009 reading rule): if the confirmation passes "
+         "but the pass does not survive removing the pool-switch rows, the "
+         "person records INCONCLUSIVE (data quality: exit print from another "
+         "pool). This check can only move a pass to INCONCLUSIVE; it never "
+         "creates a pass or a fail.")
+
+
+def exit_row(o, entry_of):
+    t = o.get("t_actual")
+    return entry_of.get((t, o["ca"])) if t else None
+
+
+def classify(o, entry_of):
+    """'switch', 'same', 'unknown' (a pool is null) or 'no_exit'."""
+    ex = exit_row(o, entry_of)
+    if ex is None:
+        return "no_exit"
+    en = entry_of.get((o["ts"], o["ca"])) or {}
+    p_in, p_out = en.get("pool"), ex.get("pool")
+    if not p_in or not p_out:
+        return "unknown"
+    return "same" if p_in == p_out else "switch"
+
+
+def read_day_population(h, hyps, labels):
+    """The confirmed rule's population rows, as evaluate() selects them: the
+    line's horizon, ts after its own watermark, then the rule's arms. For
+    H-0003 the only arm is "all" (EMERGING); the baseline is not an arm but
+    each row's own `_base`/`_peers`, which are left untouched."""
+    c = as_confirmed(h, hyps)
+    rows = [o for o in labels
+            if o["h"] == c["horizon"] and o["ts"] > c["log_watermark"]]
+    return E.RULES[c["id"]]["arms"](rows)["all"], c
+
+
+def _recompute(c, rows, stable):
+    """decide_h0003, the verdict's own function, on population `rows`, plus
+    the gates printed beside it. Only population rows were dropped; every
+    remaining row keeps the baseline peers the evaluator gave it."""
+    arms = {"all": rows}
+    gates = E.gates_for(rows, c)
+    verdict, clauses = E.decide_h0003(arms, gates)
+    sweep, crosses = E.fee_sweep(c["id"], arms, gates, stable, verdict)
+    kverdict, _, kmet = E.known_only(c["id"], c, arms, stable)
+    return {"rows": len(rows), "verdict": verdict, "clauses": clauses,
+            "holds": all(ok for _, ok, _ in clauses), "gates": gates,
+            "sweep_crosses": crosses, "known_verdict": kverdict,
+            "known_gate_met": kmet}
+
+
+def read_day_checks(h, hyps, labels, log_rows, status, stable=False):
+    pop, c = read_day_population(h, hyps, labels)
+    entry_of = {(r["ts"], r["ca"]): r for r in log_rows if "ca" in r}
+    cls = [(o, classify(o, entry_of)) for o in pop]
+    sw = [o for o, k in cls if k == "switch"]
+    sw_priced = [o for o in sw if o["status"] in PRICED]
+    drop_all = {id(o) for o in sw}
+    drop_priced = {id(o) for o in sw_priced}
+    tail = sorted((o for o in pop if (o.get("ret_net_500") or 0) > TAIL_NET),
+                  key=lambda o: o["ts"])
+    full = _recompute(c, pop, stable)
+    no_sw = _recompute(c, [o for o in pop if id(o) not in drop_all], stable)
+    no_pr = _recompute(c, [o for o in pop if id(o) not in drop_priced], stable)
+    return {"id": h["id"], "confirms": h["confirms"], "status": status,
+            "population": len(pop), "entry_of": entry_of,
+            "class": {id(o): k for o, k in cls},
+            "switch": sorted(sw, key=lambda o: o["ts"]),
+            "switch_priced": len(sw_priced),
+            "unknown": sorted((o for o, k in cls if k == "unknown"),
+                              key=lambda o: o["ts"]),
+            "no_exit": sum(1 for _, k in cls if k == "no_exit"),
+            "tail": tail, "full": full, "without_switch": no_sw,
+            "without_priced_switch": no_pr,
+            "survives": (no_sw["holds"] if status == "pass" else None)}
+
+
+def _side(r):
+    if not r:
+        return "-"
+    return (f"`{r['ts'][:16]}Z` pool `{r.get('pool')}` liq {r.get('liq')} "
+            f"txns {r.get('txns')} price {r.get('price')}")
+
+
+def _row_table(rows, x):
+    if not rows:
+        return ["none", ""]
+    L = ["| entry | ca | status | net500 pp | class | entry row | exit row |",
+         "|---|---|---|---:|---|---|---|"]
+    for o in rows:
+        L.append(f"| `{o['ts'][:16]}Z` | `{o['ca']}` | {o['status']} | "
+                 f"{E.pp(o.get('ret_net_500')).strip()} | "
+                 f"{x['class'][id(o)]} | "
+                 f"{_side(x['entry_of'].get((o['ts'], o['ca'])))} | "
+                 f"{_side(exit_row(o, x['entry_of']))} |")
+    return L + [""]
+
+
+def _recompute_row(name, deciding, v):
+    g = v["gates"]
+    cl = " | ".join(f"{val.strip()} {'[x]' if ok else '[ ]'}"
+                    for _, ok, val in v["clauses"])
+    return (f"| {name} | {deciding} | {v['rows']} | {cl} | "
+            f"{g['eff_n']}/{g['min_eff_n']} | {g['tokens']}/{g['min_n_tokens']}"
+            f" | {g['censored_pct']}/{g['max_censored_pct']} | "
+            f"{'yes' if v['sweep_crosses'] else 'no'} | "
+            f"{v['known_verdict']}{'' if v['known_gate_met'] else ' (gates not met)'}"
+            f" | {v['verdict']} |")
+
+
+def render_read_day(checks):
+    L = ["", "## Read-day checks (report only)", "",
+         "Nothing in this section changes a status, a gate, an exit code or "
+         "the text above. " + STEP9, "",
+         "Exit row = the log row at (t_actual, ca); a pool switch is an exit "
+         "row whose `pool` differs from the entry row's (the definition in "
+         "analysis/h0003-poolswitch/). Rows with a null pool are counted as "
+         "unknown and kept in every recompute.", ""]
+    for x in checks:
+        L += [f"### {x['id']} (confirms {x['confirms']})", ""]
+        if x.get("not_applicable"):
+            L += [x["not_applicable"], ""]
+            continue
+        L += [f"- population rows: {x['population']}",
+              f"- pool-switch rows: {len(x['switch'])} all statuses, "
+              f"{x['switch_priced']} priced (ok/thin)",
+              f"- unknown-pool rows (kept, not removed): {len(x['unknown'])}",
+              f"- no_exit rows: {x['no_exit']}", "",
+              "#### Pool-switch rows", ""]
+        L += _row_table(x["switch"], x)
+        L += ["#### Unknown-pool rows", ""]
+        L += _row_table(x["unknown"], x)
+        L += [f"#### Rows above {TAIL_NET:+.0%} net500", ""]
+        L += _row_table(x["tail"], x)
+        L += ["#### Clauses without the pool-switch rows", "",
+              "`evaluate.decide_h0003` on the reduced population. Only "
+              "population rows are removed; every remaining row keeps the "
+              "baseline peers the evaluator gave it (baseline peers "
+              "unchanged). Gates, censoring, fee sweep and the known-only "
+              "re-run are printed on each set but do not decide the survive "
+              "line: switch rows always have an exit row, so removing them "
+              "mechanically raises the censored share. `[x]` = registered bar "
+              "met.", "",
+              "| set | decides survive line | rows | (a) | (b) | (c) | eff_n | "
+              "tokens | censored % | fee sweep crosses | known-only | "
+              "decide_h0003 |",
+              "|---|---|---:|---|---|---|---|---|---|---|---|---|",
+              _recompute_row("all rows, as evaluated", "reference",
+                             x["full"]),
+              _recompute_row("without all pool-switch rows", "**yes**",
+                             x["without_switch"]),
+              _recompute_row("without priced (ok/thin) switch rows only",
+                             "no, report only", x["without_priced_switch"]),
+              ""]
+        if x["survives"] is None:
+            L += [f"**Survive line:** status is `{x['status']}`, not pass; "
+                  "the survive line does not apply (this check can only move "
+                  "a pass to INCONCLUSIVE).", ""]
+        else:
+            L += [f"**Survive line:** the pass "
+                  f"{'SURVIVES' if x['survives'] else 'DOES NOT SURVIVE'} "
+                  "removing all pool-switch rows (clauses (a), (b) and (c) "
+                  f"{'all still hold' if x['survives'] else 'do not all hold'}"
+                  " on the reduced set)."
+                  + ("" if x["survives"] else
+                     " Per step 9 the person records INCONCLUSIVE (data "
+                     "quality: exit print from another pool)."), ""]
+    return "\n".join(L)
+
+
+def read_day_section(lines, hyps, labels, log_rows, results):
+    """The section's markdown, or one visible FAILED line: a failure here must
+    never cost the report or change the exit code."""
+    try:
+        by_id = {r["id"]: r for r in results}
+        checks = []
+        for h in lines:
+            r = by_id.get(h["id"], {})
+            if h["confirms"] != READ_DAY_FOR:
+                checks.append({"id": h["id"], "confirms": h["confirms"],
+                               "not_applicable": "Not applicable: the "
+                               f"read-day check is defined for {READ_DAY_FOR}"
+                               " confirmations only."})
+                continue
+            checks.append(read_day_checks(h, hyps, labels, log_rows,
+                                          r.get("status"),
+                                          bool(r.get("stable"))))
+        return render_read_day(checks)
+    except Exception as e:
+        msg = f"{type(e).__name__}: {e}"
+        print(f"WARNING: read-day checks failed ({msg}); the report was "
+              "written without them", file=sys.stderr)
+        return f"\nRead-day checks FAILED: {msg}\n"
+
+
 def main(a, now=None):
     if a.report is not None and not a.unblind:
         print(E.REPORT_NEEDS_UNBLIND, file=sys.stderr)
@@ -178,7 +388,9 @@ def main(a, now=None):
             E.DEFAULT_REPORT_DIR,
             f"eval-confirm-{run_at[:10]}-{wrapper[:8]}.md")
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        open(path, "w").write("\n".join(head) + "\n\n" + E.render(results, meta))
+        open(path, "w").write("\n".join(head) + "\n\n" + E.render(results, meta)
+                              + read_day_section(lines, hyps, labels, rows,
+                                                 results))
         print(f"\nreport -> {path}")
     return 0
 

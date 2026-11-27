@@ -784,6 +784,26 @@ A result that supports a usable pattern is not a signal. "Supports a pattern" me
 
 H-0009 reading rule (pre-declared 2026-11-10, before any H-0009 outcome exists): at the H-0009 read, the report lists every population row whose exit log row comes from a different pool than its entry row, and every row above +900% net, and recomputes each clause without the pool-switch rows. If H-0009 passes but the pass does not survive removing the pool-switch rows, the person records INCONCLUSIVE (data quality: exit print from another pool). This can only move a pass to inconclusive; it never creates a pass or a fail.
 
+#### 9b. H-0009 read day: inspect before recording (HS-119)
+
+`python scripts/evaluate_confirm.py --unblind --report` appends a report-only "Read-day checks" section after the existing report text. It is written only into that markdown file. Blind stdout, unblinded stdout, statuses, gates and exit codes are unchanged. It lists:
+- every population row whose exit log row comes from a different pool than its entry row. The definition is the one in analysis/h0003-poolswitch/: the exit row is the log row at (t_actual, ca). Rows with a null pool are listed and counted as unknown, and kept. Rows with no exit row are counted as no_exit.
+- every row above +900% `ret_net_500`, the net field the clauses use, with its entry and exit rows (pool, liq, txns, price).
+- clauses (a), (b) and (c), recomputed by `evaluate.decide_h0003`, the verdict's own function, on three sets:
+  - all rows, as a reference;
+  - without all pool-switch rows of any status, which decides the survive line;
+  - without priced (ok/thin) switch rows only, which is report-only and not deciding.
+
+  Only population rows are removed; every remaining row keeps its baseline peers, as in the H-0003 correction.
+
+The survive line counts a pass as surviving when clauses (a), (b) and (c) each still hold on the set without all pool-switch rows. Eff_n, tokens, censoring, the fee sweep and the known-only re-run are printed for each set but do not decide the line. Switch rows always have an exit row, so removing them mechanically raises the censored share. If the section itself fails, the report still carries one line, "Read-day checks FAILED: …", and the person does the checks below by hand.
+
+Before recording any H-0009 verdict, the person:
+1. reads the Read-day checks section;
+2. inspects every row above +900% net and every pool-switch row;
+3. does an independent recompute of the clauses, in a separate worktree at the read pin, by code other than evaluate_confirm.py;
+4. applies the step 9 reading rule. A pass that does not survive is recorded INCONCLUSIVE (data quality: exit print from another pool). This check can only move a pass to inconclusive; it never creates a pass or a fail.
+
 #### 10. Recording the verdict
 
 The evaluator never writes the registry. A verdict is recorded in three places:
